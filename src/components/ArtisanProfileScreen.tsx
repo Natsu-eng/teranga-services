@@ -12,6 +12,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { AppView, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface ArtisanProfileScreenProps {
   artisan: Artisan;
@@ -76,8 +77,9 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
         {/* Cover Photo */}
         <section className="relative w-full h-60 md:h-80">
           <div className="w-full h-full bg-[#e5e2e1] overflow-hidden">
-            <img
+            <SafeImage
               src={artisan.coverUrl}
+              fallback="/images/placeholder-cover.svg"
               alt="Atelier artisan"
               className="w-full h-full object-cover"
             />
@@ -85,8 +87,9 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
           {/* Profile Picture Overlap */}
           <div className="absolute -bottom-14 left-4 md:left-12 ring-4 ring-[#fcf9f8] rounded-full overflow-hidden w-28 h-28 md:w-36 md:h-36 bg-white artisan-shadow">
-            <img
+            <SafeImage
               src={artisan.avatarUrl}
+              fallback="/images/placeholder-avatar.svg"
               alt={artisan.name}
               className="w-full h-full object-cover"
             />
@@ -179,8 +182,9 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
                 key={real.id}
                 className="flex-shrink-0 w-64 md:w-80 h-48 rounded-2xl overflow-hidden artisan-shadow border border-[#e5e2e1] group relative"
               >
-                <img
+                <SafeImage
                   src={real.imageUrl}
+                  fallback="/images/placeholder-cover.svg"
                   alt={real.altText}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />

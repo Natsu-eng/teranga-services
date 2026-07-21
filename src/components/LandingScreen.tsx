@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowRight, BadgeCheck, HeartHandshake, Star } from 'lucide-react';
 import { AppView, UserRole } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface LandingScreenProps {
   setCurrentView: (view: AppView) => void;
@@ -13,8 +14,9 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
       {/* Hero Illustration Section */}
       <section className="relative w-full h-[55vh] md:h-[62vh] overflow-hidden">
         <div className="absolute inset-0 w-full h-full">
-          <img
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSWS3RQlIfQFCLxRes3Jso743rGlk-MaehrAFtGoxxswhtCnRKGj__mENisENX-daqX9uyGzBKNmncgseeRP8PEj299BecKyOH0-2sFeW82iBKU3x8_G6S-tPUtarmOVkPptLwut2WJRsa4BCLA6spgnyuZlxgSfnuPmSsUCYjApid2NgdnT0Hdc5gQfPRPg33KG7xkwRsRo52kvfxMh5KI--ONt2tEOib8DBmARdGimA3agR5Uh9NtnfOoooVkftPTg6ey1DX9YUM"
+          <SafeImage
+            src="/images/hero-plombier.jpg"
+            fallback="/images/placeholder-cover.svg"
             alt="Téranga Services Artisan"
             className="w-full h-full object-cover object-top scale-105 transition-transform duration-[3s] ease-out hover:scale-100"
           />

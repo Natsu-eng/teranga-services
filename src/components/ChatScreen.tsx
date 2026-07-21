@@ -12,6 +12,7 @@ import {
   Send,
 } from 'lucide-react';
 import { AppView, ChatMessage, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface ChatScreenProps {
   artisan: Artisan;
@@ -110,8 +111,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
           <div className="flex items-center gap-3">
             <div className="relative w-11 h-11">
-              <img
+              <SafeImage
                 src={artisan.avatarUrl}
+                fallback="/images/placeholder-avatar.svg"
                 alt={artisan.name}
                 className="w-full h-full object-cover rounded-full border border-[#bfc9c1]"
               />

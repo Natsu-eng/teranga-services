@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
 import { AppView, AIAnalysisResult, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface DescribeProblemScreenProps {
   setCurrentView: (view: AppView) => void;
@@ -17,7 +18,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
     "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin.",
   );
   const [photoPreview, setPhotoPreview] = useState<string | null>(
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuCGgzVx_uIx917S-4xxo10zzmw2zvQkqiMbl173RPqwHI7CaCPLhBSFBcjReSz832uWiMs8IWf0ddCVzDx15jw97HDGQmd6lEXZUzdi3819jXNOhD1zVe6kH-OhzcN6yPfBhuEZPqhLhBgzsV3NwXIZH4Ajnj-ZzgJTOF6rMij9LLHr1FEHzYlmJ-KO6BNu4vDIsh94XU5yf3mxTw8fUk_VvNpL3Bv_Zxrm1YEkNs3YJq4cvysu-4_9xT2iMzHzyMaF3RBwZAH5dcTZ',
+    '/images/describe-problem-photo-exemple.jpg',
   );
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
@@ -145,7 +146,12 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           {/* Photo Preview if attached */}
           {photoPreview && (
             <div className="relative w-full h-28 rounded-2xl overflow-hidden border border-[#e5e2e1] group">
-              <img src={photoPreview} alt="Aperçu fuite" className="w-full h-full object-cover" />
+              <SafeImage
+                src={photoPreview}
+                fallback="/images/placeholder-cover.svg"
+                alt="Aperçu fuite"
+                className="w-full h-full object-cover"
+              />
               <button
                 onClick={() => setPhotoPreview(null)}
                 className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black transition-colors"
@@ -230,8 +236,9 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                         key={art.id}
                         className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"
                       >
-                        <img
+                        <SafeImage
                           src={art.avatarUrl}
+                          fallback="/images/placeholder-avatar.svg"
                           alt={art.name}
                           className="w-full h-full object-cover"
                         />

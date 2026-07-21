@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Star, ArrowRight } from 'lucide-react';
 import { AppView, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface SearchScreenProps {
   artisans: Artisan[];
@@ -97,8 +98,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
             }}
             className="bg-white p-4 rounded-2xl artisan-shadow border border-[#eae7e7] flex gap-4 cursor-pointer hover:shadow-md transition-all"
           >
-            <img
+            <SafeImage
               src={art.avatarUrl}
+              fallback="/images/placeholder-avatar.svg"
               alt={art.name}
               className="w-20 h-20 rounded-2xl object-cover shrink-0"
             />

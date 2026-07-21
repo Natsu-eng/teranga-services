@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send } from 'lucide-react';
 import { AppView, JobRequest, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface ArtisanDashboardScreenProps {
   artisan: Artisan;
@@ -161,8 +162,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
             >
               <div className="flex items-center gap-4 w-full md:w-auto">
                 <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-[#e5e2e1]">
-                  <img
+                  <SafeImage
                     src={req.clientAvatar}
+                    fallback="/images/placeholder-avatar.svg"
                     alt={req.clientName}
                     className="w-full h-full object-cover"
                   />
@@ -224,8 +226,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
 
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full overflow-hidden">
-                <img
+                <SafeImage
                   src={selectedJob.clientAvatar}
+                  fallback="/images/placeholder-avatar.svg"
                   alt={selectedJob.clientName}
                   className="w-full h-full object-cover"
                 />

@@ -11,6 +11,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { AppView, Artisan } from '../types';
+import { SafeImage } from './ui/SafeImage';
 
 interface ClientHomeScreenProps {
   artisans: Artisan[];
@@ -169,8 +170,9 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
               >
                 {/* Avatar */}
                 <div className="relative flex-none">
-                  <img
+                  <SafeImage
                     src={artisan.avatarUrl}
+                    fallback="/images/placeholder-avatar.svg"
                     alt={artisan.name}
                     className="w-24 h-24 rounded-2xl object-cover"
                   />

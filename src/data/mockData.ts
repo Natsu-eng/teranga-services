@@ -5,10 +5,8 @@ export const INITIAL_ARTISANS: Artisan[] = [
     id: 'idrissa-diop',
     name: 'Idrissa Diop',
     trade: 'Plomberie',
-    avatarUrl:
-      'https://lh3.googleusercontent.com/aida/AP1WRLtk-9VpiU0kRd16VlFxRrCPKGJeU5QgCl8X_KLPQq-IzkmQLAUv_mokRkM8JFS1QY39xBpwkgVvsTZ0Z-qLXbxFTBEHFLT88BSNZb9CS0s7u43QllVSShT0XAm23mHf3RDceQ_oAzSq2yLON-jj1vTElaVkxnLbWfV1RFGWb1FyM4JcYh6PFQugeVy897akZ4On-Q7G5eAwPHDXzcDpJWW1iBCXT0rBVZe5L0aBiieLxdxr4oTEh-dWdPc',
-    coverUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDCBiAi1cOp54U5Wv8LsSxDS6MwnGMHeSYGNyHYOH2bHdyMdyTrPEbGgq2sCdzPAPXLZ8vaVtxJLIN6E90rFc9o9aqxd8zQjRtNDLsQFUL1jjTa7Mt88cRbkaEdST5VFyKy6Dd4GQ07eOaxz0tY0pFNH_blb8dOhTaWJf6qqk9CzfJ--P7hwMUk3WsIlNGKQXpVnGaFLg8GTiPyp8dp7QCrM_R-MLL5x70HdEs0_5oXm5WnJ2-x-lfsOCBEu3wupvgCWF-UR8kPm0us',
+    avatarUrl: '/images/idrissa-diop-avatar.jpg',
+    coverUrl: '/images/atelier-plomberie-cover.jpg',
     verified: true,
     rating: 4.9,
     reviewCount: 120,
@@ -28,22 +26,19 @@ export const INITIAL_ARTISANS: Artisan[] = [
       {
         id: 'real-1',
         title: 'Soudure cuivre sanitaire',
-        imageUrl:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuDia7XgUEnr8x-uVy_0JiDxW4ZifAQqL6OjRhR-yo2vTNBjmZh7G3NlRjZ0R2ipAb6Gi42edM6Cop7Om1TmDvXsxIw7sVRvzDf8yCPvblAbdV10GusRm-KQ2dbv1-RA_4gn85CuYSgTa9hZbppUMdYan4wWM7Vwr1AUH62lMnFI2haL9lonTKqifKOmU-ysf4Olw9L1AQJnyr-AQcOPQb2KKu5zyrLnT_b9BKT4ZZqCQAXBFzW_Tcrnkg_Rm-cX3phD4GgB3QSu8gr7',
+        imageUrl: '/images/idrissa-diop-realisation-soudure-cuivre.jpg',
         altText: 'Soudure tuyauterie cuivre',
       },
       {
         id: 'real-2',
         title: 'Installation chauffe-eau solaire',
-        imageUrl:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuDAAijPf-xr9qhXDYuGF_7JmUHh_ms7qs_7vaJEO-0HV6uBSzKcvw3BYyrKuxdOa5VpxuWCCN4JruO8CuZ7w25UU9BQ8xiDIFKX3BSjDqPJbE81GjVGNkDNBtx9bKCQDHaRA0Af5cjLR0B0_No3spWGw0MHRYiRTDAKnr44qtnkfZgBt5dYyxlpP5QG5qNiK2zlqXzb7ip21JojCLvdTgdEhcb0Aa0fHfwSP_ADsXSSrrvG5T58zQTzvGo-LQbSN0s1H7kZFk-UfMx1',
+        imageUrl: '/images/idrissa-diop-realisation-chauffe-eau-solaire.jpg',
         altText: 'Chauffe-eau solaire toit',
       },
       {
         id: 'real-3',
         title: 'Rénovation salle de bain haut de gamme',
-        imageUrl:
-          'https://lh3.googleusercontent.com/aida-public/AB6AXuBQ-9kZapJaJLorNvMdrJPcEBBESN_kr8ARKvtFTkxG2hNEuFw71T0cdsJamLWxUu8DGrUXS3SRjZSutVDr40z67-WCs83SRcXeK-wFHk0A5qne8m30lQi9W3iUENHY5Z4JU3aCOXtZgIBtWfwMb4kf1KmunggpnBKTKUGr7mHvNlWSEBI_U4uNLokkCTPz3u2aE-c6HG2_8VYj_fctUVgqwJfLMxo_OrcIOCq1i2WXb-mosbSji1vb3tl58CLRY4pUpH67JbhObMB5',
+        imageUrl: '/images/idrissa-diop-realisation-salle-de-bain.jpg',
         altText: 'Salle de bain rénovée',
       },
     ],
@@ -72,10 +67,8 @@ export const INITIAL_ARTISANS: Artisan[] = [
     id: 'maty-ndiaye',
     name: 'Maty Ndiaye',
     trade: 'Électricité',
-    avatarUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBxaLo1Ucscw2Y1MZAQQqC88LC-rjLe1fqFsOXFd9Q8o1qHBbTfxc83d5Z-xg-YXTQy-nXqgebI-DmzFe1prZnex4CPdINZAMn9whOTOjXcnR9iVNKidlsEHfYhW3A8kLlLEsuvIq3uJKfCeScyBI6T0e-hUMBbjuFYi0UqJDcqwxWQUgtATucYghhyA2-V8C_L5QwpnA5ooJkOW8kUdOuNZZEAgHnHrMajO2cOVV7VoS-zSREf7EoWsjz5sK0r0n-tuCGQCDKCM4Rs',
-    coverUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCpg4Y6K5zbpqXiN75P4dBxZ4_NRUlkoE6fRGDUigucntW9M8pBue0t0ovYsvMvvkO36sg8F7VR4xwCBhHl4UgIMOEVEJqG9JESJ2FpBvF2yELingNeBKfq0vaX7dmH7-vtJEPEgUoHVLXsUanQTxH3hnEs61CyApQN5ZFbHevDLJrvzNeBaG_SfI0i8uErj8x9l2NruuCFd-aais8Q6_baA4VWWhqbGH0EXy_RxL4Cn-8_uiMEkHFH58jT0xYaRv2-knXivHuF4GK7',
+    avatarUrl: '/images/maty-ndiaye-avatar.jpg',
+    coverUrl: '/images/atelier-artisan-cover.jpg',
     verified: true,
     rating: 4.8,
     reviewCount: 85,
@@ -107,10 +100,8 @@ export const INITIAL_ARTISANS: Artisan[] = [
     id: 'ousmane-fall',
     name: 'Ousmane Fall',
     trade: 'Climatisation',
-    avatarUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCpg4Y6K5zbpqXiN75P4dBxZ4_NRUlkoE6fRGDUigucntW9M8pBue0t0ovYsvMvvkO36sg8F7VR4xwCBhHl4UgIMOEVEJqG9JESJ2FpBvF2yELingNeBKfq0vaX7dmH7-vtJEPEgUoHVLXsUanQTxH3hnEs61CyApQN5ZFbHevDLJrvzNeBaG_SfI0i8uErj8x9l2NruuCFd-aais8Q6_baA4VWWhqbGH0EXy_RxL4Cn-8_uiMEkHFH58jT0xYaRv2-knXivHuF4GK7',
-    coverUrl:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDCBiAi1cOp54U5Wv8LsSxDS6MwnGMHeSYGNyHYOH2bHdyMdyTrPEbGgq2sCdzPAPXLZ8vaVtxJLIN6E90rFc9o9aqxd8zQjRtNDLsQFUL1jjTa7Mt88cRbkaEdST5VFyKy6Dd4GQ07eOaxz0tY0pFNH_blb8dOhTaWJf6qqk9CzfJ--P7hwMUk3WsIlNGKQXpVnGaFLg8GTiPyp8dp7QCrM_R-MLL5x70HdEs0_5oXm5WnJ2-x-lfsOCBEu3wupvgCWF-UR8kPm0us',
+    avatarUrl: '/images/atelier-artisan-cover.jpg',
+    coverUrl: '/images/atelier-plomberie-cover.jpg',
     verified: true,
     rating: 4.9,
     reviewCount: 142,
@@ -135,8 +126,7 @@ export const INITIAL_JOB_REQUESTS: JobRequest[] = [
   {
     id: 'req-1',
     clientName: 'Moussa F.',
-    clientAvatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAvuTPY5FpVtD8VZQPGm0cn-OHQKuo_a8aLijtbyelfy5abg6YHIAc8QuE6_XqwOwSb_0CkzDGqjUSXa0naYLOAXvA_YY1VCb_ZI1Bm3ddJkPHWQQ4GcNMK5boVRbQXgrWVWk79FMZ5TN6NbFVRNMDV61899Rj-oZG_NROyKZCZAq8Xw7G-0bD_6uJ2Hi1jEynQXQf-_sG4ErSJWoWNKhs6BYl20eRCS_8VYLd794DIo7zvpo7613YCAZtCmnmSVDmLIhStGcExvdT_',
+    clientAvatar: '/images/client-moussa-f-avatar.jpg',
     title: 'Fuite robinet cuisine',
     trade: 'Plomberie',
     location: 'Ouakam, Dakar',
@@ -149,8 +139,7 @@ export const INITIAL_JOB_REQUESTS: JobRequest[] = [
   {
     id: 'req-2',
     clientName: 'Fatou D.',
-    clientAvatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuA6SwIXfGsvJhrNsJ43k1zaaBFn_v3jcTQEX3-qkXqODgenFEw953bB8sLrRb6XZ4p4tLjVbgd2SoXsR0Cd2oESO-ZL6q_DL8mG9SlOFQNfpb0J9_D9BL9a-mg8VxGJGhh8ht6aMJns94qtzW0G6q3Ybxp35xIGZNzVXyp67YsREVbIH7B9BcEmJGxFn81ubYLlMGL-0GYFaYONDqqqGWW4Xn7mAEFjbTiUgenNtCbqpxltI8ZO_lyter00PeT2Ze99NeAD9XoEuHEm',
+    clientAvatar: '/images/client-fatou-d-avatar.jpg',
     title: 'Installation chauffe-eau',
     trade: 'Plomberie',
     location: 'Almadies, Dakar',
@@ -162,8 +151,7 @@ export const INITIAL_JOB_REQUESTS: JobRequest[] = [
   {
     id: 'req-3',
     clientName: 'Ousmane T.',
-    clientAvatar:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCw5wrSHLRi9mpgNKr_vaW23ci4_ecAOCdXOBvv4ywbmm03i5mHMyCH6AAv7z_mVzNMN5yGH8_IzysG1j4Csi8L7pqFqAXxknY-4x8qIdyBSpvjdwqYhFuTxuPgFvee1h_4mf7UhyaPYeQHyG8rI67tlwULoR3ypf3WVbKvA0ClCZ_5Srw_gd8-qWTm5WgG-1zzgveXtbIxrUYOl7dGPS9OFjk0EQBAM69kDTDItKsRrcbsl-lpD9-z5p4-nR-wCravTMPLdN7fEcVh',
+    clientAvatar: '/images/client-ousmane-t-avatar.jpg',
     title: 'Réparation canalisation',
     trade: 'Plomberie',
     location: 'Plateau, Dakar',
