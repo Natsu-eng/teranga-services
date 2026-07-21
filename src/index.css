@@ -1,5 +1,64 @@
 @import 'tailwindcss';
 
+/*
+ * Design tokens — mapping hex historique -> token sémantique.
+ * Validé sur la branche refactor/design-tokens (voir table complète dans la PR).
+ * Chaque valeur hex reste inchangée : seule sa dénomination change (non-régression visuelle stricte).
+ *
+ *   primary                      #004129
+ *   primary-emerald              #0e5a3c
+ *   primary-emerald-foreground   #8acfa9
+ *   accent                       #e8a73b
+ *   accent-soft                  #ffddb1
+ *   accent-foreground            #815600
+ *   accent-foreground-strong     #291800  (variante isolée, cf. ArtisanDashboardScreen)
+ *   accent-alt                   #feba4d  (variante isolée, cf. ArtisanProfileScreen)
+ *   accent-alt-foreground        #714b00
+ *   background                   #fcf9f8
+ *   background-alt               #faf7f2  (variante isolée, cf. ChatScreen)
+ *   foreground                   #1c1b1b
+ *   muted-foreground             #404943
+ *   muted-foreground-soft        #707972
+ *   surface-muted                #f6f3f2
+ *   border                       #e5e2e1
+ *   border-subtle                #eae7e7
+ *   border-strong                #bfc9c1
+ *   border-faint                 #f0eded
+ *   destructive                  #ba1a1a
+ *   destructive-soft             #ffdad6
+ *   success                      #abf2ca
+ *   success-foreground           #002113
+ *   brand-orange-money           #ff6600
+ *   brand-wave                   #1dc8f0
+ */
+@theme {
+  --color-primary: #004129;
+  --color-primary-emerald: #0e5a3c;
+  --color-primary-emerald-foreground: #8acfa9;
+  --color-accent: #e8a73b;
+  --color-accent-soft: #ffddb1;
+  --color-accent-foreground: #815600;
+  --color-accent-foreground-strong: #291800;
+  --color-accent-alt: #feba4d;
+  --color-accent-alt-foreground: #714b00;
+  --color-background: #fcf9f8;
+  --color-background-alt: #faf7f2;
+  --color-foreground: #1c1b1b;
+  --color-muted-foreground: #404943;
+  --color-muted-foreground-soft: #707972;
+  --color-surface-muted: #f6f3f2;
+  --color-border: #e5e2e1;
+  --color-border-subtle: #eae7e7;
+  --color-border-strong: #bfc9c1;
+  --color-border-faint: #f0eded;
+  --color-destructive: #ba1a1a;
+  --color-destructive-soft: #ffdad6;
+  --color-success: #abf2ca;
+  --color-success-foreground: #002113;
+  --color-brand-orange-money: #ff6600;
+  --color-brand-wave: #1dc8f0;
+}
+
 @layer utilities {
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
