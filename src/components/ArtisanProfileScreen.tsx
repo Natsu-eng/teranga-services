@@ -33,34 +33,34 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
   };
 
   return (
-    <div className="bg-[#fcf9f8] text-[#1c1b1b] min-h-screen pb-28">
+    <div className="bg-background text-foreground min-h-screen pb-28">
       {/* Top Glass Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-[#bfc9c1]/30 px-4 h-16 flex justify-between items-center">
+      <header className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border-strong/30 px-4 h-16 flex justify-between items-center">
         <div className="flex items-center gap-3">
           <button
             onClick={() => setCurrentView('client_home')}
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors active:scale-95 cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
           >
-            <ArrowLeft className="text-[#1c1b1b] w-6 h-6" />
+            <ArrowLeft className="text-foreground w-6 h-6" />
           </button>
-          <h1 className="font-bold text-lg text-[#004129] truncate">Profil Artisan</h1>
+          <h1 className="font-bold text-lg text-primary truncate">Profil Artisan</h1>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleShare}
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors cursor-pointer"
             title="Partager le profil"
           >
-            <Share2 className="text-[#1c1b1b] w-6 h-6" />
+            <Share2 className="text-foreground w-6 h-6" />
           </button>
           <button
             onClick={() => setIsFavorite(!isFavorite)}
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors cursor-pointer"
+            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors cursor-pointer"
             title="Ajouter aux favoris"
           >
             <Heart
-              className={`w-6 h-6 ${isFavorite ? 'text-[#ba1a1a]' : 'text-[#1c1b1b]'}`}
+              className={`w-6 h-6 ${isFavorite ? 'text-destructive' : 'text-foreground'}`}
               {...(isFavorite ? { fill: 'currentColor' } : {})}
             />
           </button>
@@ -68,7 +68,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
       </header>
 
       {showShareNotification && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#004129] text-white px-4 py-2 rounded-full text-xs font-sora shadow-lg animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-primary text-white px-4 py-2 rounded-full text-xs font-sora shadow-lg animate-in fade-in slide-in-from-top-2">
           Lien du profil copié !
         </div>
       )}
@@ -76,7 +76,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
       <main className="w-full">
         {/* Cover Photo */}
         <section className="relative w-full h-60 md:h-80">
-          <div className="w-full h-full bg-[#e5e2e1] overflow-hidden">
+          <div className="w-full h-full bg-border overflow-hidden">
             <SafeImage
               src={artisan.coverUrl}
               fallback="/images/placeholder-cover.svg"
@@ -86,7 +86,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
           </div>
 
           {/* Profile Picture Overlap */}
-          <div className="absolute -bottom-14 left-4 md:left-12 ring-4 ring-[#fcf9f8] rounded-full overflow-hidden w-28 h-28 md:w-36 md:h-36 bg-white artisan-shadow">
+          <div className="absolute -bottom-14 left-4 md:left-12 ring-4 ring-background rounded-full overflow-hidden w-28 h-28 md:w-36 md:h-36 bg-white artisan-shadow">
             <SafeImage
               src={artisan.avatarUrl}
               fallback="/images/placeholder-avatar.svg"
@@ -100,9 +100,9 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
         <section className="mt-16 px-4 md:px-12 max-w-4xl mx-auto">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="font-bold text-2xl md:text-3xl text-[#004129]">{artisan.name}</h2>
+              <h2 className="font-bold text-2xl md:text-3xl text-primary">{artisan.name}</h2>
               {artisan.verified && (
-                <div className="flex items-center gap-1 bg-[#ffddb1]/40 text-[#815600] px-2.5 py-0.5 rounded-full border border-[#ffddb1]">
+                <div className="flex items-center gap-1 bg-accent-soft/40 text-accent-foreground px-2.5 py-0.5 rounded-full border border-accent-soft">
                   <BadgeCheck className="w-[14px] h-[14px]" fill="currentColor" />
                   <span className="text-xs font-sora font-semibold">Vérifié</span>
                 </div>
@@ -113,20 +113,20 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
               {artisan.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-3 py-1 bg-[#f6f3f2] border border-[#bfc9c1]/40 rounded-full font-sora text-xs text-[#404943] font-medium"
+                  className="px-3 py-1 bg-surface-muted border border-border-strong/40 rounded-full font-sora text-xs text-muted-foreground font-medium"
                 >
                   {tag}
                 </span>
               ))}
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-[#404943]">
-              <div className="flex items-center text-[#815600]">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center text-accent-foreground">
                 <Star className="w-[18px] h-[18px]" fill="currentColor" />
                 <span className="font-sora font-bold ml-1">{artisan.rating}</span>
               </div>
               <span>({artisan.reviewCount} avis)</span>
-              <span className="w-1 h-1 rounded-full bg-[#bfc9c1]" />
+              <span className="w-1 h-1 rounded-full bg-border-strong" />
               <span>{artisan.location}</span>
             </div>
           </div>
@@ -134,27 +134,27 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
         {/* Stats Row */}
         <section className="mt-6 px-4 md:px-12 max-w-4xl mx-auto">
-          <div className="grid grid-cols-3 gap-4 py-5 border-y border-[#bfc9c1]/30">
+          <div className="grid grid-cols-3 gap-4 py-5 border-y border-border-strong/30">
             <div className="flex flex-col items-center text-center">
-              <CheckCircle2 className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
-              <span className="font-bold text-xl text-[#004129]">{artisan.stats.chantiers}</span>
-              <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
+              <CheckCircle2 className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
+              <span className="font-bold text-xl text-primary">{artisan.stats.chantiers}</span>
+              <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
                 Chantiers
               </span>
             </div>
 
             <div className="flex flex-col items-center text-center">
-              <Zap className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
-              <span className="font-bold text-xl text-[#004129]">{artisan.stats.responseTime}</span>
-              <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
+              <Zap className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
+              <span className="font-bold text-xl text-primary">{artisan.stats.responseTime}</span>
+              <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
                 Réponse
               </span>
             </div>
 
             <div className="flex flex-col items-center text-center">
-              <Award className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
-              <span className="font-bold text-xl text-[#004129]">{artisan.stats.experience}</span>
-              <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
+              <Award className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
+              <span className="font-bold text-xl text-primary">{artisan.stats.experience}</span>
+              <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
                 D&apos;exp.
               </span>
             </div>
@@ -163,15 +163,15 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
         {/* Bio Section */}
         <section className="mt-6 px-4 md:px-12 max-w-4xl mx-auto space-y-2">
-          <h3 className="font-bold text-xl text-[#004129]">À propos</h3>
-          <p className="text-base text-[#404943] leading-relaxed">{artisan.bio}</p>
+          <h3 className="font-bold text-xl text-primary">À propos</h3>
+          <p className="text-base text-muted-foreground leading-relaxed">{artisan.bio}</p>
         </section>
 
         {/* Realisations Gallery */}
         <section className="mt-8">
           <div className="px-4 md:px-12 max-w-4xl mx-auto flex justify-between items-center mb-3">
-            <h3 className="font-bold text-xl text-[#004129]">Réalisations</h3>
-            <button className="text-[#004129] font-sora text-xs font-semibold hover:underline">
+            <h3 className="font-bold text-xl text-primary">Réalisations</h3>
+            <button className="text-primary font-sora text-xs font-semibold hover:underline">
               Voir tout
             </button>
           </div>
@@ -180,7 +180,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             {artisan.realisations.map((real) => (
               <div
                 key={real.id}
-                className="flex-shrink-0 w-64 md:w-80 h-48 rounded-2xl overflow-hidden artisan-shadow border border-[#e5e2e1] group relative"
+                className="flex-shrink-0 w-64 md:w-80 h-48 rounded-2xl overflow-hidden artisan-shadow border border-border group relative"
               >
                 <SafeImage
                   src={real.imageUrl}
@@ -198,38 +198,38 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
         {/* Customer Reviews */}
         <section className="mt-8 px-4 md:px-12 max-w-4xl mx-auto space-y-4">
-          <h3 className="font-bold text-xl text-[#004129]">Avis clients</h3>
+          <h3 className="font-bold text-xl text-primary">Avis clients</h3>
 
           <div className="space-y-3">
             {artisan.reviews.map((rev) => (
               <div
                 key={rev.id}
-                className="p-5 bg-[#f6f3f2] rounded-2xl border border-[#bfc9c1]/20 shadow-sm"
+                className="p-5 bg-surface-muted rounded-2xl border border-border-strong/20 shadow-sm"
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#004129]/15 flex items-center justify-center text-[#004129] font-bold font-sora text-sm">
+                    <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold font-sora text-sm">
                       {rev.avatarInitials}
                     </div>
                     <div>
-                      <h4 className="font-sora text-sm font-bold text-[#1c1b1b]">{rev.author}</h4>
-                      <div className="flex text-[#815600] text-sm">
+                      <h4 className="font-sora text-sm font-bold text-foreground">{rev.author}</h4>
+                      <div className="flex text-accent-foreground text-sm">
                         {[...Array(rev.rating)].map((_, i) => (
                           <Star key={i} className="w-[14px] h-[14px]" fill="currentColor" />
                         ))}
                       </div>
                     </div>
                   </div>
-                  <span className="font-sora text-xs text-[#707972]">{rev.date}</span>
+                  <span className="font-sora text-xs text-muted-foreground-soft">{rev.date}</span>
                 </div>
-                <p className="text-sm text-[#404943] italic leading-relaxed">{rev.comment}</p>
+                <p className="text-sm text-muted-foreground italic leading-relaxed">{rev.comment}</p>
               </div>
             ))}
           </div>
 
           <button
             onClick={() => alert('Affichage des 120 avis vérifiés par Téranga Services...')}
-            className="w-full py-3.5 rounded-full border-1.5 border-[#004129] text-[#004129] font-sora text-sm font-semibold hover:bg-[#f6f3f2] transition-colors cursor-pointer"
+            className="w-full py-3.5 rounded-full border-1.5 border-primary text-primary font-sora text-sm font-semibold hover:bg-surface-muted transition-colors cursor-pointer"
           >
             Voir les {artisan.reviewCount} avis
           </button>
@@ -237,11 +237,11 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
       </main>
 
       {/* Bottom Sticky Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 glass-card border-t border-[#bfc9c1]/30 p-4 z-50">
+      <div className="fixed bottom-0 left-0 right-0 glass-card border-t border-border-strong/30 p-4 z-50">
         <div className="max-w-xl mx-auto flex gap-3">
           <button
             onClick={() => setCurrentView('chat')}
-            className="flex-1 h-14 rounded-full border-1.5 border-[#004129] text-[#004129] font-sora text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#f6f3f2] active:scale-95 transition-all cursor-pointer"
+            className="flex-1 h-14 rounded-full border-1.5 border-primary text-primary font-sora text-sm font-bold flex items-center justify-center gap-2 hover:bg-surface-muted active:scale-95 transition-all cursor-pointer"
           >
             <MessageCircle className="w-6 h-6" />
             <span>Message</span>
@@ -249,7 +249,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
           <button
             onClick={() => setCurrentView('chat')}
-            className="flex-[1.5] h-14 rounded-full bg-[#feba4d] text-[#714b00] font-sora text-sm font-bold shadow-md flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
+            className="flex-[1.5] h-14 rounded-full bg-accent-alt text-accent-alt-foreground font-sora text-sm font-bold shadow-md flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
           >
             <Receipt className="w-6 h-6" fill="currentColor" />
             <span>Demander un devis</span>
