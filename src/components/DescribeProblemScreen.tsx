@@ -221,7 +221,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                     {artisans.length} artisans recommandés
                   </p>
                   <div className="flex items-center justify-end -space-x-3">
-                    {artisans.slice(0, 3).map((art, idx) => (
+                    {artisans.slice(0, 3).map((art) => (
                       <div
                         key={art.id}
                         className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"

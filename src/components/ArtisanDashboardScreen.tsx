@@ -9,7 +9,7 @@ interface ArtisanDashboardScreenProps {
 }
 
 export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
-  artisan,
+  artisan: _artisan,
   jobRequests,
   setJobRequests,
   setCurrentView,

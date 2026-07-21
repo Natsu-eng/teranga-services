@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { AppView, UserRole, Artisan } from './types';
 import { INITIAL_ARTISANS, INITIAL_JOB_REQUESTS, INITIAL_CHAT_MESSAGES } from './data/mockData';
 import { Header } from './components/Header';
@@ -15,7 +15,7 @@ import { UserProfileScreen } from './components/UserProfileScreen';
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [userRole, setUserRole] = useState<UserRole>('client');
-  const [artisans, setArtisans] = useState<Artisan[]>(INITIAL_ARTISANS);
+  const [artisans] = useState<Artisan[]>(INITIAL_ARTISANS);
   const [selectedArtisan, setSelectedArtisan] = useState<Artisan>(INITIAL_ARTISANS[0]);
   const [jobRequests, setJobRequests] = useState(INITIAL_JOB_REQUESTS);
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);

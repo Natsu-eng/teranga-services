@@ -56,7 +56,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
     }, 2000);
   };
 
-  const handleAcceptDevis = (devisId: string) => {
+  const handleAcceptDevis = (_devisId: string) => {
     setDevisAccepted(true);
     setMessages((prev) =>
       prev.map((msg) => {
