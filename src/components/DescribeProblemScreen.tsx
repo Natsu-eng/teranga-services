@@ -108,16 +108,16 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#fcf9f8] text-[#1c1b1b] flex flex-col pb-32">
+    <div className="min-h-screen bg-background text-foreground flex flex-col pb-32">
       {/* Top Bar */}
-      <header className="sticky top-0 z-50 flex items-center h-16 px-4 bg-[#fcf9f8]/85 backdrop-blur-md border-b border-[#e5e2e1]">
+      <header className="sticky top-0 z-50 flex items-center h-16 px-4 bg-background/85 backdrop-blur-md border-b border-border">
         <button
           onClick={() => setCurrentView('client_home')}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors active:scale-95 cursor-pointer"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
         >
-          <ArrowLeft className="text-[#1c1b1b] w-6 h-6" />
+          <ArrowLeft className="text-foreground w-6 h-6" />
         </button>
-        <h1 className="ml-3 font-bold text-lg md:text-xl text-[#004129]">
+        <h1 className="ml-3 font-bold text-lg md:text-xl text-primary">
           Décrivez votre problème
         </h1>
       </header>
@@ -136,16 +136,16 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
               }}
               maxLength={500}
               placeholder="Expliquez-nous ce qui ne va pas (ex: fuite d'eau, climatiseur qui ne refroidit plus)..."
-              className="w-full h-40 p-4 rounded-2xl bg-white border border-[#bfc9c1] focus:border-[#004129] focus:ring-1 focus:ring-[#004129] text-base text-[#1c1b1b] placeholder:text-[#707972] transition-all resize-none shadow-sm outline-none"
+              className="w-full h-40 p-4 rounded-2xl bg-white border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-base text-foreground placeholder:text-muted-foreground-soft transition-all resize-none shadow-sm outline-none"
             />
-            <div className="absolute bottom-3 right-3 text-xs text-[#707972] font-sora">
+            <div className="absolute bottom-3 right-3 text-xs text-muted-foreground-soft font-sora">
               {description.length} / 500
             </div>
           </div>
 
           {/* Photo Preview if attached */}
           {photoPreview && (
-            <div className="relative w-full h-28 rounded-2xl overflow-hidden border border-[#e5e2e1] group">
+            <div className="relative w-full h-28 rounded-2xl overflow-hidden border border-border group">
               <SafeImage
                 src={photoPreview}
                 fallback="/images/placeholder-cover.svg"
@@ -166,7 +166,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
           {/* Media Action Buttons */}
           <div className="flex gap-3">
-            <label className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-[#004129] text-[#004129] font-sora text-xs font-bold hover:bg-[#004129]/5 active:scale-95 transition-all cursor-pointer">
+            <label className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold hover:bg-primary/5 active:scale-95 transition-all cursor-pointer">
               <Camera className="w-5 h-5" />
               <span>Ajouter une photo</span>
               <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
@@ -174,10 +174,10 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
             <button
               onClick={toggleRecording}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-[#004129] font-sora text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-primary font-sora text-xs font-bold transition-all cursor-pointer ${
                 isRecording
-                  ? 'bg-[#ba1a1a] text-white border-[#ba1a1a] animate-pulse'
-                  : 'text-[#004129] hover:bg-[#004129]/5 active:scale-95'
+                  ? 'bg-destructive text-white border-destructive animate-pulse'
+                  : 'text-primary hover:bg-primary/5 active:scale-95'
               }`}
             >
               <Mic className="w-5 h-5" />
@@ -190,18 +190,18 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="magic-card-glow bg-white rounded-2xl p-6 relative overflow-hidden">
             {/* Ambient Shader Accent */}
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-[#abf2ca] opacity-20 rounded-full blur-2xl"></div>
+            <div className="absolute -top-12 -right-12 w-32 h-32 bg-success opacity-20 rounded-full blur-2xl"></div>
 
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Sparkles className="text-[#0e5a3c] w-6 h-6" fill="currentColor" />
-                <h2 className="font-sora text-xs font-bold text-[#004129] tracking-wider uppercase">
+                <Sparkles className="text-primary-emerald w-6 h-6" fill="currentColor" />
+                <h2 className="font-sora text-xs font-bold text-primary tracking-wider uppercase">
                   ANALYSE TERMINÉE
                 </h2>
               </div>
               {isAnalyzing && (
-                <span className="text-xs font-sora text-[#815600] animate-pulse flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-[#815600] animate-ping" />
+                <span className="text-xs font-sora text-accent-foreground animate-pulse flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-accent-foreground animate-ping" />
                   Mise à jour IA...
                 </span>
               )}
@@ -209,25 +209,25 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
             <div className="space-y-4">
               <div>
-                <p className="text-[#404943] font-sora text-[11px] font-bold uppercase mb-1">
+                <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
                   Métier détecté
                 </p>
-                <p className="font-bold text-xl md:text-2xl text-[#0e5a3c]">{aiResult.trade}</p>
+                <p className="font-bold text-xl md:text-2xl text-primary-emerald">{aiResult.trade}</p>
               </div>
 
-              <div className="flex justify-between items-end border-t border-[#f0eded] pt-4">
+              <div className="flex justify-between items-end border-t border-border-faint pt-4">
                 <div>
-                  <p className="text-[#404943] font-sora text-[11px] font-bold uppercase mb-1">
+                  <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
                     Prix estimé
                   </p>
-                  <p className="font-bold text-lg text-[#1c1b1b]">{aiResult.priceEstimate}</p>
-                  <span className="text-[10px] text-[#707972] italic block mt-0.5">
+                  <p className="font-bold text-lg text-foreground">{aiResult.priceEstimate}</p>
+                  <span className="text-[10px] text-muted-foreground-soft italic block mt-0.5">
                     (Estimation basée sur des cas similaires à Dakar)
                   </span>
                 </div>
 
                 <div className="text-right">
-                  <p className="text-[#404943] font-sora text-[11px] mb-2 font-medium">
+                  <p className="text-muted-foreground font-sora text-[11px] mb-2 font-medium">
                     {artisans.length} artisans recommandés
                   </p>
                   <div className="flex items-center justify-end -space-x-3">
@@ -244,7 +244,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                         />
                       </div>
                     ))}
-                    <div className="w-10 h-10 rounded-full border-2 border-white bg-[#f0eded] text-[#404943] flex items-center justify-center text-[10px] font-bold">
+                    <div className="w-10 h-10 rounded-full border-2 border-white bg-border-faint text-muted-foreground flex items-center justify-center text-[10px] font-bold">
                       +{artisans.length - 3 > 0 ? artisans.length - 3 : 5}
                     </div>
                   </div>
@@ -254,8 +254,8 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           </div>
 
           <div className="mt-3 px-1">
-            <p className="text-xs text-[#404943] font-sora flex items-start gap-1.5">
-              <Info className="w-4 h-4 text-[#004129] shrink-0 mt-0.5" />
+            <p className="text-xs text-muted-foreground font-sora flex items-start gap-1.5">
+              <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <span>{aiResult.explanation}</span>
             </p>
           </div>
@@ -263,14 +263,14 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
       </main>
 
       {/* Fixed Bottom Action */}
-      <footer className="fixed bottom-0 left-0 right-0 p-4 bg-[#fcf9f8]/90 backdrop-blur-md border-t border-[#e5e2e1] z-50 pb-safe">
+      <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-md border-t border-border z-50 pb-safe">
         <button
           onClick={() => {
             const matched = artisans.find((a) => a.id === 'idrissa-diop') || artisans[0];
             setSelectedArtisan(matched);
             setCurrentView('artisan_profile');
           }}
-          className="w-full max-w-xl mx-auto py-4 rounded-full bg-[#E8A73B] text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"
+          className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"
         >
           <span>Voir les artisans</span>
           <ArrowRight className="w-6 h-6" />

@@ -57,18 +57,18 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       {/* Search Bar */}
       <section className="relative">
         <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#404943] w-6 h-6" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground w-6 h-6" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Décrivez votre besoin (ex: fuite, clim, électricité)..."
-            className="w-full h-14 pl-12 pr-4 rounded-full border-none bg-[#f6f3f2] focus:ring-2 focus:ring-[#004129] text-base transition-all shadow-sm outline-none placeholder:text-[#707972]"
+            className="w-full h-14 pl-12 pr-4 rounded-full border-none bg-surface-muted focus:ring-2 focus:ring-primary text-base transition-all shadow-sm outline-none placeholder:text-muted-foreground-soft"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-[#707972] hover:text-[#1c1b1b]"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground-soft hover:text-foreground"
             >
               <CircleX className="w-6 h-6" />
             </button>
@@ -87,8 +87,8 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                 onClick={() => setSelectedCategory(cat)}
                 className={`flex-none px-6 py-2 rounded-full font-sora text-xs font-semibold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-[#004129] text-white shadow-sm'
-                    : 'bg-[#eae7e7] text-[#404943] hover:bg-[#0e5a3c] hover:text-white'
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-border-subtle text-muted-foreground hover:bg-primary-emerald hover:text-white'
                 }`}
               >
                 {cat}
@@ -102,17 +102,17 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       <section>
         <div
           onClick={() => setCurrentView('describe_problem')}
-          className="relative overflow-hidden rounded-3xl bg-[#0e5a3c] p-6 md:p-8 group cursor-pointer active:scale-[0.98] transition-all shadow-md"
+          className="relative overflow-hidden rounded-3xl bg-primary-emerald p-6 md:p-8 group cursor-pointer active:scale-[0.98] transition-all shadow-md"
         >
           {/* Subtle Ambient Glow */}
-          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-[#abf2ca]/20 rounded-full blur-2xl group-hover:scale-125 transition-transform"></div>
+          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-success/20 rounded-full blur-2xl group-hover:scale-125 transition-transform"></div>
 
           <div className="relative z-10 space-y-4">
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-[#abf2ca]/20 flex items-center justify-center">
-                <Sparkles className="text-[#abf2ca] w-6 h-6" fill="currentColor" />
+              <div className="w-10 h-10 rounded-full bg-success/20 flex items-center justify-center">
+                <Sparkles className="text-success w-6 h-6" fill="currentColor" />
               </div>
-              <span className="text-[#8acfa9] font-sora text-xs font-bold uppercase tracking-wider">
+              <span className="text-primary-emerald-foreground font-sora text-xs font-bold uppercase tracking-wider">
                 ASSISTANT IA
               </span>
             </div>
@@ -121,7 +121,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
               Décrivez votre problème, on vous trouve le bon artisan
             </h2>
 
-            <div className="flex items-center gap-2 text-[#abf2ca] font-sora text-sm font-semibold group-hover:translate-x-1 transition-transform">
+            <div className="flex items-center gap-2 text-success font-sora text-sm font-semibold group-hover:translate-x-1 transition-transform">
               <span>Essayer maintenant</span>
               <ArrowRight className="w-[18px] h-[18px]" />
             </div>
@@ -132,10 +132,10 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       {/* Recommended Artisans Section */}
       <section className="space-y-4">
         <div className="flex justify-between items-end">
-          <h3 className="font-bold text-xl text-[#004129]">Artisans recommandés</h3>
+          <h3 className="font-bold text-xl text-primary">Artisans recommandés</h3>
           <button
             onClick={() => setCurrentView('search')}
-            className="text-[#004129] font-sora text-xs font-semibold hover:underline decoration-1 underline-offset-2"
+            className="text-primary font-sora text-xs font-semibold hover:underline decoration-1 underline-offset-2"
           >
             Voir tout
           </button>
@@ -143,9 +143,9 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
 
         <div className="space-y-3">
           {filteredArtisans.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center border border-[#e5e2e1]">
-              <SearchX className="text-[#707972] mb-2 w-9 h-9 mx-auto" />
-              <p className="text-[#404943] font-medium">
+            <div className="bg-white rounded-2xl p-8 text-center border border-border">
+              <SearchX className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />
+              <p className="text-muted-foreground font-medium">
                 Aucun artisan ne correspond à votre recherche.
               </p>
               <button
@@ -153,7 +153,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                   setSelectedCategory('Tout');
                   setSearchQuery('');
                 }}
-                className="mt-3 text-sm font-sora text-[#004129] underline"
+                className="mt-3 text-sm font-sora text-primary underline"
               >
                 Réinitialiser les filtres
               </button>
@@ -166,7 +166,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                   setSelectedArtisan(artisan);
                   setCurrentView('artisan_profile');
                 }}
-                className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-[#eae7e7] transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer active:scale-[0.99]"
+                className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer active:scale-[0.99]"
               >
                 {/* Avatar */}
                 <div className="relative flex-none">
@@ -178,7 +178,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                   />
                   {artisan.verified && (
                     <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
-                      <div className="bg-[#0e5a3c] p-1 rounded-full flex items-center justify-center">
+                      <div className="bg-primary-emerald p-1 rounded-full flex items-center justify-center">
                         <BadgeCheck className="text-white w-[14px] h-[14px]" fill="currentColor" />
                       </div>
                     </div>
@@ -189,39 +189,39 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                 <div className="flex-1 flex flex-col justify-between py-0.5">
                   <div>
                     <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-base md:text-lg text-[#1c1b1b]">
+                      <h4 className="font-bold text-base md:text-lg text-foreground">
                         {artisan.name}
                       </h4>
-                      <div className="flex items-center gap-1 bg-[#ffddb1]/40 px-2 py-0.5 rounded-full border border-[#ffddb1]/60">
-                        <Star className="text-[#815600] w-[14px] h-[14px]" fill="currentColor" />
-                        <span className="text-[#815600] font-sora text-xs font-bold">
+                      <div className="flex items-center gap-1 bg-accent-soft/40 px-2 py-0.5 rounded-full border border-accent-soft/60">
+                        <Star className="text-accent-foreground w-[14px] h-[14px]" fill="currentColor" />
+                        <span className="text-accent-foreground font-sora text-xs font-bold">
                           {artisan.rating}
                         </span>
                       </div>
                     </div>
 
-                    <p className="text-[#404943] font-sora text-xs font-medium mt-0.5">
+                    <p className="text-muted-foreground font-sora text-xs font-medium mt-0.5">
                       {artisan.trade}
                     </p>
 
                     <div className="flex items-center gap-2 mt-1">
-                      <div className="flex items-center gap-0.5 text-[#707972] font-sora text-xs">
+                      <div className="flex items-center gap-0.5 text-muted-foreground-soft font-sora text-xs">
                         <Map className="w-[14px] h-[14px]" />
                         <span>{artisan.distance}</span>
                       </div>
-                      <span className="text-[#707972]">•</span>
-                      <span className="text-[#404943] font-sora text-xs">
+                      <span className="text-muted-foreground-soft">•</span>
+                      <span className="text-muted-foreground font-sora text-xs">
                         {artisan.reviewCount} avis
                       </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-2">
-                    <span className="text-[#004129] font-bold text-base">
+                    <span className="text-primary font-bold text-base">
                       {artisan.priceBase}{' '}
-                      <span className="text-[#707972] font-normal text-xs">/base</span>
+                      <span className="text-muted-foreground-soft font-normal text-xs">/base</span>
                     </span>
-                    <ChevronRight className="text-[#0e5a3c] w-[18px] h-[18px]" />
+                    <ChevronRight className="text-primary-emerald w-[18px] h-[18px]" />
                   </div>
                 </div>
               </div>
@@ -231,10 +231,10 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       </section>
 
       {/* Téranga Premium Banner */}
-      <section className="bg-[#f6f3f2] rounded-2xl p-5 md:p-6 flex items-center justify-between border border-[#e5e2e1]">
+      <section className="bg-surface-muted rounded-2xl p-5 md:p-6 flex items-center justify-between border border-border">
         <div className="space-y-1">
-          <h4 className="font-bold text-base text-[#004129]">Téranga Premium</h4>
-          <p className="text-[#404943] text-xs font-sora max-w-[220px] md:max-w-md">
+          <h4 className="font-bold text-base text-primary">Téranga Premium</h4>
+          <p className="text-muted-foreground text-xs font-sora max-w-[220px] md:max-w-md">
             Accès prioritaire et garanties étendues sur tous vos travaux.
           </p>
         </div>
@@ -244,7 +244,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
               'Téranga Premium vous offre la garantie sérénité 100% remboursement et un conseiller dédié à Dakar.',
             )
           }
-          className="bg-[#004129] text-white px-4 py-2.5 rounded-full font-sora text-xs font-semibold hover:opacity-90 transition-all shrink-0 cursor-pointer"
+          className="bg-primary text-white px-4 py-2.5 rounded-full font-sora text-xs font-semibold hover:opacity-90 transition-all shrink-0 cursor-pointer"
         >
           Découvrir
         </button>
@@ -253,7 +253,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       {/* Floating Action Button for AI */}
       <button
         onClick={() => setCurrentView('describe_problem')}
-        className="fixed right-5 bottom-20 md:bottom-24 w-14 h-14 bg-[#004129] text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40 cursor-pointer"
+        className="fixed right-5 bottom-20 md:bottom-24 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40 cursor-pointer"
         title="Poser votre question à l'IA"
       >
         <Sparkles className="w-[26px] h-[26px]" fill="currentColor" />
