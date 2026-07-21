@@ -53,7 +53,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['server.ts', 'vite.config.ts'],
+    files: ['server.ts', 'vite.config.ts', 'vitest.config.ts', 'vitest.setup.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
