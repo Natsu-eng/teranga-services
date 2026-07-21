@@ -18,10 +18,19 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('Tout');
 
-  const categories = ['Tout', 'Plomberie', 'Électricité', 'Climatisation', 'Menuiserie', 'Maçonnerie', 'Peinture'];
+  const categories = [
+    'Tout',
+    'Plomberie',
+    'Électricité',
+    'Climatisation',
+    'Menuiserie',
+    'Maçonnerie',
+    'Peinture',
+  ];
 
   const filteredArtisans = artisans.filter((artisan) => {
-    const matchesCategory = selectedCategory === 'Tout' || artisan.trade.toLowerCase() === selectedCategory.toLowerCase();
+    const matchesCategory =
+      selectedCategory === 'Tout' || artisan.trade.toLowerCase() === selectedCategory.toLowerCase();
     const matchesSearch =
       !searchQuery ||
       artisan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -91,7 +100,9 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
           <div className="relative z-10 space-y-4">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-[#abf2ca]/20 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[#abf2ca] fill-icon">auto_awesome</span>
+                <span className="material-symbols-outlined text-[#abf2ca] fill-icon">
+                  auto_awesome
+                </span>
               </div>
               <span className="text-[#8acfa9] font-sora text-xs font-bold uppercase tracking-wider">
                 ASSISTANT IA
@@ -125,8 +136,12 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
         <div className="space-y-3">
           {filteredArtisans.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center border border-[#e5e2e1]">
-              <span className="material-symbols-outlined text-4xl text-[#707972] mb-2">search_off</span>
-              <p className="text-[#404943] font-medium">Aucun artisan ne correspond à votre recherche.</p>
+              <span className="material-symbols-outlined text-4xl text-[#707972] mb-2">
+                search_off
+              </span>
+              <p className="text-[#404943] font-medium">
+                Aucun artisan ne correspond à votre recherche.
+              </p>
               <button
                 onClick={() => {
                   setSelectedCategory('Tout');
@@ -169,16 +184,22 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                 <div className="flex-1 flex flex-col justify-between py-0.5">
                   <div>
                     <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-base md:text-lg text-[#1c1b1b]">{artisan.name}</h4>
+                      <h4 className="font-bold text-base md:text-lg text-[#1c1b1b]">
+                        {artisan.name}
+                      </h4>
                       <div className="flex items-center gap-1 bg-[#ffddb1]/40 px-2 py-0.5 rounded-full border border-[#ffddb1]/60">
                         <span className="material-symbols-outlined text-[#815600] text-[14px] fill-icon">
                           star
                         </span>
-                        <span className="text-[#815600] font-sora text-xs font-bold">{artisan.rating}</span>
+                        <span className="text-[#815600] font-sora text-xs font-bold">
+                          {artisan.rating}
+                        </span>
                       </div>
                     </div>
 
-                    <p className="text-[#404943] font-sora text-xs font-medium mt-0.5">{artisan.trade}</p>
+                    <p className="text-[#404943] font-sora text-xs font-medium mt-0.5">
+                      {artisan.trade}
+                    </p>
 
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex items-center gap-0.5 text-[#707972] font-sora text-xs">
@@ -186,15 +207,20 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                         <span>{artisan.distance}</span>
                       </div>
                       <span className="text-[#707972]">•</span>
-                      <span className="text-[#404943] font-sora text-xs">{artisan.reviewCount} avis</span>
+                      <span className="text-[#404943] font-sora text-xs">
+                        {artisan.reviewCount} avis
+                      </span>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-[#004129] font-bold text-base">
-                      {artisan.priceBase} <span className="text-[#707972] font-normal text-xs">/base</span>
+                      {artisan.priceBase}{' '}
+                      <span className="text-[#707972] font-normal text-xs">/base</span>
                     </span>
-                    <span className="material-symbols-outlined text-[#0e5a3c] text-lg">arrow_forward_ios</span>
+                    <span className="material-symbols-outlined text-[#0e5a3c] text-lg">
+                      arrow_forward_ios
+                    </span>
                   </div>
                 </div>
               </div>
@@ -212,7 +238,11 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
           </p>
         </div>
         <button
-          onClick={() => alert("Téranga Premium vous offre la garantie sérénité 100% remboursement et un conseiller dédié à Dakar.")}
+          onClick={() =>
+            alert(
+              'Téranga Premium vous offre la garantie sérénité 100% remboursement et un conseiller dédié à Dakar.',
+            )
+          }
           className="bg-[#004129] text-white px-4 py-2.5 rounded-full font-sora text-xs font-semibold hover:opacity-90 transition-all shrink-0 cursor-pointer"
         >
           Découvrir

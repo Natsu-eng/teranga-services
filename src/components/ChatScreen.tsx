@@ -49,7 +49,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         {
           id: `msg-artisan-${Date.now()}`,
           sender: 'artisan',
-          text: "Parfait ! Je peux intervenir dès cet après-midi vers 14h à votre adresse. Merci pour votre confiance.",
+          text: 'Parfait ! Je peux intervenir dès cet après-midi vers 14h à votre adresse. Merci pour votre confiance.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -67,7 +67,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
           };
         }
         return msg;
-      })
+      }),
     );
 
     // Auto-reply confirmation
@@ -140,7 +140,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         {/* Date Divider */}
         <div className="flex justify-center my-2">
           <span className="bg-[#eae7e7] px-3 py-1 rounded-full text-xs font-sora text-[#404943]">
-            Aujourd'hui
+            Aujourd&apos;hui
           </span>
         </div>
 
@@ -182,7 +182,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
 
                       <div className="space-y-2 mb-4 text-sm">
                         <div className="flex justify-between text-[#404943]">
-                          <span>Main d'œuvre</span>
+                          <span>Main d&apos;œuvre</span>
                           <span className="font-semibold text-[#1c1b1b]">
                             {msg.devis.laborPrice.toLocaleString()} FCFA
                           </span>
@@ -207,7 +207,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                       {devisAccepted || msg.devis.status === 'accepted' ? (
                         <div className="w-full bg-[#004129] text-white font-sora text-sm font-bold py-3 rounded-full flex items-center justify-center gap-2">
                           <span>Devis accepté</span>
-                          <span className="material-symbols-outlined text-sm fill-icon">check_circle</span>
+                          <span className="material-symbols-outlined text-sm fill-icon">
+                            check_circle
+                          </span>
                         </div>
                       ) : (
                         <button
@@ -226,14 +228,19 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                   </div>
                 )}
 
-                <span className="text-[11px] font-sora text-[#707972] mt-1 ml-1">{msg.timestamp}</span>
+                <span className="text-[11px] font-sora text-[#707972] mt-1 ml-1">
+                  {msg.timestamp}
+                </span>
               </div>
             );
           }
 
           // Client message
           return (
-            <div key={msg.id} className="flex flex-col items-end self-end max-w-[88%] md:max-w-[70%]">
+            <div
+              key={msg.id}
+              className="flex flex-col items-end self-end max-w-[88%] md:max-w-[70%]"
+            >
               <div className="bg-[#0e5a3c] p-4 rounded-2xl rounded-br-sm text-[#8acfa9] text-sm md:text-base leading-relaxed shadow-sm">
                 {msg.text}
               </div>
@@ -255,7 +262,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               <div className="w-1.5 h-1.5 bg-[#707972] rounded-full animate-bounce [animation-delay:0.2s]"></div>
               <div className="w-1.5 h-1.5 bg-[#707972] rounded-full animate-bounce [animation-delay:0.4s]"></div>
             </div>
-            <span>{artisan.name} est en train d'écrire...</span>
+            <span>{artisan.name} est en train d&apos;écrire...</span>
           </div>
         )}
 

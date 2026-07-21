@@ -76,7 +76,11 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
           {/* Profile Picture Overlap */}
           <div className="absolute -bottom-14 left-4 md:left-12 ring-4 ring-[#fcf9f8] rounded-full overflow-hidden w-28 h-28 md:w-36 md:h-36 bg-white artisan-shadow">
-            <img src={artisan.avatarUrl} alt={artisan.name} className="w-full h-full object-cover" />
+            <img
+              src={artisan.avatarUrl}
+              alt={artisan.name}
+              className="w-full h-full object-cover"
+            />
           </div>
         </section>
 
@@ -145,7 +149,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
               </span>
               <span className="font-bold text-xl text-[#004129]">{artisan.stats.experience}</span>
               <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
-                D'exp.
+                D&apos;exp.
               </span>
             </div>
           </div>

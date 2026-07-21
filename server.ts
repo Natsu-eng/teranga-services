@@ -1,8 +1,8 @@
-import express from "express";
-import path from "path";
-import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
-import dotenv from "dotenv";
+import express from 'express';
+import path from 'path';
+import { createServer as createViteServer } from 'vite';
+import { GoogleGenAI } from '@google/genai';
+import dotenv from 'dotenv';
 
 dotenv.config();
 
@@ -13,20 +13,20 @@ async function startServer() {
   app.use(express.json());
 
   // API Route: AI Problem Diagnosis
-  app.post("/api/analyze-problem", async (req, res) => {
+  app.post('/api/analyze-problem', async (req, res) => {
     try {
       const { description } = req.body;
-      if (!description || typeof description !== "string") {
-        return res.status(400).json({ error: "La description est requise." });
+      if (!description || typeof description !== 'string') {
+        return res.status(400).json({ error: 'La description est requise.' });
       }
 
       const apiKey = process.env.GEMINI_API_KEY;
 
-      if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
+      if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
         try {
           const ai = new GoogleGenAI({ apiKey });
           const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: 'gemini-2.5-flash',
             contents: `Tu es l'assistant virtuel intelligent de "Téranga Services", la plateforme leader de services à domicile et d'artisans au Sénégal (Dakar).
 Analyse le problème décrit par l'utilisateur et renvoie UNIQUEMENT un objet JSON strictement valide avec cette structure exacte (sans bloc markdown triple quote si possible, ou pur json) :
 
@@ -44,10 +44,10 @@ Analyse le problème décrit par l'utilisateur et renvoie UNIQUEMENT un objet JS
   }
 }
 
-Description utilisateur: "${description}"`
+Description utilisateur: "${description}"`,
           });
 
-          const text = response.text || "";
+          const text = response.text || '';
           // Extract JSON if wrapped in markdown
           const jsonMatch = text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
@@ -55,74 +55,89 @@ Description utilisateur: "${description}"`
             return res.json(parsed);
           }
         } catch (aiErr) {
-          console.error("Gemini API Error, fallback to heuristic rules:", aiErr);
+          console.error('Gemini API Error, fallback to heuristic rules:', aiErr);
         }
       }
 
       // Smart heuristic fallback if no API key or error
       const descLower = description.toLowerCase();
-      let trade = "Plomberie — fuite";
-      let priceEstimate = "8 000 – 15 000 FCFA";
+      let trade = 'Plomberie — fuite';
+      let priceEstimate = '8 000 – 15 000 FCFA';
       let labor = 8000;
       let materials = 4000;
       let title = "Réparation fuite d'eau";
 
-      if (descLower.includes("electr") || descLower.includes("électricité") || descLower.includes("prise") || descLower.includes("courant") || descLower.includes("disjoncteur")) {
-        trade = "Électricité — dépannage";
-        priceEstimate = "12 000 – 25 000 FCFA";
+      if (
+        descLower.includes('electr') ||
+        descLower.includes('électricité') ||
+        descLower.includes('prise') ||
+        descLower.includes('courant') ||
+        descLower.includes('disjoncteur')
+      ) {
+        trade = 'Électricité — dépannage';
+        priceEstimate = '12 000 – 25 000 FCFA';
         labor = 15000;
         materials = 5000;
-        title = "Diagnostic et réparation électrique";
-      } else if (descLower.includes("clim") || descLower.includes("froid") || descLower.includes("chaleur")) {
-        trade = "Climatisation — entretien";
-        priceEstimate = "15 000 – 30 000 FCFA";
+        title = 'Diagnostic et réparation électrique';
+      } else if (
+        descLower.includes('clim') ||
+        descLower.includes('froid') ||
+        descLower.includes('chaleur')
+      ) {
+        trade = 'Climatisation — entretien';
+        priceEstimate = '15 000 – 30 000 FCFA';
         labor = 18000;
         materials = 7000;
-        title = "Recharge et nettoyage climatiseur";
-      } else if (descLower.includes("porte") || descLower.includes("bois") || descLower.includes("serrure") || descLower.includes("menuisier")) {
-        trade = "Menuiserie — réparation";
-        priceEstimate = "10 000 – 20 000 FCFA";
+        title = 'Recharge et nettoyage climatiseur';
+      } else if (
+        descLower.includes('porte') ||
+        descLower.includes('bois') ||
+        descLower.includes('serrure') ||
+        descLower.includes('menuisier')
+      ) {
+        trade = 'Menuiserie — réparation';
+        priceEstimate = '10 000 – 20 000 FCFA';
         labor = 12000;
         materials = 4000;
-        title = "Réparation porte / serrurerie";
+        title = 'Réparation porte / serrurerie';
       }
 
       return res.json({
         trade,
         priceEstimate,
         recommendedCount: 3,
-        explanation: "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
-        urgency: "moyenne",
+        explanation:
+          "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+        urgency: 'moyenne',
         suggestedDevis: {
           title,
           labor,
           materials,
-          total: labor + materials
-        }
+          total: labor + materials,
+        },
       });
-
-    } catch (err: any) {
-      console.error("Server error:", err);
-      return res.status(500).json({ error: "Erreur interne du serveur." });
+    } catch (err) {
+      console.error('Server error:', err);
+      return res.status(500).json({ error: 'Erreur interne du serveur.' });
     }
   });
 
   // Vite Middleware for Dev or Static Serving for Prod
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Téranga Services Server running on http://0.0.0.0:${PORT}`);
   });
 }

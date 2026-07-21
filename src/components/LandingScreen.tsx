@@ -6,10 +6,7 @@ interface LandingScreenProps {
   setUserRole: (role: UserRole) => void;
 }
 
-export const LandingScreen: React.FC<LandingScreenProps> = ({
-  setCurrentView,
-  setUserRole,
-}) => {
+export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, setUserRole }) => {
   return (
     <div className="bg-[#fcf9f8] text-[#1c1b1b] min-h-screen flex flex-col overflow-x-hidden">
       {/* Hero Illustration Section */}
@@ -44,7 +41,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         <div className="w-full bg-[#fcf9f8] p-6 md:p-10 rounded-[32px] shadow-[0px_4px_20px_rgba(14,90,60,0.06)] text-center border border-[#e5e2e1]">
           <div className="mb-4 flex justify-center">
             <span className="px-4 py-1.5 rounded-full bg-[#ffddb1]/40 text-[#815600] font-sora text-xs font-semibold uppercase tracking-wider">
-              L'excellence au Sénégal
+              L&apos;excellence au Sénégal
             </span>
           </div>
 
@@ -53,7 +50,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </h1>
 
           <p className="text-base md:text-lg text-[#404943] mb-8 max-w-md mx-auto leading-relaxed">
-            La première plateforme sénégalaise pour vos services à domicile. Qualité, ponctualité et respect assurés.
+            La première plateforme sénégalaise pour vos services à domicile. Qualité, ponctualité et
+            respect assurés.
           </p>
 
           <div className="flex flex-col gap-3 items-center w-full max-w-xs mx-auto">

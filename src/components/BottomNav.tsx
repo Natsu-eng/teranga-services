@@ -7,11 +7,7 @@ interface BottomNavProps {
   userRole: UserRole;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({
-  currentView,
-  setCurrentView,
-  userRole,
-}) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentView, userRole }) => {
   if (currentView === 'landing' || currentView === 'describe_problem') return null;
 
   if (userRole === 'artisan') {
@@ -40,9 +36,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           onClick={() => setCurrentView('chat')}
           className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-            currentView === 'chat'
-              ? 'bg-[#0e5a3c] text-white'
-              : 'text-[#404943] hover:bg-[#f6f3f2]'
+            currentView === 'chat' ? 'bg-[#0e5a3c] text-white' : 'text-[#404943] hover:bg-[#f6f3f2]'
           }`}
         >
           <span className="material-symbols-outlined text-[20px]">chat_bubble</span>
@@ -75,7 +69,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             : 'text-[#404943] hover:bg-[#f6f3f2]'
         }`}
       >
-        <span className={`material-symbols-outlined text-[20px] ${currentView === 'client_home' ? 'fill-icon' : ''}`}>
+        <span
+          className={`material-symbols-outlined text-[20px] ${currentView === 'client_home' ? 'fill-icon' : ''}`}
+        >
           home
         </span>
         <span className="font-sora text-[11px] mt-0.5">Accueil</span>

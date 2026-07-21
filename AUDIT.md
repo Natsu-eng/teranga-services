@@ -47,17 +47,18 @@ Pas de dossier `tests/`, pas de fichier `*.test.*`/`*.spec.*`. Pas de dossier `.
 ### 1.2 Dépendances (`package.json`)
 
 **Runtime**
-| Paquet | Version | Usage réel constaté |
-|---|---|---|
-| `react` / `react-dom` | ^19.0.1 | Oui, cœur de l'app |
-| `vite` | ^6.2.3 | Oui, build + middleware dev dans `server.ts` |
-| `express` | ^4.21.2 | Oui, serveur unique (`server.ts`) |
-| `@google/genai` | ^2.4.0 | Oui, dans `server.ts` uniquement (`GoogleGenAI`) |
-| `dotenv` | ^17.2.3 | Oui, charge `.env` dans `server.ts` |
-| `@tailwindcss/vite` | ^4.1.14 | Oui (plugin Vite) |
-| `@vitejs/plugin-react` | ^5.0.4 | Oui (plugin Vite) |
-| `lucide-react` | ^0.546.0 | **Non utilisé** — aucun import trouvé dans `src/`. Tous les écrans utilisent des `<span className="material-symbols-outlined">` (police Google), pas les composants React de lucide. |
-| `motion` | ^12.23.24 | **Non utilisé** — aucun import trouvé. Les animations sont faites en CSS/Tailwind (`animate-in`, `animate-pulse`, `animate-bounce`, transitions). |
+
+| Paquet                 | Version   | Usage réel constaté                                                                                                                                                                  |
+| ---------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `react` / `react-dom`  | ^19.0.1   | Oui, cœur de l'app                                                                                                                                                                   |
+| `vite`                 | ^6.2.3    | Oui, build + middleware dev dans `server.ts`                                                                                                                                         |
+| `express`              | ^4.21.2   | Oui, serveur unique (`server.ts`)                                                                                                                                                    |
+| `@google/genai`        | ^2.4.0    | Oui, dans `server.ts` uniquement (`GoogleGenAI`)                                                                                                                                     |
+| `dotenv`               | ^17.2.3   | Oui, charge `.env` dans `server.ts`                                                                                                                                                  |
+| `@tailwindcss/vite`    | ^4.1.14   | Oui (plugin Vite)                                                                                                                                                                    |
+| `@vitejs/plugin-react` | ^5.0.4    | Oui (plugin Vite)                                                                                                                                                                    |
+| `lucide-react`         | ^0.546.0  | **Non utilisé** — aucun import trouvé dans `src/`. Tous les écrans utilisent des `<span className="material-symbols-outlined">` (police Google), pas les composants React de lucide. |
+| `motion`               | ^12.23.24 | **Non utilisé** — aucun import trouvé. Les animations sont faites en CSS/Tailwind (`animate-in`, `animate-pulse`, `animate-bounce`, transitions).                                    |
 
 **Dev**
 `@types/node`, `autoprefixer`, `esbuild`, `tailwindcss`, `tsx`, `typescript` ~5.8.2, `@types/express`.
@@ -66,13 +67,13 @@ Pas de dossier `tests/`, pas de fichier `*.test.*`/`*.spec.*`. Pas de dossier `.
 
 ### 1.3 Scripts npm
 
-| Script | Commande | Rôle |
-|---|---|---|
-| `dev` | `tsx server.ts` | Lance Express + middleware Vite en mode dev (HMR) |
-| `build` | `vite build && esbuild server.ts --bundle --platform=node --format=cjs ... --outfile=dist/server.cjs` | Build client (Vite) + bundle serveur (esbuild → CJS) |
-| `start` | `node dist/server.cjs` | Sert le build de production (fichiers statiques + API) |
-| `clean` | `rm -rf dist server.js` | Nettoyage (commande Unix — ne fonctionnera pas telle quelle sous PowerShell natif) |
-| `lint` | `tsc --noEmit` | Vérification de types uniquement, **pas d'ESLint/Prettier configuré** |
+| Script  | Commande                                                                                              | Rôle                                                                               |
+| ------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `dev`   | `tsx server.ts`                                                                                       | Lance Express + middleware Vite en mode dev (HMR)                                  |
+| `build` | `vite build && esbuild server.ts --bundle --platform=node --format=cjs ... --outfile=dist/server.cjs` | Build client (Vite) + bundle serveur (esbuild → CJS)                               |
+| `start` | `node dist/server.cjs`                                                                                | Sert le build de production (fichiers statiques + API)                             |
+| `clean` | `rm -rf dist server.js`                                                                               | Nettoyage (commande Unix — ne fonctionnera pas telle quelle sous PowerShell natif) |
+| `lint`  | `tsc --noEmit`                                                                                        | Vérification de types uniquement, **pas d'ESLint/Prettier configuré**              |
 
 ### 1.4 Points d'entrée
 
@@ -100,37 +101,38 @@ Aucune de ces vues n'a d'URL propre : rafraîchir la page (F5) ramène toujours 
 
 ### 2.2 État global (`App.tsx`)
 
-| State | Type | Rôle |
-|---|---|---|
-| `currentView` | `AppView` | Vue active |
-| `userRole` | `UserRole` (`'client' \| 'artisan'`) | Bascule l'UI entre espace client et espace pro |
-| `artisans` | `Artisan[]` | Initialisé depuis `INITIAL_ARTISANS` (mock), jamais persisté |
-| `selectedArtisan` | `Artisan` | Artisan actif pour profil/chat, initialisé à `INITIAL_ARTISANS[0]` |
-| `jobRequests` | `JobRequest[]` | Demandes visibles côté artisan, mutées en mémoire |
-| `chatMessages` | `ChatMessage[]` | Fil de discussion, muté en mémoire |
-| `location` | `string` | Quartier sélectionné (`'Dakar Plateau'` par défaut) |
-| `searchQuery` | `string` | Texte de recherche partagé avec `ClientHomeScreen` |
+| State             | Type                                 | Rôle                                                               |
+| ----------------- | ------------------------------------ | ------------------------------------------------------------------ |
+| `currentView`     | `AppView`                            | Vue active                                                         |
+| `userRole`        | `UserRole` (`'client' \| 'artisan'`) | Bascule l'UI entre espace client et espace pro                     |
+| `artisans`        | `Artisan[]`                          | Initialisé depuis `INITIAL_ARTISANS` (mock), jamais persisté       |
+| `selectedArtisan` | `Artisan`                            | Artisan actif pour profil/chat, initialisé à `INITIAL_ARTISANS[0]` |
+| `jobRequests`     | `JobRequest[]`                       | Demandes visibles côté artisan, mutées en mémoire                  |
+| `chatMessages`    | `ChatMessage[]`                      | Fil de discussion, muté en mémoire                                 |
+| `location`        | `string`                             | Quartier sélectionné (`'Dakar Plateau'` par défaut)                |
+| `searchQuery`     | `string`                             | Texte de recherche partagé avec `ClientHomeScreen`                 |
 
 Tout est perdu au rafraîchissement (aucun `localStorage`/`sessionStorage`/backend de persistance).
 
 ### 2.3 Écrans et props reçues
 
-| Écran | Props reçues | Rôle |
-|---|---|---|
-| `Header` | `currentView, setCurrentView, userRole, setUserRole, location, setLocation, unreadCount` | Barre sup., sélecteur de quartier (mock, liste statique), bascule de rôle, badge notifications |
-| `BottomNav` | `currentView, setCurrentView, userRole` | Nav basse contextuelle au rôle |
-| `LandingScreen` | `setCurrentView, setUserRole` | Choix "Client" vs "Artisan", aucune auth |
-| `ClientHomeScreen` | `artisans, setCurrentView, setSelectedArtisan, searchQuery, setSearchQuery` | Recherche + filtre catégories + carte CTA IA + liste artisans + bandeau "Premium" (factice, `alert()`) |
-| `DescribeProblemScreen` | `setCurrentView, setSelectedArtisan, artisans` | Formulaire IA (texte, upload photo, "enregistrement vocal" simulé) → **seul écran connecté à une vraie API** |
-| `ArtisanProfileScreen` | `artisan, setCurrentView` | Fiche artisan : bio, stats, réalisations, avis, partage (clipboard réel), favoris (state local, non persisté) |
-| `ChatScreen` | `artisan, messages, setMessages, setCurrentView` | Chat simulé (réponse artisan via `setTimeout`), carte de devis, bouton "Appeler" → `alert()` |
-| `ArtisanDashboardScreen` | `artisan, jobRequests, setJobRequests, setCurrentView` | Dashboard revenus (barres codées en dur), liste demandes, modal de devis, toggle disponibilité |
-| `SearchScreen` | `artisans, setCurrentView, setSelectedArtisan` | Recherche + filtres (métier, note mini) sur `artisans` en mémoire |
-| `UserProfileScreen` | `userRole, setUserRole, setCurrentView, location` | Identité codée en dur ("Diandé Diallo"), choix moyen de paiement (state local, aucun appel réseau), déconnexion → retour `'landing'` |
+| Écran                    | Props reçues                                                                             | Rôle                                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `Header`                 | `currentView, setCurrentView, userRole, setUserRole, location, setLocation, unreadCount` | Barre sup., sélecteur de quartier (mock, liste statique), bascule de rôle, badge notifications                                       |
+| `BottomNav`              | `currentView, setCurrentView, userRole`                                                  | Nav basse contextuelle au rôle                                                                                                       |
+| `LandingScreen`          | `setCurrentView, setUserRole`                                                            | Choix "Client" vs "Artisan", aucune auth                                                                                             |
+| `ClientHomeScreen`       | `artisans, setCurrentView, setSelectedArtisan, searchQuery, setSearchQuery`              | Recherche + filtre catégories + carte CTA IA + liste artisans + bandeau "Premium" (factice, `alert()`)                               |
+| `DescribeProblemScreen`  | `setCurrentView, setSelectedArtisan, artisans`                                           | Formulaire IA (texte, upload photo, "enregistrement vocal" simulé) → **seul écran connecté à une vraie API**                         |
+| `ArtisanProfileScreen`   | `artisan, setCurrentView`                                                                | Fiche artisan : bio, stats, réalisations, avis, partage (clipboard réel), favoris (state local, non persisté)                        |
+| `ChatScreen`             | `artisan, messages, setMessages, setCurrentView`                                         | Chat simulé (réponse artisan via `setTimeout`), carte de devis, bouton "Appeler" → `alert()`                                         |
+| `ArtisanDashboardScreen` | `artisan, jobRequests, setJobRequests, setCurrentView`                                   | Dashboard revenus (barres codées en dur), liste demandes, modal de devis, toggle disponibilité                                       |
+| `SearchScreen`           | `artisans, setCurrentView, setSelectedArtisan`                                           | Recherche + filtres (métier, note mini) sur `artisans` en mémoire                                                                    |
+| `UserProfileScreen`      | `userRole, setUserRole, setCurrentView, location`                                        | Identité codée en dur ("Diandé Diallo"), choix moyen de paiement (state local, aucun appel réseau), déconnexion → retour `'landing'` |
 
 ### 2.4 Backend (`server.ts`)
 
 Un seul fichier, une seule route `POST /api/analyze-problem` :
+
 1. Valide `description` (string requise).
 2. Si `GEMINI_API_KEY` est définie et différente du placeholder `"MY_GEMINI_API_KEY"` → appelle `gemini-2.5-flash` avec un prompt qui exige un JSON strict.
 3. Extrait le JSON de la réponse via regex `/\{[\s\S]*\}/` puis `JSON.parse`.
@@ -194,6 +196,7 @@ Toutes les images (avatars, couvertures, réalisations, hero de la landing page)
 ### 4.3 Absence de validation du JSON renvoyé par Gemini
 
 Dans `server.ts` (lignes ~50-56) :
+
 ```ts
 const jsonMatch = text.match(/\{[\s\S]*\}/);
 if (jsonMatch) {
@@ -201,6 +204,7 @@ if (jsonMatch) {
   return res.json(parsed);
 }
 ```
+
 - Aucun schéma (pas de Zod/Ajv/validation manuelle) ne vérifie que `parsed` contient bien `trade`, `priceEstimate`, `recommendedCount`, `urgency`, `suggestedDevis.{title,labor,materials,total}`.
 - Si Gemini renvoie un JSON valide mais incomplet ou de forme différente, l'objet est renvoyé tel quel au client ; le frontend (`DescribeProblemScreen.tsx`) applique bien des valeurs par défaut (`data.trade || ...`) mais **uniquement au premier niveau** — un `suggestedDevis` malformé (ex. `labor` en string, champ manquant) sera propagé tel quel et pourra casser `toLocaleString()` côté `ChatScreen`/UI si jamais réutilisé.
 - `JSON.parse` peut lever une exception si le JSON extrait par la regex est invalide (ex. JSON tronqué) — elle est bien rattrapée par le `catch (aiErr)` englobant, donc pas de crash serveur, mais elle **avale silencieusement l'erreur** (`console.error` seulement) et bascule sur l'heuristique sans en informer le client ni faire de retry.
@@ -225,27 +229,32 @@ if (jsonMatch) {
 
 ## 5. Proposition de plan en lots priorisés
 
-*(à valider avant toute action — aucune modification n'a été faite)*
+_(à valider avant toute action — aucune modification n'a été faite)_
 
 **Lot 0 — Remise en état de l'environnement (prérequis)**
+
 - Initialiser le dépôt git (`git init`) si souhaité.
 - `npm install` pour générer un vrai lockfile et `node_modules`.
 - Créer un `.env.local` avec une vraie clé Gemini (ou documenter le mode fallback comme choix assumé).
 
 **Lot 1 — Fiabilisation des assets (risque le plus visible/urgent)**
+
 - Remplacer les URLs `googleusercontent.com` temporaires par des images hébergées durablement (assets locaux `/public` ou stockage type S3/Cloud Storage).
 - Ajouter un fallback `onError` sur les `<img>` (image placeholder locale) en attendant.
 
 **Lot 2 — Nettoyage des dépendances et icônes**
+
 - Décider : soit migrer les icônes vers `lucide-react` (déjà en dépendance, évite la dépendance réseau à Google Fonts), soit retirer `lucide-react` et `motion` du `package.json` s'ils restent inutilisés.
 - Auto-héberger la police "Material Symbols Outlined" si on garde ce système, pour ne plus dépendre du CDN Google Fonts en prod.
 
 **Lot 3 — Robustesse de l'API `/api/analyze-problem`**
+
 - Ajouter une validation de schéma (Zod) sur la réponse Gemini avant de la renvoyer au client.
 - Ajouter un timeout explicite sur l'appel Gemini.
 - Distinguer dans la réponse si le résultat vient de l'IA ou du fallback (utile pour debug/monitoring).
 
 **Lot 4 — Fondations manquantes (plus gros chantier, à séquencer selon vos priorités produit)**
+
 - Authentification réelle (comptes client/artisan) — condition préalable avant d'ouvrir `userRole` à autre chose qu'une démo.
 - Persistance (base de données) pour artisans, demandes, messages, remplaçant `mockData.ts`.
 - Routing réel (React Router) pour le deep-linking et le rafraîchissement de page.

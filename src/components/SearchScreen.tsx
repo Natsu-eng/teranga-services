@@ -25,7 +25,8 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
       art.trade.toLowerCase().includes(searchTerm.toLowerCase()) ||
       art.tags.some((t) => t.toLowerCase().includes(searchTerm.toLowerCase()));
 
-    const matchesTrade = selectedTrade === 'Tous' || art.trade.toLowerCase() === selectedTrade.toLowerCase();
+    const matchesTrade =
+      selectedTrade === 'Tous' || art.trade.toLowerCase() === selectedTrade.toLowerCase();
     const matchesRating = art.rating >= minRating;
 
     return matchesSearch && matchesTrade && matchesRating;
@@ -34,7 +35,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
   return (
     <main className="max-w-4xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
       <div className="flex items-center gap-3">
-        <h2 className="font-bold text-2xl text-[#004129]">Recherche d'artisans</h2>
+        <h2 className="font-bold text-2xl text-[#004129]">Recherche d&apos;artisans</h2>
       </div>
 
       {/* Input */}
@@ -97,7 +98,11 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
             }}
             className="bg-white p-4 rounded-2xl artisan-shadow border border-[#eae7e7] flex gap-4 cursor-pointer hover:shadow-md transition-all"
           >
-            <img src={art.avatarUrl} alt={art.name} className="w-20 h-20 rounded-2xl object-cover shrink-0" />
+            <img
+              src={art.avatarUrl}
+              alt={art.name}
+              className="w-20 h-20 rounded-2xl object-cover shrink-0"
+            />
             <div className="flex-1 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-start">
@@ -110,7 +115,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
                   </div>
                 </div>
                 <p className="text-xs text-[#404943] font-sora font-medium mt-0.5">{art.trade}</p>
-                <p className="text-xs text-[#707972] font-sora mt-1">{art.location} • {art.distance}</p>
+                <p className="text-xs text-[#707972] font-sora mt-1">
+                  {art.location} • {art.distance}
+                </p>
               </div>
 
               <div className="flex justify-between items-center mt-2">

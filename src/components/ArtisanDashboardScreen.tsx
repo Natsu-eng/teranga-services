@@ -23,7 +23,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
   const handleSendQuote = () => {
     if (selectedJob) {
       setJobRequests((prev) =>
-        prev.map((j) => (j.id === selectedJob.id ? { ...j, status: 'accepted' } : j))
+        prev.map((j) => (j.id === selectedJob.id ? { ...j, status: 'accepted' } : j)),
       );
       setShowQuoteModal(false);
       setSelectedJob(null);
@@ -37,7 +37,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
       <section className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="font-bold text-2xl md:text-3xl text-[#004129]">Bonjour, Idrissa 👋</h2>
-          <p className="text-[#404943] text-sm md:text-base">Prêt pour vos services d'aujourd'hui ?</p>
+          <p className="text-[#404943] text-sm md:text-base">
+            Prêt pour vos services d&apos;aujourd&apos;hui ?
+          </p>
         </div>
 
         {/* Switch Toggle */}
@@ -85,11 +87,26 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
 
           {/* Bar Chart */}
           <div className="mt-8 h-32 flex items-end gap-2.5">
-            <div className="flex-1 bg-[#004129]/10 rounded-t-md h-[40%]" title="Semaine 1: 45 000 FCFA" />
-            <div className="flex-1 bg-[#004129]/10 rounded-t-md h-[60%]" title="Semaine 2: 65 000 FCFA" />
-            <div className="flex-1 bg-[#004129]/10 rounded-t-md h-[45%]" title="Semaine 3: 50 000 FCFA" />
-            <div className="flex-1 bg-[#004129]/10 rounded-t-md h-[75%]" title="Semaine 4: 85 000 FCFA" />
-            <div className="flex-1 bg-[#0e5a3c] rounded-t-md h-[100%]" title="Cette semaine: 110 000 FCFA" />
+            <div
+              className="flex-1 bg-[#004129]/10 rounded-t-md h-[40%]"
+              title="Semaine 1: 45 000 FCFA"
+            />
+            <div
+              className="flex-1 bg-[#004129]/10 rounded-t-md h-[60%]"
+              title="Semaine 2: 65 000 FCFA"
+            />
+            <div
+              className="flex-1 bg-[#004129]/10 rounded-t-md h-[45%]"
+              title="Semaine 3: 50 000 FCFA"
+            />
+            <div
+              className="flex-1 bg-[#004129]/10 rounded-t-md h-[75%]"
+              title="Semaine 4: 85 000 FCFA"
+            />
+            <div
+              className="flex-1 bg-[#0e5a3c] rounded-t-md h-[100%]"
+              title="Cette semaine: 110 000 FCFA"
+            />
           </div>
         </div>
 
@@ -97,7 +114,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
         <div className="lg:col-span-4 flex flex-col gap-3">
           <div className="bg-white p-4 rounded-2xl artisan-shadow border border-[#eae7e7]">
             <div className="flex items-center justify-between">
-              <span className="text-[#404943] font-sora text-xs font-medium">Demandes acceptées</span>
+              <span className="text-[#404943] font-sora text-xs font-medium">
+                Demandes acceptées
+              </span>
               <span className="material-symbols-outlined text-[#004129] bg-[#004129]/10 p-1.5 rounded-lg text-lg">
                 task_alt
               </span>
@@ -145,7 +164,11 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
             >
               <div className="flex items-center gap-4 w-full md:w-auto">
                 <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-[#e5e2e1]">
-                  <img src={req.clientAvatar} alt={req.clientName} className="w-full h-full object-cover" />
+                  <img
+                    src={req.clientAvatar}
+                    alt={req.clientName}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 <div className="flex flex-col">
                   <h4 className="font-sora font-bold text-base text-[#1c1b1b]">{req.clientName}</h4>
@@ -181,7 +204,8 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
         <div className="relative z-10 max-w-md space-y-3">
           <h3 className="font-bold text-xl md:text-2xl">Optimisez vos interventions</h3>
           <p className="text-sm opacity-90 leading-relaxed font-sora">
-            Grâce à notre nouveau système de géolocalisation à Dakar, recevez des demandes encore plus proches de votre position actuelle.
+            Grâce à notre nouveau système de géolocalisation à Dakar, recevez des demandes encore
+            plus proches de votre position actuelle.
           </p>
           <button
             onClick={() => alert('Géolocalisation activée sur Dakar Plateau & Almadies')}
@@ -220,7 +244,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
             <div className="bg-[#f6f3f2] p-4 rounded-2xl border border-[#e5e2e1]">
               <p className="font-bold text-sm text-[#1c1b1b] mb-1">{selectedJob.title}</p>
               <p className="text-xs text-[#404943] leading-relaxed">
-                "{selectedJob.description || 'Besoin d intervention en urgence.'}"
+                &quot;{selectedJob.description || 'Besoin d intervention en urgence.'}&quot;
               </p>
             </div>
 
@@ -231,7 +255,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
 
               <div className="space-y-2">
                 <div>
-                  <label className="text-xs font-sora text-[#404943] font-semibold">Main d'œuvre (FCFA)</label>
+                  <label className="text-xs font-sora text-[#404943] font-semibold">
+                    Main d&apos;œuvre (FCFA)
+                  </label>
                   <input
                     type="number"
                     value={laborPrice}
@@ -241,7 +267,9 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-sora text-[#404943] font-semibold">Fournitures (FCFA)</label>
+                  <label className="text-xs font-sora text-[#404943] font-semibold">
+                    Fournitures (FCFA)
+                  </label>
                   <input
                     type="number"
                     value={materialsPrice}

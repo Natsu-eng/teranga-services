@@ -37,7 +37,9 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
         <div>
           <h4 className="font-bold text-sm text-[#1c1b1b]">Mode actuel</h4>
           <p className="text-xs font-sora text-[#707972]">
-            {userRole === 'client' ? 'Espace Client (Demandes de services)' : 'Espace Artisan Pro (Idrissa Diop)'}
+            {userRole === 'client'
+              ? 'Espace Client (Demandes de services)'
+              : 'Espace Artisan Pro (Idrissa Diop)'}
           </p>
         </div>
         <button
@@ -121,7 +123,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
           className="w-full text-left px-4 py-3 text-sm font-sora text-[#ba1a1a] font-semibold flex items-center gap-2 hover:bg-[#ffdad6]/20 rounded-xl transition-colors cursor-pointer"
         >
           <span className="material-symbols-outlined">logout</span>
-          <span>Déconnexion / Retour à l'accueil</span>
+          <span>Déconnexion / Retour à l&apos;accueil</span>
         </button>
       </div>
     </main>

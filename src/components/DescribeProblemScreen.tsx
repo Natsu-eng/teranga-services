@@ -13,10 +13,10 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
   artisans,
 }) => {
   const [description, setDescription] = useState<string>(
-    "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin."
+    "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin.",
   );
   const [photoPreview, setPhotoPreview] = useState<string | null>(
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuCGgzVx_uIx917S-4xxo10zzmw2zvQkqiMbl173RPqwHI7CaCPLhBSFBcjReSz832uWiMs8IWf0ddCVzDx15jw97HDGQmd6lEXZUzdi3819jXNOhD1zVe6kH-OhzcN6yPfBhuEZPqhLhBgzsV3NwXIZH4Ajnj-ZzgJTOF6rMij9LLHr1FEHzYlmJ-KO6BNu4vDIsh94XU5yf3mxTw8fUk_VvNpL3Bv_Zxrm1YEkNs3YJq4cvysu-4_9xT2iMzHzyMaF3RBwZAH5dcTZ'
+    'https://lh3.googleusercontent.com/aida-public/AB6AXuCGgzVx_uIx917S-4xxo10zzmw2zvQkqiMbl173RPqwHI7CaCPLhBSFBcjReSz832uWiMs8IWf0ddCVzDx15jw97HDGQmd6lEXZUzdi3819jXNOhD1zVe6kH-OhzcN6yPfBhuEZPqhLhBgzsV3NwXIZH4Ajnj-ZzgJTOF6rMij9LLHr1FEHzYlmJ-KO6BNu4vDIsh94XU5yf3mxTw8fUk_VvNpL3Bv_Zxrm1YEkNs3YJq4cvysu-4_9xT2iMzHzyMaF3RBwZAH5dcTZ',
   );
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
@@ -26,7 +26,8 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
     trade: 'Plomberie — fuite',
     priceEstimate: '8 000 – 15 000 FCFA',
     recommendedCount: 3,
-    explanation: "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+    explanation:
+      "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
     urgency: 'haute',
     suggestedDevis: {
       title: "Réparation de fuite d'évier",
@@ -56,7 +57,9 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
             clearInterval(timer);
             setIsRecording(false);
             setDescription(
-              (d) => d + " [Note vocale 0:10]: 'J'ai aussi une forte odeur d'humidité sous le meuble de cuisine.'"
+              (d) =>
+                d +
+                " [Note vocale 0:10]: 'J'ai aussi une forte odeur d'humidité sous le meuble de cuisine.'",
             );
             return 10;
           }
@@ -112,7 +115,9 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
         >
           <span className="material-symbols-outlined text-[#1c1b1b]">arrow_back</span>
         </button>
-        <h1 className="ml-3 font-bold text-lg md:text-xl text-[#004129]">Décrivez votre problème</h1>
+        <h1 className="ml-3 font-bold text-lg md:text-xl text-[#004129]">
+          Décrivez votre problème
+        </h1>
       </header>
 
       <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-4 space-y-6">
@@ -184,7 +189,9 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#0e5a3c] fill-icon">auto_awesome</span>
+                <span className="material-symbols-outlined text-[#0e5a3c] fill-icon">
+                  auto_awesome
+                </span>
                 <h2 className="font-sora text-xs font-bold text-[#004129] tracking-wider uppercase">
                   ANALYSE TERMINÉE
                 </h2>
@@ -226,7 +233,11 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                         key={art.id}
                         className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"
                       >
-                        <img src={art.avatarUrl} alt={art.name} className="w-full h-full object-cover" />
+                        <img
+                          src={art.avatarUrl}
+                          alt={art.name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                     ))}
                     <div className="w-10 h-10 rounded-full border-2 border-white bg-[#f0eded] text-[#404943] flex items-center justify-center text-[10px] font-bold">

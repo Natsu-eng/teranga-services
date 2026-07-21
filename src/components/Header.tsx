@@ -28,7 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
     'Ouakam, Dakar',
     'Mermoz - Sacré Cœur',
     'Yoff - Ngor',
-    'Point E, Dakar'
+    'Point E, Dakar',
   ];
 
   if (currentView === 'landing') return null;
@@ -39,25 +39,29 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3">
         {userRole === 'artisan' ? (
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={() => setCurrentView('artisan_dashboard')}
               className="font-headline-md text-lg md:text-xl font-bold text-[#004129] flex items-center gap-2"
             >
-              <span className="w-8 h-8 bg-[#004129] rounded-lg flex items-center justify-center text-white text-sm font-bold">T</span>
+              <span className="w-8 h-8 bg-[#004129] rounded-lg flex items-center justify-center text-white text-sm font-bold">
+                T
+              </span>
               <span>Téranga Pro</span>
             </button>
           </div>
         ) : (
           <div className="flex flex-col relative">
-            <button 
+            <button
               onClick={() => setShowLocationPicker(!showLocationPicker)}
               className="flex items-center gap-1 text-[#404943] text-xs font-sora hover:text-[#004129] transition-colors"
             >
-              <span className="material-symbols-outlined text-[#004129] text-[18px]">location_on</span>
+              <span className="material-symbols-outlined text-[#004129] text-[18px]">
+                location_on
+              </span>
               <span className="font-medium">{location}</span>
               <span className="material-symbols-outlined text-[16px]">expand_more</span>
             </button>
-            <h1 
+            <h1
               onClick={() => setCurrentView('client_home')}
               className="font-headline-md text-xl md:text-2xl font-bold text-[#004129] cursor-pointer"
             >
@@ -66,7 +70,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             {showLocationPicker && (
               <div className="absolute top-12 left-0 w-56 bg-white rounded-2xl shadow-xl border border-[#e5e2e1] p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#707972]">Quartier à Dakar</p>
+                <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-[#707972]">
+                  Quartier à Dakar
+                </p>
                 {locations.map((loc) => (
                   <button
                     key={loc}
@@ -75,11 +81,15 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowLocationPicker(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-sm rounded-xl transition-colors flex items-center justify-between ${
-                      location === loc ? 'bg-[#0e5a3c]/10 text-[#004129] font-semibold' : 'text-[#1c1b1b] hover:bg-[#f6f3f2]'
+                      location === loc
+                        ? 'bg-[#0e5a3c]/10 text-[#004129] font-semibold'
+                        : 'text-[#1c1b1b] hover:bg-[#f6f3f2]'
                     }`}
                   >
                     <span>{loc}</span>
-                    {location === loc && <span className="material-symbols-outlined text-sm">check</span>}
+                    {location === loc && (
+                      <span className="material-symbols-outlined text-sm">check</span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -101,12 +111,14 @@ export const Header: React.FC<HeaderProps> = ({
           title="Basculer entre l'espace Client et l'espace Artisan Pro"
         >
           <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
-          <span className="hidden sm:inline">{userRole === 'client' ? 'Mode Artisan Pro' : 'Espace Client'}</span>
+          <span className="hidden sm:inline">
+            {userRole === 'client' ? 'Mode Artisan Pro' : 'Espace Client'}
+          </span>
           <span className="sm:hidden">{userRole === 'client' ? 'Pro' : 'Client'}</span>
         </button>
 
         {/* Notifications */}
-        <button 
+        <button
           onClick={() => setCurrentView(userRole === 'artisan' ? 'artisan_dashboard' : 'chat')}
           className="relative w-10 h-10 flex items-center justify-center rounded-full bg-[#f6f3f2] hover:bg-[#eae7e7] text-[#404943] transition-colors"
         >

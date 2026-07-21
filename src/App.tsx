@@ -60,10 +60,7 @@ export default function App() {
         )}
 
         {currentView === 'artisan_profile' && (
-          <ArtisanProfileScreen
-            artisan={selectedArtisan}
-            setCurrentView={setCurrentView}
-          />
+          <ArtisanProfileScreen artisan={selectedArtisan} setCurrentView={setCurrentView} />
         )}
 
         {currentView === 'chat' && (
@@ -103,11 +100,7 @@ export default function App() {
       </div>
 
       {/* Persistent Bottom Navigation */}
-      <BottomNav
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        userRole={userRole}
-      />
+      <BottomNav currentView={currentView} setCurrentView={setCurrentView} userRole={userRole} />
     </div>
   );
 }
