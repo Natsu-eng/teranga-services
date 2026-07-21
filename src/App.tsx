@@ -23,7 +23,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   return (
-    <div className="min-h-screen bg-[#fcf9f8] text-[#1c1b1b] font-sans flex flex-col selection:bg-[#004129] selection:text-[#8acfa9]">
+    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col selection:bg-primary selection:text-primary-emerald-foreground">
       {/* Top Bar Navigation */}
       <Header
         currentView={currentView}
