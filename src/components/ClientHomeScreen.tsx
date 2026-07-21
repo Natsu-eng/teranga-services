@@ -1,4 +1,15 @@
 import React, { useState } from 'react';
+import {
+  Search,
+  CircleX,
+  Sparkles,
+  ArrowRight,
+  SearchX,
+  BadgeCheck,
+  Star,
+  Map,
+  ChevronRight,
+} from 'lucide-react';
 import { AppView, Artisan } from '../types';
 
 interface ClientHomeScreenProps {
@@ -45,9 +56,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       {/* Search Bar */}
       <section className="relative">
         <div className="relative group">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#404943]">
-            search
-          </span>
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#404943] w-6 h-6" />
           <input
             type="text"
             value={searchQuery}
@@ -60,7 +69,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
               onClick={() => setSearchQuery('')}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-[#707972] hover:text-[#1c1b1b]"
             >
-              <span className="material-symbols-outlined">cancel</span>
+              <CircleX className="w-6 h-6" />
             </button>
           )}
         </div>
@@ -100,9 +109,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
           <div className="relative z-10 space-y-4">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-[#abf2ca]/20 flex items-center justify-center">
-                <span className="material-symbols-outlined text-[#abf2ca] fill-icon">
-                  auto_awesome
-                </span>
+                <Sparkles className="text-[#abf2ca] w-6 h-6" fill="currentColor" />
               </div>
               <span className="text-[#8acfa9] font-sora text-xs font-bold uppercase tracking-wider">
                 ASSISTANT IA
@@ -115,7 +122,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
 
             <div className="flex items-center gap-2 text-[#abf2ca] font-sora text-sm font-semibold group-hover:translate-x-1 transition-transform">
               <span>Essayer maintenant</span>
-              <span className="material-symbols-outlined text-lg">arrow_forward</span>
+              <ArrowRight className="w-[18px] h-[18px]" />
             </div>
           </div>
         </div>
@@ -136,9 +143,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
         <div className="space-y-3">
           {filteredArtisans.length === 0 ? (
             <div className="bg-white rounded-2xl p-8 text-center border border-[#e5e2e1]">
-              <span className="material-symbols-outlined text-4xl text-[#707972] mb-2">
-                search_off
-              </span>
+              <SearchX className="text-[#707972] mb-2 w-9 h-9 mx-auto" />
               <p className="text-[#404943] font-medium">
                 Aucun artisan ne correspond à votre recherche.
               </p>
@@ -172,9 +177,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                   {artisan.verified && (
                     <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
                       <div className="bg-[#0e5a3c] p-1 rounded-full flex items-center justify-center">
-                        <span className="material-symbols-outlined text-white text-[14px] fill-icon">
-                          verified
-                        </span>
+                        <BadgeCheck className="text-white w-[14px] h-[14px]" fill="currentColor" />
                       </div>
                     </div>
                   )}
@@ -188,9 +191,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                         {artisan.name}
                       </h4>
                       <div className="flex items-center gap-1 bg-[#ffddb1]/40 px-2 py-0.5 rounded-full border border-[#ffddb1]/60">
-                        <span className="material-symbols-outlined text-[#815600] text-[14px] fill-icon">
-                          star
-                        </span>
+                        <Star className="text-[#815600] w-[14px] h-[14px]" fill="currentColor" />
                         <span className="text-[#815600] font-sora text-xs font-bold">
                           {artisan.rating}
                         </span>
@@ -203,7 +204,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
 
                     <div className="flex items-center gap-2 mt-1">
                       <div className="flex items-center gap-0.5 text-[#707972] font-sora text-xs">
-                        <span className="material-symbols-outlined text-[14px]">map</span>
+                        <Map className="w-[14px] h-[14px]" />
                         <span>{artisan.distance}</span>
                       </div>
                       <span className="text-[#707972]">•</span>
@@ -218,9 +219,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                       {artisan.priceBase}{' '}
                       <span className="text-[#707972] font-normal text-xs">/base</span>
                     </span>
-                    <span className="material-symbols-outlined text-[#0e5a3c] text-lg">
-                      arrow_forward_ios
-                    </span>
+                    <ChevronRight className="text-[#0e5a3c] w-[18px] h-[18px]" />
                   </div>
                 </div>
               </div>
@@ -255,7 +254,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
         className="fixed right-5 bottom-20 md:bottom-24 w-14 h-14 bg-[#004129] text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40 cursor-pointer"
         title="Poser votre question à l'IA"
       >
-        <span className="material-symbols-outlined text-[26px] fill-icon">auto_awesome</span>
+        <Sparkles className="w-[26px] h-[26px]" fill="currentColor" />
       </button>
     </main>
   );

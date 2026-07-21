@@ -1,4 +1,5 @@
 import React from 'react';
+import { ClipboardList, Wallet, MessageCircle, User, Home, Search } from 'lucide-react';
 import { AppView, UserRole } from '../types';
 
 interface BottomNavProps {
@@ -21,7 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
               : 'text-[#404943] hover:bg-[#f6f3f2]'
           }`}
         >
-          <span className="material-symbols-outlined text-[20px]">assignment</span>
+          <ClipboardList className="w-5 h-5" />
           <span className="font-sora text-[11px] font-medium mt-0.5">Demandes</span>
         </button>
 
@@ -29,7 +30,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
           onClick={() => setCurrentView('artisan_dashboard')}
           className="flex flex-col items-center justify-center px-4 py-1.5 rounded-full text-[#404943] hover:bg-[#f6f3f2] transition-all"
         >
-          <span className="material-symbols-outlined text-[20px]">payments</span>
+          <Wallet className="w-5 h-5" />
           <span className="font-sora text-[11px] font-medium mt-0.5">Revenus</span>
         </button>
 
@@ -39,7 +40,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
             currentView === 'chat' ? 'bg-[#0e5a3c] text-white' : 'text-[#404943] hover:bg-[#f6f3f2]'
           }`}
         >
-          <span className="material-symbols-outlined text-[20px]">chat_bubble</span>
+          <MessageCircle className="w-5 h-5" />
           <span className="font-sora text-[11px] font-medium mt-0.5">Messages</span>
         </button>
 
@@ -51,7 +52,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
               : 'text-[#404943] hover:bg-[#f6f3f2]'
           }`}
         >
-          <span className="material-symbols-outlined text-[20px]">person</span>
+          <User className="w-5 h-5" />
           <span className="font-sora text-[11px] font-medium mt-0.5">Profil</span>
         </button>
       </nav>
@@ -69,11 +70,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
             : 'text-[#404943] hover:bg-[#f6f3f2]'
         }`}
       >
-        <span
-          className={`material-symbols-outlined text-[20px] ${currentView === 'client_home' ? 'fill-icon' : ''}`}
-        >
-          home
-        </span>
+        <Home
+          className="w-5 h-5"
+          {...(currentView === 'client_home' ? { fill: 'currentColor' } : {})}
+        />
         <span className="font-sora text-[11px] mt-0.5">Accueil</span>
       </button>
 
@@ -85,7 +85,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
             : 'text-[#404943] hover:bg-[#f6f3f2]'
         }`}
       >
-        <span className="material-symbols-outlined text-[20px]">search</span>
+        <Search className="w-5 h-5" />
         <span className="font-sora text-[11px] mt-0.5">Recherche</span>
       </button>
 
@@ -97,7 +97,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
             : 'text-[#404943] hover:bg-[#f6f3f2]'
         }`}
       >
-        <span className="material-symbols-outlined text-[20px]">chat_bubble</span>
+        <MessageCircle className="w-5 h-5" />
         <span className="font-sora text-[11px] mt-0.5">Messages</span>
       </button>
 
@@ -109,7 +109,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentView, setCurrentVie
             : 'text-[#404943] hover:bg-[#f6f3f2]'
         }`}
       >
-        <span className="material-symbols-outlined text-[20px]">person</span>
+        <User className="w-5 h-5" />
         <span className="font-sora text-[11px] mt-0.5">Profil</span>
       </button>
     </nav>

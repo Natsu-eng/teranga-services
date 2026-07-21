@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
 import { AppView, AIAnalysisResult, Artisan } from '../types';
 
 interface DescribeProblemScreenProps {
@@ -113,7 +114,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           onClick={() => setCurrentView('client_home')}
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors active:scale-95 cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[#1c1b1b]">arrow_back</span>
+          <ArrowLeft className="text-[#1c1b1b] w-6 h-6" />
         </button>
         <h1 className="ml-3 font-bold text-lg md:text-xl text-[#004129]">
           Décrivez votre problème
@@ -149,7 +150,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                 onClick={() => setPhotoPreview(null)}
                 className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black transition-colors"
               >
-                <span className="material-symbols-outlined text-sm">close</span>
+                <X className="w-4 h-4" />
               </button>
               <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-full text-xs font-sora">
                 Photo jointe
@@ -160,7 +161,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           {/* Media Action Buttons */}
           <div className="flex gap-3">
             <label className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-[#004129] text-[#004129] font-sora text-xs font-bold hover:bg-[#004129]/5 active:scale-95 transition-all cursor-pointer">
-              <span className="material-symbols-outlined text-[20px]">photo_camera</span>
+              <Camera className="w-5 h-5" />
               <span>Ajouter une photo</span>
               <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
             </label>
@@ -173,9 +174,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
                   : 'text-[#004129] hover:bg-[#004129]/5 active:scale-95'
               }`}
             >
-              <span className="material-symbols-outlined text-[20px]">
-                {isRecording ? 'mic_active' : 'mic'}
-              </span>
+              <Mic className="w-5 h-5" />
               <span>{isRecording ? `Enregistrement 0:0${recordingTime}` : 'Message vocal'}</span>
             </button>
           </div>
@@ -189,9 +188,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#0e5a3c] fill-icon">
-                  auto_awesome
-                </span>
+                <Sparkles className="text-[#0e5a3c] w-6 h-6" fill="currentColor" />
                 <h2 className="font-sora text-xs font-bold text-[#004129] tracking-wider uppercase">
                   ANALYSE TERMINÉE
                 </h2>
@@ -251,9 +248,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
           <div className="mt-3 px-1">
             <p className="text-xs text-[#404943] font-sora flex items-start gap-1.5">
-              <span className="material-symbols-outlined text-[16px] text-[#004129] shrink-0 mt-0.5">
-                info
-              </span>
+              <Info className="w-4 h-4 text-[#004129] shrink-0 mt-0.5" />
               <span>{aiResult.explanation}</span>
             </p>
           </div>
@@ -271,7 +266,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           className="w-full max-w-xl mx-auto py-4 rounded-full bg-[#E8A73B] text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"
         >
           <span>Voir les artisans</span>
-          <span className="material-symbols-outlined">arrow_forward</span>
+          <ArrowRight className="w-6 h-6" />
         </button>
       </footer>
     </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { ArrowRight, BadgeCheck, HeartHandshake, Star } from 'lucide-react';
 import { AppView, UserRole } from '../types';
 
 interface LandingScreenProps {
@@ -63,7 +64,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
               className="w-full bg-[#0e5a3c] text-white font-sora text-sm font-semibold py-4 rounded-full shadow-lg hover:brightness-110 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Commencer</span>
-              <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
+              <ArrowRight className="w-5 h-5" />
             </button>
 
             <button
@@ -82,7 +83,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
         <div className="mt-8 w-full grid grid-cols-1 md:grid-cols-3 gap-4 pb-12">
           <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-[#bfc9c1]/20 shadow-sm">
             <div className="w-12 h-12 rounded-full bg-[#004129]/10 flex items-center justify-center text-[#004129]">
-              <span className="material-symbols-outlined fill-icon">verified</span>
+              <BadgeCheck className="w-6 h-6" fill="currentColor" />
             </div>
             <div>
               <h3 className="font-sora text-sm font-bold text-[#1c1b1b]">Vérifiés</h3>
@@ -92,7 +93,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
 
           <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-[#bfc9c1]/20 shadow-sm">
             <div className="w-12 h-12 rounded-full bg-[#004129]/10 flex items-center justify-center text-[#004129]">
-              <span className="material-symbols-outlined fill-icon">shield_with_heart</span>
+              <HeartHandshake className="w-6 h-6" fill="currentColor" />
             </div>
             <div>
               <h3 className="font-sora text-sm font-bold text-[#1c1b1b]">Sécurisé</h3>
@@ -102,7 +103,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
 
           <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-[#bfc9c1]/20 shadow-sm">
             <div className="w-12 h-12 rounded-full bg-[#004129]/10 flex items-center justify-center text-[#004129]">
-              <span className="material-symbols-outlined fill-icon">star</span>
+              <Star className="w-6 h-6" fill="currentColor" />
             </div>
             <div>
               <h3 className="font-sora text-sm font-bold text-[#1c1b1b]">Qualité 4.8/5</h3>

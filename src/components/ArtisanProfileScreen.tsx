@@ -1,4 +1,16 @@
 import React, { useState } from 'react';
+import {
+  ArrowLeft,
+  Share2,
+  Heart,
+  BadgeCheck,
+  Star,
+  CheckCircle2,
+  Zap,
+  Award,
+  MessageCircle,
+  Receipt,
+} from 'lucide-react';
 import { AppView, Artisan } from '../types';
 
 interface ArtisanProfileScreenProps {
@@ -28,7 +40,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             onClick={() => setCurrentView('client_home')}
             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors active:scale-95 cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[#1c1b1b]">arrow_back</span>
+            <ArrowLeft className="text-[#1c1b1b] w-6 h-6" />
           </button>
           <h1 className="font-bold text-lg text-[#004129] truncate">Profil Artisan</h1>
         </div>
@@ -39,20 +51,17 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors cursor-pointer"
             title="Partager le profil"
           >
-            <span className="material-symbols-outlined text-[#1c1b1b]">share</span>
+            <Share2 className="text-[#1c1b1b] w-6 h-6" />
           </button>
           <button
             onClick={() => setIsFavorite(!isFavorite)}
             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f6f3f2] transition-colors cursor-pointer"
             title="Ajouter aux favoris"
           >
-            <span
-              className={`material-symbols-outlined ${
-                isFavorite ? 'text-[#ba1a1a] fill-icon' : 'text-[#1c1b1b]'
-              }`}
-            >
-              favorite
-            </span>
+            <Heart
+              className={`w-6 h-6 ${isFavorite ? 'text-[#ba1a1a]' : 'text-[#1c1b1b]'}`}
+              {...(isFavorite ? { fill: 'currentColor' } : {})}
+            />
           </button>
         </div>
       </header>
@@ -91,7 +100,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
               <h2 className="font-bold text-2xl md:text-3xl text-[#004129]">{artisan.name}</h2>
               {artisan.verified && (
                 <div className="flex items-center gap-1 bg-[#ffddb1]/40 text-[#815600] px-2.5 py-0.5 rounded-full border border-[#ffddb1]">
-                  <span className="material-symbols-outlined text-[14px] fill-icon">verified</span>
+                  <BadgeCheck className="w-[14px] h-[14px]" fill="currentColor" />
                   <span className="text-xs font-sora font-semibold">Vérifié</span>
                 </div>
               )}
@@ -110,7 +119,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
 
             <div className="flex items-center gap-2 text-sm text-[#404943]">
               <div className="flex items-center text-[#815600]">
-                <span className="material-symbols-outlined text-[18px] fill-icon">star</span>
+                <Star className="w-[18px] h-[18px]" fill="currentColor" />
                 <span className="font-sora font-bold ml-1">{artisan.rating}</span>
               </div>
               <span>({artisan.reviewCount} avis)</span>
@@ -124,9 +133,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
         <section className="mt-6 px-4 md:px-12 max-w-4xl mx-auto">
           <div className="grid grid-cols-3 gap-4 py-5 border-y border-[#bfc9c1]/30">
             <div className="flex flex-col items-center text-center">
-              <span className="material-symbols-outlined text-[#004129] mb-1 text-2xl md:text-3xl">
-                task_alt
-              </span>
+              <CheckCircle2 className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
               <span className="font-bold text-xl text-[#004129]">{artisan.stats.chantiers}</span>
               <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
                 Chantiers
@@ -134,9 +141,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             </div>
 
             <div className="flex flex-col items-center text-center">
-              <span className="material-symbols-outlined text-[#004129] mb-1 text-2xl md:text-3xl">
-                bolt
-              </span>
+              <Zap className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
               <span className="font-bold text-xl text-[#004129]">{artisan.stats.responseTime}</span>
               <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
                 Réponse
@@ -144,9 +149,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             </div>
 
             <div className="flex flex-col items-center text-center">
-              <span className="material-symbols-outlined text-[#004129] mb-1 text-2xl md:text-3xl">
-                workspace_premium
-              </span>
+              <Award className="text-[#004129] mb-1 w-8 h-8 md:w-9 md:h-9" />
               <span className="font-bold text-xl text-[#004129]">{artisan.stats.experience}</span>
               <span className="text-[11px] font-sora text-[#404943] uppercase tracking-wider font-semibold">
                 D&apos;exp.
@@ -208,9 +211,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
                       <h4 className="font-sora text-sm font-bold text-[#1c1b1b]">{rev.author}</h4>
                       <div className="flex text-[#815600] text-sm">
                         {[...Array(rev.rating)].map((_, i) => (
-                          <span key={i} className="material-symbols-outlined text-sm fill-icon">
-                            star
-                          </span>
+                          <Star key={i} className="w-[14px] h-[14px]" fill="currentColor" />
                         ))}
                       </div>
                     </div>
@@ -238,7 +239,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             onClick={() => setCurrentView('chat')}
             className="flex-1 h-14 rounded-full border-1.5 border-[#004129] text-[#004129] font-sora text-sm font-bold flex items-center justify-center gap-2 hover:bg-[#f6f3f2] active:scale-95 transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined">chat_bubble</span>
+            <MessageCircle className="w-6 h-6" />
             <span>Message</span>
           </button>
 
@@ -246,7 +247,7 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
             onClick={() => setCurrentView('chat')}
             className="flex-[1.5] h-14 rounded-full bg-[#feba4d] text-[#714b00] font-sora text-sm font-bold shadow-md flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
           >
-            <span className="material-symbols-outlined fill-icon">request_quote</span>
+            <Receipt className="w-6 h-6" fill="currentColor" />
             <span>Demander un devis</span>
           </button>
         </div>

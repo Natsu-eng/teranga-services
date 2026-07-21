@@ -1,4 +1,5 @@
 import React from 'react';
+import { Bell, Check, ChevronDown, MapPin, ArrowLeftRight } from 'lucide-react';
 import { AppView, UserRole } from '../types';
 
 interface HeaderProps {
@@ -55,11 +56,9 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setShowLocationPicker(!showLocationPicker)}
               className="flex items-center gap-1 text-[#404943] text-xs font-sora hover:text-[#004129] transition-colors"
             >
-              <span className="material-symbols-outlined text-[#004129] text-[18px]">
-                location_on
-              </span>
+              <MapPin className="text-[#004129] w-[18px] h-[18px]" />
               <span className="font-medium">{location}</span>
-              <span className="material-symbols-outlined text-[16px]">expand_more</span>
+              <ChevronDown className="w-4 h-4" />
             </button>
             <h1
               onClick={() => setCurrentView('client_home')}
@@ -87,9 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
                     }`}
                   >
                     <span>{loc}</span>
-                    {location === loc && (
-                      <span className="material-symbols-outlined text-sm">check</span>
-                    )}
+                    {location === loc && <Check className="w-4 h-4" />}
                   </button>
                 ))}
               </div>
@@ -110,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
           className="px-3 py-1.5 rounded-full bg-[#ffddb1]/50 text-[#815600] text-xs font-sora font-semibold flex items-center gap-1.5 border border-[#ffddb1] hover:bg-[#ffddb1] transition-all"
           title="Basculer entre l'espace Client et l'espace Artisan Pro"
         >
-          <span className="material-symbols-outlined text-[16px]">swap_horiz</span>
+          <ArrowLeftRight className="w-4 h-4" />
           <span className="hidden sm:inline">
             {userRole === 'client' ? 'Mode Artisan Pro' : 'Espace Client'}
           </span>
@@ -122,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => setCurrentView(userRole === 'artisan' ? 'artisan_dashboard' : 'chat')}
           className="relative w-10 h-10 flex items-center justify-center rounded-full bg-[#f6f3f2] hover:bg-[#eae7e7] text-[#404943] transition-colors"
         >
-          <span className="material-symbols-outlined">notifications</span>
+          <Bell className="w-6 h-6" />
           {unreadCount > 0 && (
             <span className="absolute top-2 right-2 w-2 h-2 bg-[#ba1a1a] rounded-full animate-ping" />
           )}

@@ -1,4 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Phone,
+  MoreVertical,
+  FileText,
+  CheckCircle,
+  CheckCheck,
+  PlusCircle,
+  Smile,
+  Send,
+} from 'lucide-react';
 import { AppView, ChatMessage, Artisan } from '../types';
 
 interface ChatScreenProps {
@@ -91,9 +103,9 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={() => setCurrentView('client_home')}
-            className="material-symbols-outlined text-[#1c1b1b] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
+            className="text-[#1c1b1b] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
           >
-            arrow_back
+            <ArrowLeft className="w-6 h-6" />
           </button>
 
           <div className="flex items-center gap-3">
@@ -110,7 +122,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-base text-[#1c1b1b]">{artisan.name}</span>
                 <span className="bg-[#abf2ca] text-[#002113] px-1.5 py-0.5 rounded-full text-[10px] font-sora font-bold flex items-center gap-0.5">
-                  <span className="material-symbols-outlined text-[12px] fill-icon">verified</span>
+                  <BadgeCheck className="w-3 h-3" fill="currentColor" />
                   VÉRIFIÉ
                 </span>
               </div>
@@ -122,15 +134,15 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
         <div className="flex items-center gap-1">
           <button
             onClick={() => alert(`Appel direct à ${artisan.name}: +221 77 000 00 00`)}
-            className="material-symbols-outlined text-[#004129] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
+            className="text-[#004129] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
           >
-            call
+            <Phone className="w-6 h-6" />
           </button>
           <button
             onClick={() => alert('Options de la conversation')}
-            className="material-symbols-outlined text-[#404943] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
+            className="text-[#404943] p-2 hover:bg-[#f6f3f2] rounded-full transition-colors cursor-pointer"
           >
-            more_vert
+            <MoreVertical className="w-6 h-6" />
           </button>
         </div>
       </header>
@@ -175,9 +187,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                           </span>
                           <h3 className="font-bold text-lg text-[#1c1b1b]">{msg.devis.title}</h3>
                         </div>
-                        <span className="material-symbols-outlined text-[#815600] text-3xl">
-                          description
-                        </span>
+                        <FileText className="text-[#815600] w-9 h-9" />
                       </div>
 
                       <div className="space-y-2 mb-4 text-sm">
@@ -207,9 +217,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                       {devisAccepted || msg.devis.status === 'accepted' ? (
                         <div className="w-full bg-[#004129] text-white font-sora text-sm font-bold py-3 rounded-full flex items-center justify-center gap-2">
                           <span>Devis accepté</span>
-                          <span className="material-symbols-outlined text-sm fill-icon">
-                            check_circle
-                          </span>
+                          <CheckCircle className="w-4 h-4" fill="currentColor" />
                         </div>
                       ) : (
                         <button
@@ -217,7 +225,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                           className="w-full bg-[#815600] text-white font-sora text-sm font-bold py-3.5 rounded-full hover:brightness-110 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
                         >
                           <span>Accepter le devis</span>
-                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          <CheckCircle className="w-4 h-4" />
                         </button>
                       )}
 
@@ -246,9 +254,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
               </div>
               <div className="flex items-center gap-1 mt-1 mr-1">
                 <span className="text-[11px] font-sora text-[#707972]">{msg.timestamp}</span>
-                <span className="material-symbols-outlined text-[16px] text-[#004129] fill-icon">
-                  done_all
-                </span>
+                <CheckCheck className="w-4 h-4 text-[#004129]" />
               </div>
             </div>
           );
@@ -275,7 +281,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
           onClick={() => alert('Joindre une photo ou un document')}
           className="w-10 h-10 flex items-center justify-center text-[#707972] hover:bg-[#f6f3f2] rounded-full transition-colors shrink-0 cursor-pointer"
         >
-          <span className="material-symbols-outlined">add_circle</span>
+          <PlusCircle className="w-6 h-6" />
         </button>
 
         <div className="flex-1 relative">
@@ -291,7 +297,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
             onClick={() => setInputText((prev) => prev + ' 😊')}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-[#707972] hover:text-[#004129]"
           >
-            <span className="material-symbols-outlined text-[20px]">sentiment_satisfied</span>
+            <Smile className="w-5 h-5" />
           </button>
         </div>
 
@@ -299,7 +305,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
           onClick={handleSendMessage}
           className="w-11 h-11 bg-[#0e5a3c] text-[#8acfa9] rounded-full flex items-center justify-center shadow-md active:scale-90 transition-transform shrink-0 cursor-pointer"
         >
-          <span className="material-symbols-outlined fill-icon text-[20px]">send</span>
+          <Send className="w-5 h-5" fill="currentColor" />
         </button>
       </footer>
     </div>

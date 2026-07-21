@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send } from 'lucide-react';
 import { AppView, JobRequest, Artisan } from '../types';
 
 interface ArtisanDashboardScreenProps {
@@ -79,7 +80,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
             <div className="mt-2 flex items-end gap-3 flex-wrap">
               <span className="font-bold text-3xl md:text-4xl text-[#004129]">245 000 FCFA</span>
               <div className="flex items-center text-[#004129] font-sora text-xs font-semibold mb-1">
-                <span className="material-symbols-outlined text-[18px]">trending_up</span>
+                <TrendingUp className="w-[18px] h-[18px]" />
                 <span className="ml-1">+12% vs mois dernier</span>
               </div>
             </div>
@@ -117,9 +118,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
               <span className="text-[#404943] font-sora text-xs font-medium">
                 Demandes acceptées
               </span>
-              <span className="material-symbols-outlined text-[#004129] bg-[#004129]/10 p-1.5 rounded-lg text-lg">
-                task_alt
-              </span>
+              <CheckCircle2 className="text-[#004129] bg-[#004129]/10 p-1.5 rounded-lg w-9 h-9" />
             </div>
             <span className="font-bold text-2xl text-[#004129] mt-1 block">28</span>
           </div>
@@ -128,7 +127,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-[#404943] font-sora text-xs font-medium">Note moyenne</span>
               <div className="flex items-center bg-[#ffddb1] text-[#291800] px-2 py-0.5 rounded-full">
-                <span className="material-symbols-outlined text-[14px] fill-icon">star</span>
+                <Star className="w-[14px] h-[14px]" fill="currentColor" />
                 <span className="ml-1 text-[11px] font-sora font-bold">Top Pro</span>
               </div>
             </div>
@@ -138,9 +137,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
           <div className="bg-white p-4 rounded-2xl artisan-shadow border border-[#eae7e7]">
             <div className="flex items-center justify-between">
               <span className="text-[#404943] font-sora text-xs font-medium">Taux de réponse</span>
-              <span className="material-symbols-outlined text-[#004129] bg-[#004129]/10 p-1.5 rounded-lg text-lg">
-                bolt
-              </span>
+              <Zap className="text-[#004129] bg-[#004129]/10 p-1.5 rounded-lg w-9 h-9" />
             </div>
             <span className="font-bold text-2xl text-[#004129] mt-1 block">95%</span>
           </div>
@@ -174,9 +171,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
                   <h4 className="font-sora font-bold text-base text-[#1c1b1b]">{req.clientName}</h4>
                   <p className="text-sm text-[#404943] font-medium">{req.title}</p>
                   <div className="flex items-center text-xs font-sora text-[#707972] mt-0.5">
-                    <span className="material-symbols-outlined text-[14px] mr-1 text-[#004129]">
-                      location_on
-                    </span>
+                    <MapPin className="w-[14px] h-[14px] mr-1 text-[#004129]" />
                     <span>{req.location}</span>
                   </div>
                 </div>
@@ -224,7 +219,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
               onClick={() => setShowQuoteModal(false)}
               className="absolute top-4 right-4 text-[#707972] hover:text-[#1c1b1b]"
             >
-              <span className="material-symbols-outlined">close</span>
+              <X className="w-6 h-6" />
             </button>
 
             <div className="flex items-center gap-3">
@@ -292,7 +287,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
               className="w-full py-4 rounded-full bg-[#004129] text-white font-sora text-sm font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Envoyer le devis au client</span>
-              <span className="material-symbols-outlined text-sm">send</span>
+              <Send className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Search, Star, ArrowRight } from 'lucide-react';
 import { AppView, Artisan } from '../types';
 
 interface SearchScreenProps {
@@ -40,9 +41,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
 
       {/* Input */}
       <div className="relative">
-        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#707972]">
-          search
-        </span>
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#707972] w-6 h-6" />
         <input
           type="text"
           value={searchTerm}
@@ -108,9 +107,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
                 <div className="flex justify-between items-start">
                   <h4 className="font-bold text-base text-[#1c1b1b]">{art.name}</h4>
                   <div className="flex items-center gap-1 bg-[#ffddb1]/40 px-2 py-0.5 rounded-full">
-                    <span className="material-symbols-outlined text-[#815600] text-[12px] fill-icon">
-                      star
-                    </span>
+                    <Star className="text-[#815600] w-3 h-3" fill="currentColor" />
                     <span className="text-[#815600] font-sora text-xs font-bold">{art.rating}</span>
                   </div>
                 </div>
@@ -124,7 +121,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
                 <span className="text-[#004129] font-bold text-sm">{art.priceBase}</span>
                 <span className="text-xs font-sora text-[#004129] font-bold flex items-center gap-1">
                   <span>Voir le profil</span>
-                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                  <ArrowRight className="w-4 h-4" />
                 </span>
               </div>
             </div>

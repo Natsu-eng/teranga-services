@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
 import { AppView, UserRole } from '../types';
 
 interface UserProfileScreenProps {
@@ -74,7 +75,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
               <span className="text-sm font-sora">Wave Sénégal</span>
             </div>
             {paymentMethod === 'wave' && (
-              <span className="material-symbols-outlined text-[#004129]">check_circle</span>
+              <CheckCircle className="text-[#004129] w-6 h-6" />
             )}
           </label>
 
@@ -93,7 +94,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
               <span className="text-sm font-sora">Orange Money Sénégal</span>
             </div>
             {paymentMethod === 'om' && (
-              <span className="material-symbols-outlined text-[#004129]">check_circle</span>
+              <CheckCircle className="text-[#004129] w-6 h-6" />
             )}
           </label>
 
@@ -106,11 +107,11 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
             }`}
           >
             <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-[#004129]">credit_card</span>
+              <CreditCard className="text-[#004129] w-6 h-6" />
               <span className="text-sm font-sora">Carte bancaire internationale</span>
             </div>
             {paymentMethod === 'card' && (
-              <span className="material-symbols-outlined text-[#004129]">check_circle</span>
+              <CheckCircle className="text-[#004129] w-6 h-6" />
             )}
           </label>
         </div>
@@ -122,7 +123,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
           onClick={() => setCurrentView('landing')}
           className="w-full text-left px-4 py-3 text-sm font-sora text-[#ba1a1a] font-semibold flex items-center gap-2 hover:bg-[#ffdad6]/20 rounded-xl transition-colors cursor-pointer"
         >
-          <span className="material-symbols-outlined">logout</span>
+          <LogOut className="w-6 h-6" />
           <span>Déconnexion / Retour à l&apos;accueil</span>
         </button>
       </div>
