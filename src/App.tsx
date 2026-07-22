@@ -14,7 +14,7 @@ import { SearchScreen } from './features/artisans/SearchScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 
-function AppRoutes() {
+export function AppRoutes() {
   const [userRole, setUserRole] = useState<UserRole>('client');
   const [location, setLocation] = useState<string>('Dakar Plateau');
 
