@@ -10,22 +10,14 @@ import {
   Map,
   ChevronRight,
 } from 'lucide-react';
-import { AppView } from '../../types';
+import { Link } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useArtisans } from './hooks/useArtisans';
 
-interface ClientHomeScreenProps {
-  setCurrentView: (view: AppView) => void;
-  setSelectedArtisanId: (id: string) => void;
-}
-
-export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
-  setCurrentView,
-  setSelectedArtisanId,
-}) => {
+export const ClientHomeScreen: React.FC = () => {
   const { data: artisans, isLoading, error, reload } = useArtisans();
   const [selectedCategory, setSelectedCategory] = useState<string>('Tout');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -100,9 +92,9 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
 
       {/* AI Assistant Feature Bento Card */}
       <section>
-        <div
-          onClick={() => setCurrentView('describe_problem')}
-          className="relative overflow-hidden rounded-3xl bg-primary-emerald p-6 md:p-8 group cursor-pointer active:scale-[0.98] transition-all shadow-md"
+        <Link
+          to="/demande"
+          className="block relative overflow-hidden rounded-3xl bg-primary-emerald p-6 md:p-8 group cursor-pointer active:scale-[0.98] transition-all shadow-md"
         >
           {/* Subtle Ambient Glow */}
           <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-success/20 rounded-full blur-2xl group-hover:scale-125 transition-transform"></div>
@@ -126,19 +118,19 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
               <ArrowRight className="w-[18px] h-[18px]" />
             </div>
           </div>
-        </div>
+        </Link>
       </section>
 
       {/* Recommended Artisans Section */}
       <section className="space-y-4">
         <div className="flex justify-between items-end">
           <h3 className="font-bold text-xl text-primary">Artisans recommandés</h3>
-          <button
-            onClick={() => setCurrentView('search')}
+          <Link
+            to="/recherche"
             className="text-primary font-sora text-xs font-semibold hover:underline decoration-1 underline-offset-2"
           >
             Voir tout
-          </button>
+          </Link>
         </div>
 
         <div className="space-y-3">
@@ -172,12 +164,9 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
             />
           ) : (
             filteredArtisans.map((artisan) => (
-              <div
+              <Link
                 key={artisan.id}
-                onClick={() => {
-                  setSelectedArtisanId(artisan.id);
-                  setCurrentView('artisan_profile');
-                }}
+                to={`/artisans/${artisan.id}`}
                 className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer active:scale-[0.99]"
               >
                 {/* Avatar */}
@@ -236,7 +225,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
                     <ChevronRight className="text-primary-emerald w-[18px] h-[18px]" />
                   </div>
                 </div>
-              </div>
+              </Link>
             ))
           )}
         </div>
@@ -263,13 +252,13 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
       </section>
 
       {/* Floating Action Button for AI */}
-      <button
-        onClick={() => setCurrentView('describe_problem')}
+      <Link
+        to="/demande"
         className="fixed right-5 bottom-20 md:bottom-24 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40 cursor-pointer"
         title="Poser votre question à l'IA"
       >
         <Sparkles className="w-[26px] h-[26px]" fill="currentColor" />
-      </button>
+      </Link>
     </main>
   );
 };

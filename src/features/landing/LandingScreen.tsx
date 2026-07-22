@@ -1,14 +1,16 @@
 import React from 'react';
 import { ArrowRight, BadgeCheck, HeartHandshake, Star } from 'lucide-react';
-import { AppView, UserRole } from '../../types';
+import { useNavigate } from 'react-router';
+import { UserRole } from '../../types';
 import { SafeImage } from '../../components/ui/SafeImage';
 
 interface LandingScreenProps {
-  setCurrentView: (view: AppView) => void;
   setUserRole: (role: UserRole) => void;
 }
 
-export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, setUserRole }) => {
+export const LandingScreen: React.FC<LandingScreenProps> = ({ setUserRole }) => {
+  const navigate = useNavigate();
+
   return (
     <div className="bg-background text-foreground min-h-screen flex flex-col overflow-x-hidden">
       {/* Hero Illustration Section */}
@@ -61,7 +63,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
             <button
               onClick={() => {
                 setUserRole('client');
-                setCurrentView('client_home');
+                navigate('/accueil');
               }}
               className="w-full bg-primary-emerald text-white font-sora text-sm font-semibold py-4 rounded-full shadow-lg hover:brightness-110 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -72,7 +74,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({ setCurrentView, se
             <button
               onClick={() => {
                 setUserRole('artisan');
-                setCurrentView('artisan_dashboard');
+                navigate('/pro');
               }}
               className="w-full py-3 text-primary font-sora text-sm font-semibold hover:underline decoration-2 underline-offset-4 transition-all cursor-pointer"
             >

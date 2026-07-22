@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
 import { Search, Star, ArrowRight, SearchX } from 'lucide-react';
-import { AppView } from '../../types';
+import { Link } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useArtisans } from './hooks/useArtisans';
 
-interface SearchScreenProps {
-  setCurrentView: (view: AppView) => void;
-  setSelectedArtisanId: (id: string) => void;
-}
-
-export const SearchScreen: React.FC<SearchScreenProps> = ({
-  setCurrentView,
-  setSelectedArtisanId,
-}) => {
+export const SearchScreen: React.FC = () => {
   const { data: artisans, isLoading, error, reload } = useArtisans();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTrade, setSelectedTrade] = useState('Tous');
@@ -120,12 +112,9 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
           />
         ) : (
           filtered.map((art) => (
-            <div
+            <Link
               key={art.id}
-              onClick={() => {
-                setSelectedArtisanId(art.id);
-                setCurrentView('artisan_profile');
-              }}
+              to={`/artisans/${art.id}`}
               className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle flex gap-4 cursor-pointer hover:shadow-md transition-all"
             >
               <SafeImage
@@ -157,7 +146,7 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
                   </span>
                 </div>
               </div>
-            </div>
+            </Link>
           ))
         )}
       </div>

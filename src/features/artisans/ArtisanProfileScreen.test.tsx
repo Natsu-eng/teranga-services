@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { ArtisanProfileScreen } from './ArtisanProfileScreen';
 import { useArtisan } from './hooks/useArtisan';
 import { ApiError } from '../../lib/api';
@@ -39,7 +40,9 @@ describe('ArtisanProfileScreen', () => {
     mockedUseArtisan.mockReturnValue({ data: null, isLoading: true, error: null, reload: vi.fn() });
 
     const { container } = render(
-      <ArtisanProfileScreen artisanId="test-artisan" setCurrentView={vi.fn()} />,
+      <MemoryRouter>
+        <ArtisanProfileScreen artisanId="test-artisan" />
+      </MemoryRouter>,
     );
 
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
@@ -55,7 +58,11 @@ describe('ArtisanProfileScreen', () => {
       reload,
     });
 
-    render(<ArtisanProfileScreen artisanId="missing" setCurrentView={vi.fn()} />);
+    render(
+      <MemoryRouter>
+        <ArtisanProfileScreen artisanId="missing" />
+      </MemoryRouter>,
+    );
 
     expect(
       screen.getByText("Cet artisan n'existe pas ou n'est plus disponible."),
@@ -72,7 +79,11 @@ describe('ArtisanProfileScreen', () => {
       reload: vi.fn(),
     });
 
-    render(<ArtisanProfileScreen artisanId={artisanFixture.id} setCurrentView={vi.fn()} />);
+    render(
+      <MemoryRouter>
+        <ArtisanProfileScreen artisanId={artisanFixture.id} />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(artisanFixture.name)).toBeInTheDocument();
     expect(screen.getByText(artisanFixture.bio)).toBeInTheDocument();

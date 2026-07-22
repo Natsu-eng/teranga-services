@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send, Inbox } from 'lucide-react';
-import { AppView, JobRequest } from '../../types';
+import { useNavigate } from 'react-router';
+import { JobRequest } from '../../types';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -10,11 +11,8 @@ import { useArtisanStats } from '../artisans/hooks/useArtisanStats';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { useJobRequests } from './hooks/useJobRequests';
 
-interface ArtisanDashboardScreenProps {
-  setCurrentView: (view: AppView) => void;
-}
-
-export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ setCurrentView }) => {
+export const ArtisanDashboardScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { data: jobRequests, isLoading, error, reload, acceptJob } = useJobRequests();
   const { data: currentUser } = useCurrentUser();
   const artisanId = currentUser?.artisanId ?? null;
@@ -33,11 +31,11 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ 
   const [materialsPrice, setMaterialsPrice] = useState<number>(4000);
 
   const handleSendQuote = () => {
-    if (selectedJob) {
+    if (selectedJob && artisanId) {
       acceptJob(selectedJob.id);
       setShowQuoteModal(false);
       setSelectedJob(null);
-      setCurrentView('chat');
+      navigate(`/messages/${artisanId}`);
     }
   };
 

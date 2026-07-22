@@ -11,7 +11,7 @@ import {
   MessageCircle,
   Receipt,
 } from 'lucide-react';
-import { AppView } from '../../types';
+import { Link } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -19,13 +19,9 @@ import { useArtisan } from './hooks/useArtisan';
 
 interface ArtisanProfileScreenProps {
   artisanId: string;
-  setCurrentView: (view: AppView) => void;
 }
 
-export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
-  artisanId,
-  setCurrentView,
-}) => {
+export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({ artisanId }) => {
   const { data: artisan, isLoading, error, reload } = useArtisan(artisanId);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShareNotification, setShowShareNotification] = useState(false);
@@ -41,12 +37,12 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
       {/* Top Glass Header */}
       <header className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border-strong/30 px-4 h-16 flex justify-between items-center">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setCurrentView('client_home')}
+          <Link
+            to="/accueil"
             className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
           >
             <ArrowLeft className="text-foreground w-6 h-6" />
-          </button>
+          </Link>
           <h1 className="font-bold text-lg text-primary truncate">Profil Artisan</h1>
         </div>
 
@@ -261,21 +257,21 @@ export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({
       {artisan && (
         <div className="fixed bottom-0 left-0 right-0 glass-card border-t border-border-strong/30 p-4 z-50">
           <div className="max-w-xl mx-auto flex gap-3">
-            <button
-              onClick={() => setCurrentView('chat')}
+            <Link
+              to={`/messages/${artisanId}`}
               className="flex-1 h-14 rounded-full border-1.5 border-primary text-primary font-sora text-sm font-bold flex items-center justify-center gap-2 hover:bg-surface-muted active:scale-95 transition-all cursor-pointer"
             >
               <MessageCircle className="w-6 h-6" />
               <span>Message</span>
-            </button>
+            </Link>
 
-            <button
-              onClick={() => setCurrentView('chat')}
+            <Link
+              to={`/messages/${artisanId}`}
               className="flex-[1.5] h-14 rounded-full bg-accent-alt text-accent-alt-foreground font-sora text-sm font-bold shadow-md flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
             >
               <Receipt className="w-6 h-6" fill="currentColor" />
               <span>Demander un devis</span>
-            </button>
+            </Link>
           </div>
         </div>
       )}
