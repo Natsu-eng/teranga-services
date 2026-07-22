@@ -5,6 +5,9 @@ import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { useArtisan } from '../artisans/hooks/useArtisan';
+import { useArtisanStats } from '../artisans/hooks/useArtisanStats';
+import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { useJobRequests } from './hooks/useJobRequests';
 
 interface ArtisanDashboardScreenProps {
@@ -13,6 +16,16 @@ interface ArtisanDashboardScreenProps {
 
 export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ setCurrentView }) => {
   const { data: jobRequests, isLoading, error, reload, acceptJob } = useJobRequests();
+  const { data: currentUser } = useCurrentUser();
+  const artisanId = currentUser?.artisanId ?? null;
+  const { data: artisan } = useArtisan(artisanId);
+  const {
+    data: stats,
+    isLoading: isStatsLoading,
+    error: statsError,
+    reload: reloadStats,
+  } = useArtisanStats(artisanId);
+  const maxWeeklyAmount = stats ? Math.max(...stats.weeklyRevenues.map((week) => week.amount)) : 0;
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
   const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
   const [showQuoteModal, setShowQuoteModal] = useState<boolean>(false);
@@ -33,7 +46,13 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ 
       {/* Welcome & Availability Toggle */}
       <section className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="font-bold text-2xl md:text-3xl text-primary">Bonjour, Idrissa 👋</h2>
+          {artisan ? (
+            <h2 className="font-bold text-2xl md:text-3xl text-primary">
+              Bonjour, {artisan.name.split(' ')[0]} 👋
+            </h2>
+          ) : (
+            <Skeleton className="h-9 w-48" />
+          )}
           <p className="text-muted-foreground text-sm md:text-base">
             Prêt pour vos services d&apos;aujourd&apos;hui ?
           </p>
@@ -64,81 +83,92 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ 
       </section>
 
       {/* Revenue & Stats Bento Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main Revenue Card */}
-        <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-2xl artisan-shadow flex flex-col justify-between border border-border-subtle relative overflow-hidden">
-          <div className="absolute -right-12 -top-12 w-48 h-48 bg-primary/5 rounded-full blur-3xl"></div>
-
-          <div>
-            <span className="font-sora text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              REVENUS DU MOIS
-            </span>
-            <div className="mt-2 flex items-end gap-3 flex-wrap">
-              <span className="font-bold text-3xl md:text-4xl text-primary">245 000 FCFA</span>
-              <div className="flex items-center text-primary font-sora text-xs font-semibold mb-1">
-                <TrendingUp className="w-[18px] h-[18px]" />
-                <span className="ml-1">+12% vs mois dernier</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Bar Chart */}
-          <div className="mt-8 h-32 flex items-end gap-2.5">
-            <div
-              className="flex-1 bg-primary/10 rounded-t-md h-[40%]"
-              title="Semaine 1: 45 000 FCFA"
-            />
-            <div
-              className="flex-1 bg-primary/10 rounded-t-md h-[60%]"
-              title="Semaine 2: 65 000 FCFA"
-            />
-            <div
-              className="flex-1 bg-primary/10 rounded-t-md h-[45%]"
-              title="Semaine 3: 50 000 FCFA"
-            />
-            <div
-              className="flex-1 bg-primary/10 rounded-t-md h-[75%]"
-              title="Semaine 4: 85 000 FCFA"
-            />
-            <div
-              className="flex-1 bg-primary-emerald rounded-t-md h-[100%]"
-              title="Cette semaine: 110 000 FCFA"
-            />
+      {isStatsLoading && !stats ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <Skeleton className="lg:col-span-8 h-56 rounded-2xl" />
+          <div className="lg:col-span-4 flex flex-col gap-3">
+            <Skeleton className="h-20 rounded-2xl" />
+            <Skeleton className="h-20 rounded-2xl" />
+            <Skeleton className="h-20 rounded-2xl" />
           </div>
         </div>
+      ) : statsError && !stats ? (
+        <ErrorState message={statsError.message} onRetry={reloadStats} />
+      ) : stats ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Main Revenue Card */}
+          <div className="lg:col-span-8 bg-white p-6 md:p-8 rounded-2xl artisan-shadow flex flex-col justify-between border border-border-subtle relative overflow-hidden">
+            <div className="absolute -right-12 -top-12 w-48 h-48 bg-primary/5 rounded-full blur-3xl"></div>
 
-        {/* Side Stats Column */}
-        <div className="lg:col-span-4 flex flex-col gap-3">
-          <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground font-sora text-xs font-medium">
-                Demandes acceptées
+            <div>
+              <span className="font-sora text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                REVENUS DU MOIS
               </span>
-              <CheckCircle2 className="text-primary bg-primary/10 p-1.5 rounded-lg w-9 h-9" />
-            </div>
-            <span className="font-bold text-2xl text-primary mt-1 block">28</span>
-          </div>
-
-          <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground font-sora text-xs font-medium">Note moyenne</span>
-              <div className="flex items-center bg-accent-soft text-accent-foreground-strong px-2 py-0.5 rounded-full">
-                <Star className="w-[14px] h-[14px]" fill="currentColor" />
-                <span className="ml-1 text-[11px] font-sora font-bold">Top Pro</span>
+              <div className="mt-2 flex items-end gap-3 flex-wrap">
+                <span className="font-bold text-3xl md:text-4xl text-primary">
+                  {stats.monthlyRevenue.toLocaleString()} FCFA
+                </span>
+                <div className="flex items-center text-primary font-sora text-xs font-semibold mb-1">
+                  <TrendingUp className="w-[18px] h-[18px]" />
+                  <span className="ml-1">+{stats.monthlyRevenueChangePercent}% vs mois dernier</span>
+                </div>
               </div>
             </div>
-            <span className="font-bold text-2xl text-primary mt-1 block">4.9/5</span>
+
+            {/* Bar Chart */}
+            <div className="mt-8 h-32 flex items-end gap-2.5">
+              {stats.weeklyRevenues.map((week) => (
+                <div
+                  key={week.label}
+                  className={`flex-1 rounded-t-md ${week.isCurrent ? 'bg-primary-emerald' : 'bg-primary/10'}`}
+                  style={{
+                    height: `${maxWeeklyAmount > 0 ? (week.amount / maxWeeklyAmount) * 100 : 0}%`,
+                  }}
+                  title={`${week.label}: ${week.amount.toLocaleString()} FCFA`}
+                />
+              ))}
+            </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground font-sora text-xs font-medium">Taux de réponse</span>
-              <Zap className="text-primary bg-primary/10 p-1.5 rounded-lg w-9 h-9" />
+          {/* Side Stats Column */}
+          <div className="lg:col-span-4 flex flex-col gap-3">
+            <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-sora text-xs font-medium">
+                  Demandes acceptées
+                </span>
+                <CheckCircle2 className="text-primary bg-primary/10 p-1.5 rounded-lg w-9 h-9" />
+              </div>
+              <span className="font-bold text-2xl text-primary mt-1 block">
+                {stats.acceptedRequestsCount}
+              </span>
             </div>
-            <span className="font-bold text-2xl text-primary mt-1 block">95%</span>
+
+            <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-sora text-xs font-medium">Note moyenne</span>
+                <div className="flex items-center bg-accent-soft text-accent-foreground-strong px-2 py-0.5 rounded-full">
+                  <Star className="w-[14px] h-[14px]" fill="currentColor" />
+                  <span className="ml-1 text-[11px] font-sora font-bold">Top Pro</span>
+                </div>
+              </div>
+              <span className="font-bold text-2xl text-primary mt-1 block">
+                {stats.averageRating.toFixed(1)}/5
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground font-sora text-xs font-medium">Taux de réponse</span>
+                <Zap className="text-primary bg-primary/10 p-1.5 rounded-lg w-9 h-9" />
+              </div>
+              <span className="font-bold text-2xl text-primary mt-1 block">
+                {stats.responseRatePercent}%
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       {/* New Requests Section */}
       <section className="space-y-4">

@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
 import { AppView, UserRole } from '../../types';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { useArtisan } from '../artisans/hooks/useArtisan';
+import { useCurrentUser } from './hooks/useCurrentUser';
 
 interface UserProfileScreenProps {
   userRole: UserRole;
@@ -15,23 +19,39 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
   setCurrentView,
   location,
 }) => {
+  const { data: currentUser, isLoading, error, reload } = useCurrentUser();
+  const { data: proArtisan } = useArtisan(userRole === 'artisan' ? currentUser?.artisanId ?? null : null);
   const [paymentMethod, setPaymentMethod] = useState<'wave' | 'om' | 'card'>('wave');
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
       {/* User Header */}
-      <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle flex items-center gap-4">
-        <div className="w-16 h-16 rounded-full bg-primary text-primary-emerald-foreground font-bold font-sora text-xl flex items-center justify-center border-2 border-primary-emerald">
-          DD
+      {isLoading && !currentUser ? (
+        <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle flex items-center gap-4">
+          <Skeleton className="w-16 h-16 rounded-full shrink-0" />
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-3 w-24" />
+          </div>
         </div>
-        <div className="flex-1">
-          <h2 className="font-bold text-xl text-primary">Diandé Diallo</h2>
-          <p className="text-xs font-sora text-muted-foreground-soft">{location}</p>
-          <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-accent-soft/50 text-accent-foreground font-sora text-[11px] font-bold">
-            Membre Téranga Vérifié
-          </span>
+      ) : error && !currentUser ? (
+        <ErrorState message={error.message} onRetry={reload} />
+      ) : currentUser ? (
+        <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-primary text-primary-emerald-foreground font-bold font-sora text-xl flex items-center justify-center border-2 border-primary-emerald">
+            {currentUser.initials}
+          </div>
+          <div className="flex-1">
+            <h2 className="font-bold text-xl text-primary">{currentUser.name}</h2>
+            <p className="text-xs font-sora text-muted-foreground-soft">{location}</p>
+            {currentUser.verified && (
+              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-accent-soft/50 text-accent-foreground font-sora text-[11px] font-bold">
+                Membre Téranga Vérifié
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Role Switcher */}
       <div className="bg-surface-muted p-4 rounded-2xl border border-border flex justify-between items-center">
@@ -40,7 +60,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
           <p className="text-xs font-sora text-muted-foreground-soft">
             {userRole === 'client'
               ? 'Espace Client (Demandes de services)'
-              : 'Espace Artisan Pro (Idrissa Diop)'}
+              : `Espace Artisan Pro${proArtisan ? ` (${proArtisan.name})` : ''}`}
           </p>
         </div>
         <button
