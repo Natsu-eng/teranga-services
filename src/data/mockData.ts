@@ -1,4 +1,4 @@
-import { Artisan, JobRequest, ChatMessage } from '../types';
+import { Artisan, JobRequest, ChatMessage, ArtisanStats, CurrentUser } from '../types';
 
 export const INITIAL_ARTISANS: Artisan[] = [
   {
@@ -191,3 +191,28 @@ export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
     timestamp: '10:48',
   },
 ];
+
+export const ARTISAN_STATS_BY_ID: Record<string, ArtisanStats> = {
+  'idrissa-diop': {
+    monthlyRevenue: 245000,
+    monthlyRevenueChangePercent: 12,
+    weeklyRevenues: [
+      { label: 'Semaine 1', amount: 45000, isCurrent: false },
+      { label: 'Semaine 2', amount: 65000, isCurrent: false },
+      { label: 'Semaine 3', amount: 50000, isCurrent: false },
+      { label: 'Semaine 4', amount: 85000, isCurrent: false },
+      { label: 'Cette semaine', amount: 110000, isCurrent: true },
+    ],
+    acceptedRequestsCount: 28,
+    averageRating: 4.9,
+    responseRatePercent: 95,
+  },
+};
+
+export const CURRENT_USER: CurrentUser = {
+  id: 'user-diande-diallo',
+  name: 'Diandé Diallo',
+  initials: 'DD',
+  verified: true,
+  artisanId: 'idrissa-diop',
+};

@@ -97,3 +97,26 @@ export interface AIAnalysisResult {
     total: number;
   };
 }
+
+export interface WeeklyRevenuePoint {
+  label: string; // e.g. "Semaine 1", "Cette semaine"
+  amount: number; // FCFA
+  isCurrent: boolean;
+}
+
+export interface ArtisanStats {
+  monthlyRevenue: number; // FCFA
+  monthlyRevenueChangePercent: number; // vs mois dernier
+  weeklyRevenues: WeeklyRevenuePoint[];
+  acceptedRequestsCount: number;
+  averageRating: number;
+  responseRatePercent: number;
+}
+
+export interface CurrentUser {
+  id: string;
+  name: string;
+  initials: string;
+  verified: boolean;
+  artisanId: string; // linked artisan profile when switching to "Pro" mode
+}
