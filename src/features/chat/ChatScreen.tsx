@@ -12,7 +12,7 @@ import {
   Send,
   MessageCircle,
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -20,13 +20,10 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useChat } from './hooks/useChat';
 
-interface ChatScreenProps {
-  artisanId: string;
-}
-
-export const ChatScreen: React.FC<ChatScreenProps> = ({ artisanId }) => {
+export const ChatScreen: React.FC = () => {
+  const { conversationId = '' } = useParams<{ conversationId: string }>();
   const { data: artisan, isLoading: isArtisanLoading, error: artisanError, reload: reloadArtisan } =
-    useArtisan(artisanId);
+    useArtisan(conversationId);
   const {
     data: messages,
     isLoading: isMessagesLoading,
@@ -34,7 +31,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ artisanId }) => {
     reload: reloadMessages,
     sendMessage,
     acceptDevis,
-  } = useChat(artisanId);
+  } = useChat(conversationId);
 
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);

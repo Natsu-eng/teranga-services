@@ -11,17 +11,14 @@ import {
   MessageCircle,
   Receipt,
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useArtisan } from './hooks/useArtisan';
 
-interface ArtisanProfileScreenProps {
-  artisanId: string;
-}
-
-export const ArtisanProfileScreen: React.FC<ArtisanProfileScreenProps> = ({ artisanId }) => {
+export const ArtisanProfileScreen: React.FC = () => {
+  const { artisanId = '' } = useParams<{ artisanId: string }>();
   const { data: artisan, isLoading, error, reload } = useArtisan(artisanId);
   const [isFavorite, setIsFavorite] = useState(false);
   const [showShareNotification, setShowShareNotification] = useState(false);

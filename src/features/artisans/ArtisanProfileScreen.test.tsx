@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { ArtisanProfileScreen } from './ArtisanProfileScreen';
 import { useArtisan } from './hooks/useArtisan';
 import { ApiError } from '../../lib/api';
@@ -31,6 +31,16 @@ const artisanFixture: Artisan = {
   available: true,
 };
 
+function renderAtArtisan(artisanId: string) {
+  return render(
+    <MemoryRouter initialEntries={[`/artisans/${artisanId}`]}>
+      <Routes>
+        <Route path="/artisans/:artisanId" element={<ArtisanProfileScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe('ArtisanProfileScreen', () => {
   beforeEach(() => {
     mockedUseArtisan.mockReset();
@@ -39,11 +49,7 @@ describe('ArtisanProfileScreen', () => {
   it('shows a loading skeleton while the artisan is being fetched', () => {
     mockedUseArtisan.mockReturnValue({ data: null, isLoading: true, error: null, reload: vi.fn() });
 
-    const { container } = render(
-      <MemoryRouter>
-        <ArtisanProfileScreen artisanId="test-artisan" />
-      </MemoryRouter>,
-    );
+    const { container } = renderAtArtisan('test-artisan');
 
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
     expect(screen.queryByText(artisanFixture.name)).not.toBeInTheDocument();
@@ -58,11 +64,7 @@ describe('ArtisanProfileScreen', () => {
       reload,
     });
 
-    render(
-      <MemoryRouter>
-        <ArtisanProfileScreen artisanId="missing" />
-      </MemoryRouter>,
-    );
+    renderAtArtisan('missing');
 
     expect(
       screen.getByText("Cet artisan n'existe pas ou n'est plus disponible."),
@@ -79,11 +81,7 @@ describe('ArtisanProfileScreen', () => {
       reload: vi.fn(),
     });
 
-    render(
-      <MemoryRouter>
-        <ArtisanProfileScreen artisanId={artisanFixture.id} />
-      </MemoryRouter>,
-    );
+    renderAtArtisan(artisanFixture.id);
 
     expect(screen.getByText(artisanFixture.name)).toBeInTheDocument();
     expect(screen.getByText(artisanFixture.bio)).toBeInTheDocument();

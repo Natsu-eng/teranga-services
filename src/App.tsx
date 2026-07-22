@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Route, Routes, useParams } from 'react-router';
+import { BrowserRouter, Route, Routes } from 'react-router';
 import { UserRole } from './types';
 import { MainLayout } from './components/layout/MainLayout';
 import { NoBottomNavLayout } from './components/layout/NoBottomNavLayout';
@@ -13,16 +13,6 @@ import { ArtisanDashboardScreen } from './features/requests/ArtisanDashboardScre
 import { SearchScreen } from './features/artisans/SearchScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
-
-function ArtisanProfileRoute() {
-  const { artisanId = '' } = useParams<{ artisanId: string }>();
-  return <ArtisanProfileScreen artisanId={artisanId} />;
-}
-
-function ChatRoute() {
-  const { conversationId = '' } = useParams<{ conversationId: string }>();
-  return <ChatScreen artisanId={conversationId} />;
-}
 
 function AppRoutes() {
   const [userRole, setUserRole] = useState<UserRole>('client');
@@ -59,8 +49,8 @@ function AppRoutes() {
       >
         <Route path="accueil" element={<ClientHomeScreen />} />
         <Route path="recherche" element={<SearchScreen />} />
-        <Route path="artisans/:artisanId" element={<ArtisanProfileRoute />} />
-        <Route path="messages/:conversationId" element={<ChatRoute />} />
+        <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
+        <Route path="messages/:conversationId" element={<ChatScreen />} />
         <Route path="pro" element={<ArtisanDashboardScreen />} />
         <Route
           path="profil"
