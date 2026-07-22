@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
-import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send } from 'lucide-react';
-import { AppView, JobRequest, Artisan } from '../../types';
+import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send, Inbox } from 'lucide-react';
+import { AppView, JobRequest } from '../../types';
 import { SafeImage } from '../../components/ui/SafeImage';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { useJobRequests } from './hooks/useJobRequests';
 
 interface ArtisanDashboardScreenProps {
-  artisan: Artisan;
-  jobRequests: JobRequest[];
-  setJobRequests: React.Dispatch<React.SetStateAction<JobRequest[]>>;
   setCurrentView: (view: AppView) => void;
 }
 
-export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
-  artisan: _artisan,
-  jobRequests,
-  setJobRequests,
-  setCurrentView,
-}) => {
+export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({ setCurrentView }) => {
+  const { data: jobRequests, isLoading, error, reload, acceptJob } = useJobRequests();
   const [isAvailable, setIsAvailable] = useState<boolean>(true);
   const [selectedJob, setSelectedJob] = useState<JobRequest | null>(null);
   const [showQuoteModal, setShowQuoteModal] = useState<boolean>(false);
@@ -24,9 +21,7 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
 
   const handleSendQuote = () => {
     if (selectedJob) {
-      setJobRequests((prev) =>
-        prev.map((j) => (j.id === selectedJob.id ? { ...j, status: 'accepted' } : j)),
-      );
+      acceptJob(selectedJob.id);
       setShowQuoteModal(false);
       setSelectedJob(null);
       setCurrentView('chat');
@@ -149,50 +144,75 @@ export const ArtisanDashboardScreen: React.FC<ArtisanDashboardScreenProps> = ({
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-bold text-xl text-primary">Nouvelles demandes</h3>
-          <span className="bg-primary-emerald text-white text-xs font-sora px-2.5 py-0.5 rounded-full font-bold">
-            {jobRequests.length} en attente
-          </span>
+          {jobRequests && (
+            <span className="bg-primary-emerald text-white text-xs font-sora px-2.5 py-0.5 rounded-full font-bold">
+              {jobRequests.length} en attente
+            </span>
+          )}
         </div>
 
         <div className="space-y-3">
-          {jobRequests.map((req) => (
-            <div
-              key={req.id}
-              className="bg-white p-5 rounded-2xl artisan-shadow border border-border-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all hover:border-primary/30"
-            >
-              <div className="flex items-center gap-4 w-full md:w-auto">
-                <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-border">
-                  <SafeImage
-                    src={req.clientAvatar}
-                    fallback="/images/placeholder-avatar.svg"
-                    alt={req.clientName}
-                    className="w-full h-full object-cover"
-                  />
+          {isLoading && !jobRequests ? (
+            [0, 1, 2].map((key) => (
+              <div
+                key={key}
+                className="bg-white p-5 rounded-2xl artisan-shadow border border-border-subtle flex items-center gap-4"
+              >
+                <Skeleton className="w-12 h-12 rounded-full shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
-                <div className="flex flex-col">
-                  <h4 className="font-sora font-bold text-base text-foreground">{req.clientName}</h4>
-                  <p className="text-sm text-muted-foreground font-medium">{req.title}</p>
-                  <div className="flex items-center text-xs font-sora text-muted-foreground-soft mt-0.5">
-                    <MapPin className="w-[14px] h-[14px] mr-1 text-primary" />
-                    <span>{req.location}</span>
+              </div>
+            ))
+          ) : error && !jobRequests ? (
+            <ErrorState message={error.message} onRetry={reload} />
+          ) : jobRequests && jobRequests.length === 0 ? (
+            <EmptyState
+              icon={<Inbox className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />}
+              title="Aucune nouvelle demande pour le moment."
+              description="Les nouvelles demandes de vos clients apparaîtront ici."
+            />
+          ) : (
+            (jobRequests ?? []).map((req) => (
+              <div
+                key={req.id}
+                className="bg-white p-5 rounded-2xl artisan-shadow border border-border-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all hover:border-primary/30"
+              >
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 border border-border">
+                    <SafeImage
+                      src={req.clientAvatar}
+                      fallback="/images/placeholder-avatar.svg"
+                      alt={req.clientName}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <h4 className="font-sora font-bold text-base text-foreground">{req.clientName}</h4>
+                    <p className="text-sm text-muted-foreground font-medium">{req.title}</p>
+                    <div className="flex items-center text-xs font-sora text-muted-foreground-soft mt-0.5">
+                      <MapPin className="w-[14px] h-[14px] mr-1 text-primary" />
+                      <span>{req.location}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4">
-                <span className="text-xs font-sora text-muted-foreground-soft italic">{req.timeAgo}</span>
-                <button
-                  onClick={() => {
-                    setSelectedJob(req);
-                    setShowQuoteModal(true);
-                  }}
-                  className="bg-accent text-white font-sora text-xs font-bold px-6 py-2.5 rounded-full hover:shadow-md active:scale-95 transition-all cursor-pointer"
-                >
-                  Voir
-                </button>
+                <div className="flex items-center justify-between md:justify-end w-full md:w-auto gap-4">
+                  <span className="text-xs font-sora text-muted-foreground-soft italic">{req.timeAgo}</span>
+                  <button
+                    onClick={() => {
+                      setSelectedJob(req);
+                      setShowQuoteModal(true);
+                    }}
+                    className="bg-accent text-white font-sora text-xs font-bold px-6 py-2.5 rounded-full hover:shadow-md active:scale-95 transition-all cursor-pointer"
+                  >
+                    Voir
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </section>
 

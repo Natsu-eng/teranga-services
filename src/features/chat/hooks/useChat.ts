@@ -19,9 +19,11 @@ export function useChat(conversationId: string) {
     async (text: string) => {
       const message = await api.sendChatMessage(conversationId, text);
       setData((prev) => [...(prev ?? []), message]);
-      setTimeout(() => {
-        run(() => api.getChatMessages(conversationId));
-      }, AUTO_REPLY_REFRESH_DELAY_MS);
+
+      // Resolve only once the reply has landed, so callers can drive a
+      // "typing…" indicator for exactly as long as the reply takes.
+      await new Promise((resolve) => setTimeout(resolve, AUTO_REPLY_REFRESH_DELAY_MS));
+      run(() => api.getChatMessages(conversationId));
     },
     [conversationId, run, setData],
   );

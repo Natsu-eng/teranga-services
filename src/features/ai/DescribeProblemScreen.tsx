@@ -1,19 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
-import { AppView, AIAnalysisResult, Artisan } from '../../types';
+import { AppView } from '../../types';
 import { SafeImage } from '../../components/ui/SafeImage';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { useArtisans } from '../artisans/hooks/useArtisans';
+import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 
 interface DescribeProblemScreenProps {
   setCurrentView: (view: AppView) => void;
-  setSelectedArtisan: (artisan: Artisan) => void;
-  artisans: Artisan[];
+  setSelectedArtisanId: (id: string) => void;
 }
 
 export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
   setCurrentView,
-  setSelectedArtisan,
-  artisans,
+  setSelectedArtisanId,
 }) => {
+  const { data: artisans, isLoading: isArtisansLoading, error: artisansError } = useArtisans();
+  const { data: aiResult, isLoading: isAnalyzing, error: analysisError, analyze } = useAnalyzeProblem();
+
   const [description, setDescription] = useState<string>(
     "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin.",
   );
@@ -22,22 +27,13 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
   );
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [recordingTime, setRecordingTime] = useState<number>(0);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
-  const [aiResult, setAiResult] = useState<AIAnalysisResult>({
-    trade: 'Plomberie — fuite',
-    priceEstimate: '8 000 – 15 000 FCFA',
-    recommendedCount: 3,
-    explanation:
-      "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
-    urgency: 'haute',
-    suggestedDevis: {
-      title: "Réparation de fuite d'évier",
-      labor: 8000,
-      materials: 4000,
-      total: 12000,
-    },
-  });
+  // Analyze the pre-filled sample description once on mount; further edits
+  // re-trigger analysis via the textarea's onChange handler below.
+  useEffect(() => {
+    analyze(description);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyze]);
 
   // Handle Photo File Upload
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,40 +69,6 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
     }
   };
 
-  // Perform AI Analysis via Server Endpoint
-  const triggerAiAnalysis = async (text: string) => {
-    setIsAnalyzing(true);
-    try {
-      const res = await fetch('/api/analyze-problem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: text }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiResult({
-          trade: data.trade || 'Plomberie — fuite',
-          priceEstimate: data.priceEstimate || '8 000 – 15 000 FCFA',
-          recommendedCount: data.recommendedCount || 3,
-          explanation:
-            data.explanation ||
-            "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
-          urgency: data.urgency || 'moyenne',
-          suggestedDevis: data.suggestedDevis || {
-            title: "Réparation de fuite d'eau",
-            labor: 8000,
-            materials: 4000,
-            total: 12000,
-          },
-        });
-      }
-    } catch (err) {
-      console.error('AI Analysis failed, using fallback:', err);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col pb-32">
       {/* Top Bar */}
@@ -131,7 +93,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
               onChange={(e) => {
                 setDescription(e.target.value);
                 if (e.target.value.length > 10) {
-                  triggerAiAnalysis(e.target.value);
+                  analyze(e.target.value);
                 }
               }}
               maxLength={500}
@@ -188,77 +150,105 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
 
         {/* AI Analysis Result Card */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="magic-card-glow bg-white rounded-2xl p-6 relative overflow-hidden">
-            {/* Ambient Shader Accent */}
-            <div className="absolute -top-12 -right-12 w-32 h-32 bg-success opacity-20 rounded-full blur-2xl"></div>
-
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="text-primary-emerald w-6 h-6" fill="currentColor" />
-                <h2 className="font-sora text-xs font-bold text-primary tracking-wider uppercase">
-                  ANALYSE TERMINÉE
-                </h2>
-              </div>
-              {isAnalyzing && (
-                <span className="text-xs font-sora text-accent-foreground animate-pulse flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-accent-foreground animate-ping" />
-                  Mise à jour IA...
-                </span>
-              )}
+          {!aiResult && isAnalyzing ? (
+            <div className="bg-white rounded-2xl p-6 space-y-4">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-7 w-56" />
+              <Skeleton className="h-12 w-full" />
             </div>
+          ) : !aiResult && analysisError ? (
+            <ErrorState message={analysisError.message} onRetry={() => analyze(description)} />
+          ) : aiResult ? (
+            <>
+              <div className="magic-card-glow bg-white rounded-2xl p-6 relative overflow-hidden">
+                {/* Ambient Shader Accent */}
+                <div className="absolute -top-12 -right-12 w-32 h-32 bg-success opacity-20 rounded-full blur-2xl"></div>
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
-                  Métier détecté
-                </p>
-                <p className="font-bold text-xl md:text-2xl text-primary-emerald">{aiResult.trade}</p>
-              </div>
-
-              <div className="flex justify-between items-end border-t border-border-faint pt-4">
-                <div>
-                  <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
-                    Prix estimé
-                  </p>
-                  <p className="font-bold text-lg text-foreground">{aiResult.priceEstimate}</p>
-                  <span className="text-[10px] text-muted-foreground-soft italic block mt-0.5">
-                    (Estimation basée sur des cas similaires à Dakar)
-                  </span>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="text-primary-emerald w-6 h-6" fill="currentColor" />
+                    <h2 className="font-sora text-xs font-bold text-primary tracking-wider uppercase">
+                      ANALYSE TERMINÉE
+                    </h2>
+                  </div>
+                  {isAnalyzing && (
+                    <span className="text-xs font-sora text-accent-foreground animate-pulse flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-accent-foreground animate-ping" />
+                      Mise à jour IA...
+                    </span>
+                  )}
                 </div>
 
-                <div className="text-right">
-                  <p className="text-muted-foreground font-sora text-[11px] mb-2 font-medium">
-                    {artisans.length} artisans recommandés
-                  </p>
-                  <div className="flex items-center justify-end -space-x-3">
-                    {artisans.slice(0, 3).map((art) => (
-                      <div
-                        key={art.id}
-                        className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"
-                      >
-                        <SafeImage
-                          src={art.avatarUrl}
-                          fallback="/images/placeholder-avatar.svg"
-                          alt={art.name}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
-                    <div className="w-10 h-10 rounded-full border-2 border-white bg-border-faint text-muted-foreground flex items-center justify-center text-[10px] font-bold">
-                      +{artisans.length - 3 > 0 ? artisans.length - 3 : 5}
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
+                      Métier détecté
+                    </p>
+                    <p className="font-bold text-xl md:text-2xl text-primary-emerald">{aiResult.trade}</p>
+                  </div>
+
+                  <div className="flex justify-between items-end border-t border-border-faint pt-4">
+                    <div>
+                      <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
+                        Prix estimé
+                      </p>
+                      <p className="font-bold text-lg text-foreground">{aiResult.priceEstimate}</p>
+                      <span className="text-[10px] text-muted-foreground-soft italic block mt-0.5">
+                        (Estimation basée sur des cas similaires à Dakar)
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      {isArtisansLoading && !artisans ? (
+                        <div className="flex items-center justify-end -space-x-3">
+                          {[0, 1, 2].map((key) => (
+                            <Skeleton key={key} className="w-10 h-10 rounded-full border-2 border-white" />
+                          ))}
+                        </div>
+                      ) : artisansError && !artisans ? (
+                        <span className="text-xs font-sora text-muted-foreground-soft">
+                          Artisans indisponibles
+                        </span>
+                      ) : (
+                        artisans && (
+                          <>
+                            <p className="text-muted-foreground font-sora text-[11px] mb-2 font-medium">
+                              {artisans.length} artisans recommandés
+                            </p>
+                            <div className="flex items-center justify-end -space-x-3">
+                              {artisans.slice(0, 3).map((art) => (
+                                <div
+                                  key={art.id}
+                                  className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"
+                                >
+                                  <SafeImage
+                                    src={art.avatarUrl}
+                                    fallback="/images/placeholder-avatar.svg"
+                                    alt={art.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                              ))}
+                              <div className="w-10 h-10 rounded-full border-2 border-white bg-border-faint text-muted-foreground flex items-center justify-center text-[10px] font-bold">
+                                +{artisans.length - 3 > 0 ? artisans.length - 3 : 5}
+                              </div>
+                            </div>
+                          </>
+                        )
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="mt-3 px-1">
-            <p className="text-xs text-muted-foreground font-sora flex items-start gap-1.5">
-              <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <span>{aiResult.explanation}</span>
-            </p>
-          </div>
+              <div className="mt-3 px-1">
+                <p className="text-xs text-muted-foreground font-sora flex items-start gap-1.5">
+                  <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <span>{aiResult.explanation}</span>
+                </p>
+              </div>
+            </>
+          ) : null}
         </section>
       </main>
 
@@ -266,8 +256,9 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
       <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-md border-t border-border z-50 pb-safe">
         <button
           onClick={() => {
+            if (!artisans || artisans.length === 0) return;
             const matched = artisans.find((a) => a.id === 'idrissa-diop') || artisans[0];
-            setSelectedArtisan(matched);
+            setSelectedArtisanId(matched.id);
             setCurrentView('artisan_profile');
           }}
           className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"

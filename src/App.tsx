@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { AppView, UserRole, Artisan } from './types';
-import { INITIAL_ARTISANS, INITIAL_JOB_REQUESTS, INITIAL_CHAT_MESSAGES } from './data/mockData';
+import { AppView, UserRole } from './types';
 import { Header } from './components/layout/Header';
 import { BottomNav } from './components/layout/BottomNav';
 import { LandingScreen } from './features/landing/LandingScreen';
@@ -15,12 +14,8 @@ import { UserProfileScreen } from './features/profile/UserProfileScreen';
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('landing');
   const [userRole, setUserRole] = useState<UserRole>('client');
-  const [artisans] = useState<Artisan[]>(INITIAL_ARTISANS);
-  const [selectedArtisan, setSelectedArtisan] = useState<Artisan>(INITIAL_ARTISANS[0]);
-  const [jobRequests, setJobRequests] = useState(INITIAL_JOB_REQUESTS);
-  const [chatMessages, setChatMessages] = useState(INITIAL_CHAT_MESSAGES);
   const [location, setLocation] = useState<string>('Dakar Plateau');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedArtisanId, setSelectedArtisanId] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col selection:bg-primary selection:text-primary-emerald-foreground">
@@ -32,7 +27,6 @@ export default function App() {
         setUserRole={setUserRole}
         location={location}
         setLocation={setLocation}
-        unreadCount={chatMessages.length > 0 ? 1 : 0}
       />
 
       {/* Main Screen Views */}
@@ -43,50 +37,32 @@ export default function App() {
 
         {currentView === 'client_home' && (
           <ClientHomeScreen
-            artisans={artisans}
             setCurrentView={setCurrentView}
-            setSelectedArtisan={setSelectedArtisan}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
+            setSelectedArtisanId={setSelectedArtisanId}
           />
         )}
 
         {currentView === 'describe_problem' && (
           <DescribeProblemScreen
             setCurrentView={setCurrentView}
-            setSelectedArtisan={setSelectedArtisan}
-            artisans={artisans}
+            setSelectedArtisanId={setSelectedArtisanId}
           />
         )}
 
-        {currentView === 'artisan_profile' && (
-          <ArtisanProfileScreen artisan={selectedArtisan} setCurrentView={setCurrentView} />
+        {currentView === 'artisan_profile' && selectedArtisanId && (
+          <ArtisanProfileScreen artisanId={selectedArtisanId} setCurrentView={setCurrentView} />
         )}
 
-        {currentView === 'chat' && (
-          <ChatScreen
-            artisan={selectedArtisan}
-            messages={chatMessages}
-            setMessages={setChatMessages}
-            setCurrentView={setCurrentView}
-          />
+        {currentView === 'chat' && selectedArtisanId && (
+          <ChatScreen artisanId={selectedArtisanId} setCurrentView={setCurrentView} />
         )}
 
         {currentView === 'artisan_dashboard' && (
-          <ArtisanDashboardScreen
-            artisan={artisans[0]}
-            jobRequests={jobRequests}
-            setJobRequests={setJobRequests}
-            setCurrentView={setCurrentView}
-          />
+          <ArtisanDashboardScreen setCurrentView={setCurrentView} />
         )}
 
         {currentView === 'search' && (
-          <SearchScreen
-            artisans={artisans}
-            setCurrentView={setCurrentView}
-            setSelectedArtisan={setSelectedArtisan}
-          />
+          <SearchScreen setCurrentView={setCurrentView} setSelectedArtisanId={setSelectedArtisanId} />
         )}
 
         {currentView === 'profile' && (

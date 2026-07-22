@@ -10,25 +10,25 @@ import {
   Map,
   ChevronRight,
 } from 'lucide-react';
-import { AppView, Artisan } from '../../types';
+import { AppView } from '../../types';
 import { SafeImage } from '../../components/ui/SafeImage';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { useArtisans } from './hooks/useArtisans';
 
 interface ClientHomeScreenProps {
-  artisans: Artisan[];
   setCurrentView: (view: AppView) => void;
-  setSelectedArtisan: (artisan: Artisan) => void;
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
+  setSelectedArtisanId: (id: string) => void;
 }
 
 export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
-  artisans,
   setCurrentView,
-  setSelectedArtisan,
-  searchQuery,
-  setSearchQuery,
+  setSelectedArtisanId,
 }) => {
+  const { data: artisans, isLoading, error, reload } = useArtisans();
   const [selectedCategory, setSelectedCategory] = useState<string>('Tout');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const categories = [
     'Tout',
@@ -40,7 +40,7 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
     'Peinture',
   ];
 
-  const filteredArtisans = artisans.filter((artisan) => {
+  const filteredArtisans = (artisans ?? []).filter((artisan) => {
     const matchesCategory =
       selectedCategory === 'Tout' || artisan.trade.toLowerCase() === selectedCategory.toLowerCase();
     const matchesSearch =
@@ -142,28 +142,40 @@ export const ClientHomeScreen: React.FC<ClientHomeScreenProps> = ({
         </div>
 
         <div className="space-y-3">
-          {filteredArtisans.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center border border-border">
-              <SearchX className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />
-              <p className="text-muted-foreground font-medium">
-                Aucun artisan ne correspond à votre recherche.
-              </p>
-              <button
-                onClick={() => {
+          {isLoading && artisans === null ? (
+            [0, 1, 2].map((key) => (
+              <div
+                key={key}
+                className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle"
+              >
+                <Skeleton className="w-24 h-24 rounded-2xl shrink-0" />
+                <div className="flex-1 space-y-2 py-1">
+                  <Skeleton className="h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/3" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+            ))
+          ) : error && artisans === null ? (
+            <ErrorState message={error.message} onRetry={reload} />
+          ) : filteredArtisans.length === 0 ? (
+            <EmptyState
+              icon={<SearchX className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />}
+              title="Aucun artisan ne correspond à votre recherche."
+              action={{
+                label: 'Réinitialiser les filtres',
+                onClick: () => {
                   setSelectedCategory('Tout');
                   setSearchQuery('');
-                }}
-                className="mt-3 text-sm font-sora text-primary underline"
-              >
-                Réinitialiser les filtres
-              </button>
-            </div>
+                },
+              }}
+            />
           ) : (
             filteredArtisans.map((artisan) => (
               <div
                 key={artisan.id}
                 onClick={() => {
-                  setSelectedArtisan(artisan);
+                  setSelectedArtisanId(artisan.id);
                   setCurrentView('artisan_profile');
                 }}
                 className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer active:scale-[0.99]"
