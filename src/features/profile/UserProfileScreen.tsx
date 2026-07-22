@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
-import { AppView, UserRole } from '../types';
+import { AppView, UserRole } from '../../types';
 
 interface UserProfileScreenProps {
   userRole: UserRole;

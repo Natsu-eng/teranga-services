@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
-import { AppView, AIAnalysisResult, Artisan } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, AIAnalysisResult, Artisan } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface DescribeProblemScreenProps {
   setCurrentView: (view: AppView) => void;

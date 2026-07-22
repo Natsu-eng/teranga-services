@@ -1,6 +1,6 @@
 import React from 'react';
 import { ClipboardList, Wallet, MessageCircle, User, Home, Search } from 'lucide-react';
-import { AppView, UserRole } from '../types';
+import { AppView, UserRole } from '../../types';
 
 interface BottomNavProps {
   currentView: AppView;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowRight, BadgeCheck, HeartHandshake, Star } from 'lucide-react';
-import { AppView, UserRole } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, UserRole } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface LandingScreenProps {
   setCurrentView: (view: AppView) => void;

@@ -10,8 +10,8 @@ import {
   Map,
   ChevronRight,
 } from 'lucide-react';
-import { AppView, Artisan } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, Artisan } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface ClientHomeScreenProps {
   artisans: Artisan[];

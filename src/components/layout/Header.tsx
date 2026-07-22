@@ -1,6 +1,6 @@
 import React from 'react';
 import { Bell, Check, ChevronDown, MapPin, ArrowLeftRight } from 'lucide-react';
-import { AppView, UserRole } from '../types';
+import { AppView, UserRole } from '../../types';
 
 interface HeaderProps {
   currentView: AppView;

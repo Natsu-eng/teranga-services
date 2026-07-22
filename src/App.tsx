@@ -1,16 +1,16 @@
 import { useState } from 'react';
 import { AppView, UserRole, Artisan } from './types';
 import { INITIAL_ARTISANS, INITIAL_JOB_REQUESTS, INITIAL_CHAT_MESSAGES } from './data/mockData';
-import { Header } from './components/Header';
-import { BottomNav } from './components/BottomNav';
-import { LandingScreen } from './components/LandingScreen';
-import { ClientHomeScreen } from './components/ClientHomeScreen';
-import { DescribeProblemScreen } from './components/DescribeProblemScreen';
-import { ArtisanProfileScreen } from './components/ArtisanProfileScreen';
-import { ChatScreen } from './components/ChatScreen';
-import { ArtisanDashboardScreen } from './components/ArtisanDashboardScreen';
-import { SearchScreen } from './components/SearchScreen';
-import { UserProfileScreen } from './components/UserProfileScreen';
+import { Header } from './components/layout/Header';
+import { BottomNav } from './components/layout/BottomNav';
+import { LandingScreen } from './features/landing/LandingScreen';
+import { ClientHomeScreen } from './features/artisans/ClientHomeScreen';
+import { DescribeProblemScreen } from './features/ai/DescribeProblemScreen';
+import { ArtisanProfileScreen } from './features/artisans/ArtisanProfileScreen';
+import { ChatScreen } from './features/chat/ChatScreen';
+import { ArtisanDashboardScreen } from './features/requests/ArtisanDashboardScreen';
+import { SearchScreen } from './features/artisans/SearchScreen';
+import { UserProfileScreen } from './features/profile/UserProfileScreen';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('landing');

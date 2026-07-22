@@ -11,8 +11,8 @@ import {
   MessageCircle,
   Receipt,
 } from 'lucide-react';
-import { AppView, Artisan } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, Artisan } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface ArtisanProfileScreenProps {
   artisan: Artisan;

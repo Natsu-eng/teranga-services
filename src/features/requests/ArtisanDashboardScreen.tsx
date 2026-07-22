@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TrendingUp, CheckCircle2, Star, Zap, MapPin, X, Send } from 'lucide-react';
-import { AppView, JobRequest, Artisan } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, JobRequest, Artisan } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface ArtisanDashboardScreenProps {
   artisan: Artisan;

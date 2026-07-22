@@ -11,8 +11,8 @@ import {
   Smile,
   Send,
 } from 'lucide-react';
-import { AppView, ChatMessage, Artisan } from '../types';
-import { SafeImage } from './ui/SafeImage';
+import { AppView, ChatMessage, Artisan } from '../../types';
+import { SafeImage } from '../../components/ui/SafeImage';
 
 interface ChatScreenProps {
   artisan: Artisan;
