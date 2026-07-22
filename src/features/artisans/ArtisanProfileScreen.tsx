@@ -24,7 +24,7 @@ export const ArtisanProfileScreen: React.FC = () => {
   const [showShareNotification, setShowShareNotification] = useState(false);
 
   const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
+    navigator.clipboard?.writeText(`${window.location.origin}/artisans/${artisanId}`);
     setShowShareNotification(true);
     setTimeout(() => setShowShareNotification(false), 2500);
   };
