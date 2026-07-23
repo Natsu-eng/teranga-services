@@ -17,7 +17,7 @@ Monorepo à deux services indépendants, chacun avec son propre cycle de build, 
 | Service | Rôle | Stack |
 | --- | --- | --- |
 | [`frontend/`](frontend/) | Application web (SPA) | React 19, TypeScript, Tailwind CSS v4, Vite |
-| `backend/` *(à venir)* | API métier | Python, FastAPI, SQLAlchemy async, PostgreSQL + PostGIS |
+| [`backend/`](backend/) | API métier | Python, FastAPI, SQLAlchemy async, PostgreSQL (PostGIS à venir) |
 
 Base de données **PostgreSQL** partagée par le backend (Postgres local en dev, Railway en prod — voir [BUILD_PLAN.md](BUILD_PLAN.md)).
 
@@ -31,11 +31,11 @@ teranga-services/
 ├── BUILD_PLAN.md       # document de référence Phase 2 (backend, données, API)
 ├── AUDIT.md             # audit historique
 ├── frontend/             # application web — voir frontend/README.md
-└── backend/              # API FastAPI (à venir) — voir backend/README.md
+└── backend/              # API FastAPI — voir backend/README.md
 ```
 
 ## Documentation par service
 
 - [frontend/README.md](frontend/README.md) — prérequis, installation, scripts, variables d'environnement.
-- `backend/README.md` — à venir, une fois le service créé.
+- [backend/README.md](backend/README.md) — prérequis, base de données locale, installation, migrations, lancement du serveur, porte de validation.
 - [BUILD_PLAN.md](BUILD_PLAN.md) — décisions d'architecture, modèle de données, contrats d'API, séquence des lots de la Phase 2.
