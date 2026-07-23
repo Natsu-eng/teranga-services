@@ -10,60 +10,32 @@ Plateforme sénégalaise de mise en relation entre particuliers et artisans qual
 - **Tableau de bord artisan** — suivi des revenus, des demandes entrantes et des indicateurs de performance.
 - **Profils** — fiches artisan détaillées (avis, réalisations, statistiques) et profil client avec moyens de paiement locaux (Wave, Orange Money, carte).
 
-## Stack technique
+## Topologie
 
-| Côté | Technologies |
-| --- | --- |
-| Frontend | React 19, TypeScript, Tailwind CSS v4, Vite |
-| Backend | Express, middleware Vite (dev), Google Gemini (`@google/genai`) |
-| Qualité | Vitest, Testing Library, ESLint, Prettier |
+Monorepo à deux services indépendants, chacun avec son propre cycle de build, ses propres dépendances et sa propre porte de qualité :
 
-## Structure du projet
+| Service | Rôle | Stack |
+| --- | --- | --- |
+| [`frontend/`](frontend/) | Application web (SPA) | React 19, TypeScript, Tailwind CSS v4, Vite |
+| `backend/` *(à venir)* | API métier | Python, FastAPI, SQLAlchemy async, PostgreSQL + PostGIS |
 
-```
-src/
-├── App.tsx                       # State machine racine (vue courante) + état global
-├── index.css                     # Tailwind + design tokens (@theme) + classes utilitaires custom
-├── types.ts                      # Types du domaine
-├── data/                         # Données de démonstration (mock)
-└── components/
-    ├── Header.tsx, BottomNav.tsx      # Navigation persistante
-    ├── LandingScreen.tsx              # Accueil / choix de rôle
-    ├── ClientHomeScreen.tsx           # Accueil client
-    ├── DescribeProblemScreen.tsx      # Diagnostic IA
-    ├── SearchScreen.tsx               # Recherche d'artisans
-    ├── ArtisanProfileScreen.tsx       # Fiche artisan
-    ├── ChatScreen.tsx                 # Messagerie + devis
-    ├── ArtisanDashboardScreen.tsx     # Tableau de bord artisan
-    ├── UserProfileScreen.tsx          # Profil client
-    └── ui/SafeImage.tsx               # Image avec repli sur erreur de chargement
+Base de données **PostgreSQL** partagée par le backend (Postgres local en dev, Railway en prod — voir [BUILD_PLAN.md](BUILD_PLAN.md)).
+
+Aujourd'hui, le frontend embarque encore un petit serveur Express (`frontend/server.ts`) qui sert le build de production et expose l'unique endpoint IA (`/api/analyze-problem`). C'est une étape transitoire : ce endpoint migre vers FastAPI et Express disparaît une fois la bascule terminée (voir la séquence de lots dans BUILD_PLAN.md).
+
+## Structure du dépôt
+
+```text
+teranga-services/
+├── README.md          # ce fichier : présentation, topologie
+├── BUILD_PLAN.md       # document de référence Phase 2 (backend, données, API)
+├── AUDIT.md             # audit historique
+├── frontend/             # application web — voir frontend/README.md
+└── backend/              # API FastAPI (à venir) — voir backend/README.md
 ```
 
-## Développement local
+## Documentation par service
 
-**Prérequis :** Node.js LTS (v20+) et git.
-
-1. Installer les dépendances :
-   `npm install`
-2. (Optionnel) Copier [.env.local.example](.env.local.example) vers `.env.local` et y renseigner
-   votre clé `GEMINI_API_KEY`. Sans clé (ou fichier absent), le serveur fonctionne quand même :
-   `/api/analyze-problem` bascule automatiquement sur une heuristique par mots-clés au lieu
-   d'appeler Gemini.
-3. Lancer le serveur de développement (Express + middleware Vite, avec HMR) :
-   `npm run dev`
-   L'application est servie sur http://localhost:3000.
-4. Avant de commit/push, faire passer la porte de validation unique (typecheck + lint + tests) :
-   `npm run validate`
-
-## Scripts disponibles
-
-| Commande | Description |
-| --- | --- |
-| `npm run dev` | Serveur de développement (Express + Vite middleware, HMR) |
-| `npm run build` | Build de production (Vite + bundle serveur esbuild) |
-| `npm start` | Démarre le build de production |
-| `npm run typecheck` | Vérification TypeScript sans émission |
-| `npm run lint` | Lint ESLint |
-| `npm run format` | Formatage Prettier |
-| `npm test` | Tests unitaires (Vitest) |
-| `npm run validate` | Porte de validation complète (typecheck + lint + test) |
+- [frontend/README.md](frontend/README.md) — prérequis, installation, scripts, variables d'environnement.
+- `backend/README.md` — à venir, une fois le service créé.
+- [BUILD_PLAN.md](BUILD_PLAN.md) — décisions d'architecture, modèle de données, contrats d'API, séquence des lots de la Phase 2.
