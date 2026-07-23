@@ -12,7 +12,7 @@ import {
   Send,
   MessageCircle,
 } from 'lucide-react';
-import { AppView } from '../../types';
+import { Link, useParams } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -20,14 +20,10 @@ import { EmptyState } from '../../components/ui/EmptyState';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useChat } from './hooks/useChat';
 
-interface ChatScreenProps {
-  artisanId: string;
-  setCurrentView: (view: AppView) => void;
-}
-
-export const ChatScreen: React.FC<ChatScreenProps> = ({ artisanId, setCurrentView }) => {
+export const ChatScreen: React.FC = () => {
+  const { conversationId = '' } = useParams<{ conversationId: string }>();
   const { data: artisan, isLoading: isArtisanLoading, error: artisanError, reload: reloadArtisan } =
-    useArtisan(artisanId);
+    useArtisan(conversationId);
   const {
     data: messages,
     isLoading: isMessagesLoading,
@@ -35,7 +31,7 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ artisanId, setCurrentVie
     reload: reloadMessages,
     sendMessage,
     acceptDevis,
-  } = useChat(artisanId);
+  } = useChat(conversationId);
 
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -69,12 +65,12 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({ artisanId, setCurrentVie
       {/* Top Header */}
       <header className="flex justify-between items-center px-4 md:px-12 h-18 w-full z-40 bg-background/90 backdrop-blur-md border-b border-border shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setCurrentView('client_home')}
+          <Link
+            to="/accueil"
             className="text-foreground p-2 hover:bg-surface-muted rounded-full transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-6 h-6" />
-          </button>
+          </Link>
 
           {artisan ? (
             <div className="flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { ClientHomeScreen } from './ClientHomeScreen';
 import { useArtisans } from './hooks/useArtisans';
 import { ApiError } from '../../lib/api';
@@ -39,7 +40,9 @@ describe('ClientHomeScreen', () => {
     mockedUseArtisans.mockReturnValue({ data: null, isLoading: true, error: null, reload: vi.fn() });
 
     const { container } = render(
-      <ClientHomeScreen setCurrentView={vi.fn()} setSelectedArtisanId={vi.fn()} />,
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
     );
 
     expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
@@ -55,7 +58,11 @@ describe('ClientHomeScreen', () => {
       reload,
     });
 
-    render(<ClientHomeScreen setCurrentView={vi.fn()} setSelectedArtisanId={vi.fn()} />);
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText('Impossible de charger les artisans.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
@@ -70,7 +77,11 @@ describe('ClientHomeScreen', () => {
       reload: vi.fn(),
     });
 
-    render(<ClientHomeScreen setCurrentView={vi.fn()} setSelectedArtisanId={vi.fn()} />);
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(artisanFixture.name)).toBeInTheDocument();
   });

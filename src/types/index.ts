@@ -1,13 +1,3 @@
-export type AppView =
-  | 'landing'
-  | 'client_home'
-  | 'describe_problem'
-  | 'artisan_profile'
-  | 'chat'
-  | 'artisan_dashboard'
-  | 'search'
-  | 'profile';
-
 export type UserRole = 'client' | 'artisan';
 
 export interface Review {

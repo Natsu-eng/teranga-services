@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
-import { AppView, UserRole } from '../../types';
+import { Link, useNavigate } from 'react-router';
+import { UserRole } from '../../types';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useArtisan } from '../artisans/hooks/useArtisan';
@@ -9,16 +10,15 @@ import { useCurrentUser } from './hooks/useCurrentUser';
 interface UserProfileScreenProps {
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
-  setCurrentView: (view: AppView) => void;
   location: string;
 }
 
 export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
   userRole,
   setUserRole,
-  setCurrentView,
   location,
 }) => {
+  const navigate = useNavigate();
   const { data: currentUser, isLoading, error, reload } = useCurrentUser();
   const { data: proArtisan } = useArtisan(userRole === 'artisan' ? currentUser?.artisanId ?? null : null);
   const [paymentMethod, setPaymentMethod] = useState<'wave' | 'om' | 'card'>('wave');
@@ -67,7 +67,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
           onClick={() => {
             const next = userRole === 'client' ? 'artisan' : 'client';
             setUserRole(next);
-            setCurrentView(next === 'artisan' ? 'artisan_dashboard' : 'client_home');
+            navigate(next === 'artisan' ? '/pro' : '/accueil');
           }}
           className="bg-primary text-white px-4 py-2 rounded-full font-sora text-xs font-bold hover:opacity-90 transition-all cursor-pointer"
         >
@@ -139,13 +139,13 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
 
       {/* Account actions */}
       <div className="bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle space-y-1">
-        <button
-          onClick={() => setCurrentView('landing')}
+        <Link
+          to="/"
           className="w-full text-left px-4 py-3 text-sm font-sora text-destructive font-semibold flex items-center gap-2 hover:bg-destructive-soft/20 rounded-xl transition-colors cursor-pointer"
         >
           <LogOut className="w-6 h-6" />
           <span>Déconnexion / Retour à l&apos;accueil</span>
-        </button>
+        </Link>
       </div>
     </main>
   );

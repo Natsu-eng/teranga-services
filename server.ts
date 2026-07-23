@@ -133,8 +133,15 @@ Description utilisateur: "${description}"`,
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/')) {
+        next();
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
+    });
+    app.use('/api', (_req, res) => {
+      res.status(404).json({ error: 'Route API introuvable.' });
     });
   }
 

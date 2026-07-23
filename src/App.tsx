@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { AppView, UserRole } from './types';
-import { Header } from './components/layout/Header';
-import { BottomNav } from './components/layout/BottomNav';
+import { BrowserRouter, Route, Routes } from 'react-router';
+import { UserRole } from './types';
+import { MainLayout } from './components/layout/MainLayout';
+import { NoBottomNavLayout } from './components/layout/NoBottomNavLayout';
+import { MinimalLayout } from './components/layout/MinimalLayout';
 import { LandingScreen } from './features/landing/LandingScreen';
 import { ClientHomeScreen } from './features/artisans/ClientHomeScreen';
 import { DescribeProblemScreen } from './features/ai/DescribeProblemScreen';
@@ -10,73 +12,63 @@ import { ChatScreen } from './features/chat/ChatScreen';
 import { ArtisanDashboardScreen } from './features/requests/ArtisanDashboardScreen';
 import { SearchScreen } from './features/artisans/SearchScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
+import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 
-export default function App() {
-  const [currentView, setCurrentView] = useState<AppView>('landing');
+export function AppRoutes() {
   const [userRole, setUserRole] = useState<UserRole>('client');
   const [location, setLocation] = useState<string>('Dakar Plateau');
-  const [selectedArtisanId, setSelectedArtisanId] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col selection:bg-primary selection:text-primary-emerald-foreground">
-      {/* Top Bar Navigation */}
-      <Header
-        currentView={currentView}
-        setCurrentView={setCurrentView}
-        userRole={userRole}
-        setUserRole={setUserRole}
-        location={location}
-        setLocation={setLocation}
-      />
+    <Routes>
+      <Route element={<MinimalLayout />}>
+        <Route index element={<LandingScreen setUserRole={setUserRole} />} />
+      </Route>
 
-      {/* Main Screen Views */}
-      <div className="flex-1">
-        {currentView === 'landing' && (
-          <LandingScreen setCurrentView={setCurrentView} setUserRole={setUserRole} />
-        )}
-
-        {currentView === 'client_home' && (
-          <ClientHomeScreen
-            setCurrentView={setCurrentView}
-            setSelectedArtisanId={setSelectedArtisanId}
-          />
-        )}
-
-        {currentView === 'describe_problem' && (
-          <DescribeProblemScreen
-            setCurrentView={setCurrentView}
-            setSelectedArtisanId={setSelectedArtisanId}
-          />
-        )}
-
-        {currentView === 'artisan_profile' && selectedArtisanId && (
-          <ArtisanProfileScreen artisanId={selectedArtisanId} setCurrentView={setCurrentView} />
-        )}
-
-        {currentView === 'chat' && selectedArtisanId && (
-          <ChatScreen artisanId={selectedArtisanId} setCurrentView={setCurrentView} />
-        )}
-
-        {currentView === 'artisan_dashboard' && (
-          <ArtisanDashboardScreen setCurrentView={setCurrentView} />
-        )}
-
-        {currentView === 'search' && (
-          <SearchScreen setCurrentView={setCurrentView} setSelectedArtisanId={setSelectedArtisanId} />
-        )}
-
-        {currentView === 'profile' && (
-          <UserProfileScreen
+      <Route
+        element={
+          <NoBottomNavLayout
             userRole={userRole}
             setUserRole={setUserRole}
-            setCurrentView={setCurrentView}
             location={location}
+            setLocation={setLocation}
           />
-        )}
-      </div>
+        }
+      >
+        <Route path="demande" element={<DescribeProblemScreen />} />
+      </Route>
 
-      {/* Persistent Bottom Navigation */}
-      <BottomNav currentView={currentView} setCurrentView={setCurrentView} userRole={userRole} />
-    </div>
+      <Route
+        element={
+          <MainLayout
+            userRole={userRole}
+            setUserRole={setUserRole}
+            location={location}
+            setLocation={setLocation}
+          />
+        }
+      >
+        <Route path="accueil" element={<ClientHomeScreen />} />
+        <Route path="recherche" element={<SearchScreen />} />
+        <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
+        <Route path="messages/:conversationId" element={<ChatScreen />} />
+        <Route path="pro" element={<ArtisanDashboardScreen />} />
+        <Route
+          path="profil"
+          element={
+            <UserProfileScreen userRole={userRole} setUserRole={setUserRole} location={location} />
+          }
+        />
+      </Route>
+
+      <Route path="*" element={<NotFoundScreen />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }

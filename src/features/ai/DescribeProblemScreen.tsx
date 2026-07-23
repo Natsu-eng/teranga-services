@@ -1,21 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
-import { AppView } from '../../types';
+import { useNavigate } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useArtisans } from '../artisans/hooks/useArtisans';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 
-interface DescribeProblemScreenProps {
-  setCurrentView: (view: AppView) => void;
-  setSelectedArtisanId: (id: string) => void;
-}
-
-export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
-  setCurrentView,
-  setSelectedArtisanId,
-}) => {
+export const DescribeProblemScreen: React.FC = () => {
+  const navigate = useNavigate();
   const { data: artisans, isLoading: isArtisansLoading, error: artisansError } = useArtisans();
   const { data: aiResult, isLoading: isAnalyzing, error: analysisError, analyze } = useAnalyzeProblem();
 
@@ -74,7 +67,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
       {/* Top Bar */}
       <header className="sticky top-0 z-50 flex items-center h-16 px-4 bg-background/85 backdrop-blur-md border-b border-border">
         <button
-          onClick={() => setCurrentView('client_home')}
+          onClick={() => navigate(-1)}
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
         >
           <ArrowLeft className="text-foreground w-6 h-6" />
@@ -258,8 +251,7 @@ export const DescribeProblemScreen: React.FC<DescribeProblemScreenProps> = ({
           onClick={() => {
             if (!artisans || artisans.length === 0) return;
             const matched = artisans.find((a) => a.id === 'idrissa-diop') || artisans[0];
-            setSelectedArtisanId(matched.id);
-            setCurrentView('artisan_profile');
+            navigate(`/artisans/${matched.id}`);
           }}
           className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"
         >
