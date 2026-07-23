@@ -1,8 +1,8 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
@@ -17,7 +17,18 @@ class Settings(BaseSettings):
     database_url: str
     app_env: Literal["dev", "staging", "prod"] = "dev"
     log_level: str = "INFO"
-    cors_origins: list[str] = []
+    # NoDecode : sans ça, pydantic-settings tente de parser la valeur brute
+    # de l'env en JSON avant même d'atteindre le validator ci-dessous, ce qui
+    # échoue pour une liste séparée par des virgules comme CORS_ORIGINS.
+    cors_origins: Annotated[list[str], NoDecode] = []
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def split_cors_origins(cls, v: object) -> object:
+        # Permet CORS_ORIGINS=http://a,http://b dans .env plutôt que du JSON.
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
     @field_validator("database_url")
     @classmethod
