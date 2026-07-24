@@ -1,10 +1,20 @@
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKBElement, WKTElement
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -61,6 +71,12 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
         nullable=False,
         default=SubscriptionTier.FREE,
     )
+    # Dénormalisé depuis `review` (avis `publie` uniquement) : un AVG() par
+    # artisan sur chaque requête de liste ne tient pas à l'échelle. Recalculé
+    # par `app.services.reviews.recalculate_artisan_rating`, jamais saisi
+    # directement (BUILD_PLAN.md §6, Lot 9).
+    rating_avg: Mapped[Decimal | None] = mapped_column(Numeric(precision=3, scale=2))
+    review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     user: Mapped["User"] = relationship(back_populates="artisan_profile")
     verifications: Mapped[list["Verification"]] = relationship(
