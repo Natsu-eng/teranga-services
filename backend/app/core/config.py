@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     database_url: str
     app_env: Literal["dev", "staging", "prod"] = "dev"
     log_level: str = "INFO"
+    # "console" (dev, log lisible) est le seul fournisseur implémenté à ce
+    # stade -- un fournisseur SMS commercial reste à choisir avant la prod
+    # (BUILD_PLAN.md §4). "unconfigured" échoue explicitement à l'envoi,
+    # pour ne jamais retomber silencieusement sur le provider console hors dev.
+    sms_provider: Literal["console", "unconfigured"] = "console"
     # NoDecode : sans ça, pydantic-settings tente de parser la valeur brute
     # de l'env en JSON avant même d'atteindre le validator ci-dessous, ce qui
     # échoue pour une liste séparée par des virgules comme CORS_ORIGINS.
