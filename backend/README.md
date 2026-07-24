@@ -106,6 +106,12 @@ uv run uvicorn app.main:app --reload --port 8000
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
 | `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
+| `ARTISAN_SEARCH_DEFAULT_RADIUS_M` | Non (`10000`) | Rayon de recherche par défaut (mètres) si `radius_m` n'est pas fourni sur `GET /artisans`. |
+| `ARTISAN_SEARCH_MAX_RADIUS_M` | Non (`50000`) | Plafond dur du rayon de recherche (mètres). |
+| `PAGINATION_PAGE_SIZE_DEFAULT` | Non (`20`) | Taille de page par défaut, réutilisée par `GET /artisans` et `GET /artisans/{id}/reviews`. |
+| `PAGINATION_PAGE_SIZE_MAX` | Non (`50`) | Plafond de taille de page. |
+| `PAGINATION_MAX_PAGE` | Non (`50`) | Page maximale autorisée -- au-delà, `422 PAGE_HORS_BORNES`. |
+| `VERIFICATION_REQUIRED_DOC_TYPES` | Non (`cni,selfie`) | Types de documents requis pour `verified_status=VERIFIED`, séparés par des virgules. |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
 
