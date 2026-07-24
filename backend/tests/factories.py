@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from geoalchemy2.elements import WKTElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.artisan import ArtisanProfile, Verification
+from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
 from app.models.commission import CommissionRate
 from app.models.enums import (
     ArtisanVerifiedStatus,
@@ -49,6 +49,20 @@ def point(lat: float = DEFAULT_LAT, lng: float = DEFAULT_LNG) -> WKTElement:
     return WKTElement(f"POINT({lng} {lat})", srid=4326)
 
 
+def bounding_box_polygon(
+    *, min_lat: float, max_lat: float, min_lng: float, max_lng: float
+) -> WKTElement:
+    corners = [
+        (min_lng, min_lat),
+        (max_lng, min_lat),
+        (max_lng, max_lat),
+        (min_lng, max_lat),
+        (min_lng, min_lat),  # anneau fermé -- premier point == dernier point
+    ]
+    coords = ", ".join(f"{lng} {lat}" for lng, lat in corners)
+    return WKTElement(f"POLYGON(({coords}))", srid=4326)
+
+
 async def make_trade(session: AsyncSession, *, code: str = "plomberie") -> Trade:
     trade = Trade(code=f"{code}-{uuid.uuid4().hex[:8]}", label_fr=code.capitalize(), sort_order=1)
     session.add(trade)
@@ -71,18 +85,42 @@ async def make_artisan_profile(
     user: User | None = None,
     lat: float = DEFAULT_LAT,
     lng: float = DEFAULT_LNG,
+    bio: str | None = None,
+    is_available: bool = True,
 ) -> ArtisanProfile:
     artisan_user = user or await make_user(session, role=Role.ARTISAN, full_name="Test Artisan")
     profile = ArtisanProfile(
         user_id=artisan_user.id,
         base_location=point(lat, lng),
-        is_available=True,
+        bio=bio,
+        is_available=is_available,
         verified_status=ArtisanVerifiedStatus.VERIFIED,
         subscription_tier=SubscriptionTier.FREE,
     )
     session.add(profile)
     await session.flush()
     return profile
+
+
+async def make_artisan_trade(
+    session: AsyncSession,
+    *,
+    artisan: ArtisanProfile,
+    trade: Trade,
+    hourly_rate_fcfa: int = 15_000,
+    service_radius_m: int = 5_000,
+    service_area: WKTElement | None = None,
+) -> ArtisanTrade:
+    artisan_trade = ArtisanTrade(
+        artisan_id=artisan.id,
+        trade_id=trade.id,
+        hourly_rate_fcfa=hourly_rate_fcfa,
+        service_radius_m=service_radius_m,
+        service_area=service_area,
+    )
+    session.add(artisan_trade)
+    await session.flush()
+    return artisan_trade
 
 
 async def make_verification(
