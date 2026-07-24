@@ -10,11 +10,13 @@ Sème :
   maçonnerie) ;
 - un `commission_rate` à 10 % (rate_bps=1000), tous métiers, tous paliers ;
 - les 3 artisans du mock frontend (`frontend/src/data/mockData.ts`), en
-  vraies lignes cohérentes (user + artisan_profile + artisan_trade +
-  verification approuvée), avec des coordonnées réelles de quartiers de
-  Dakar ;
+  vraies lignes cohérentes (user + artisan_profile + artisan_trade + CNI et
+  selfie approuvés), avec des coordonnées réelles de quartiers de Dakar ;
+  `verified_status` est dérivé de ces documents via
+  `app.services.verification.compute_verified_status`, jamais assigné en dur ;
 - quelques avis liés à des interventions terminées, portés par des clients
-  distincts (idem mock) ;
+  distincts (idem mock) ; `rating_avg`/`review_count` sont recalculés en fin
+  de seed via `app.services.reviews.recalculate_artisan_rating` ;
 - l'utilisateur client correspondant à `CURRENT_USER` du mock frontend.
 
 Idempotent par clé naturelle (téléphone, code métier) : relancer ce script
@@ -43,6 +45,7 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.db.session import async_session_maker
 from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
 from app.models.commission import CommissionRate
@@ -64,6 +67,8 @@ from app.models.request import ServiceRequest
 from app.models.review import Review
 from app.models.trade import Trade
 from app.models.user import User
+from app.services.reviews import recalculate_artisan_rating
+from app.services.verification import compute_verified_status
 
 TRADES = [
     ("plomberie", "Plomberie", 1),
@@ -273,7 +278,7 @@ async def _seed_artisans(
             years_experience=artisan["years_experience"],
             base_location=_point(artisan["lat"], artisan["lng"]),
             is_available=True,
-            verified_status=ArtisanVerifiedStatus.VERIFIED,
+            verified_status=ArtisanVerifiedStatus.NONE,  # corrigé juste après (dérivé)
             subscription_tier=SubscriptionTier.VERIFIED,
         )
         session.add(profile)
@@ -287,14 +292,29 @@ async def _seed_artisans(
                 service_radius_m=5_000,
             )
         )
-        session.add(
+        # CNI + selfie approuvés : les deux documents requis par défaut
+        # (Settings.verification_required_doc_types) pour que verified_status
+        # se dérive à VERIFIED -- jamais assigné en dur (BUILD_PLAN.md §2.2).
+        verifications = [
             Verification(
                 artisan_id=profile.id,
                 doc_type=VerificationDocType.CNI,
                 doc_url="https://example.invalid/dev-seed/cni-placeholder.jpg",
                 status=VerificationStatus.APPROVED,
                 reviewed_at=datetime.now(UTC),
-            )
+            ),
+            Verification(
+                artisan_id=profile.id,
+                doc_type=VerificationDocType.SELFIE,
+                doc_url="https://example.invalid/dev-seed/selfie-placeholder.jpg",
+                status=VerificationStatus.APPROVED,
+                reviewed_at=datetime.now(UTC),
+            ),
+        ]
+        session.add_all(verifications)
+        await session.flush()
+        profile.verified_status = compute_verified_status(
+            verifications, get_settings().verification_required_doc_types
         )
         profiles[artisan["phone"]] = profile
     return profiles
@@ -387,6 +407,11 @@ async def seed(session: AsyncSession) -> None:
 
     print("Avis :")
     await _seed_reviews(session, artisan_profiles, rate)
+
+    print("Notes recalculées :")
+    for profile in artisan_profiles.values():
+        await recalculate_artisan_rating(session, profile.id)
+    print(f"  + rating_avg/review_count recalculés pour {len(artisan_profiles)} artisan(s)")
 
 
 async def main() -> None:

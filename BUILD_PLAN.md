@@ -153,9 +153,35 @@ Extension 1:1 d'un `user` de rôle `artisan`.
 | base_location | geography(Point,4326) | domicile/atelier (PostGIS) |
 | avatar_url / cover_url | text | |
 | is_available | bool | toggle dispo |
-| verified_status | enum(`none`,`pending`,`verified`,`rejected`) | dérivé des `verification`, **pas** un booléen |
+| verified_status | enum(`none`,`pending`,`verified`,`rejected`) | dérivé des `verification`, **pas** un booléen — voir encadré ci-dessous |
 | subscription_tier | enum(`free`,`verified`) | monétisation (abonnement) |
+| rating_avg | numeric(3,2) null | **dénormalisé** depuis `review` (avis `publie` uniquement) — recalculé par `recalculate_artisan_rating`, jamais saisi (Lot 9) |
+| review_count | int, défaut 0 | idem, dénormalisé et recalculé avec `rating_avg` |
 | created_at / updated_at / deleted_at | | |
+
+> **`verified_status` : règle de dérivation exacte** (`app.services.verification.compute_verified_status`,
+> Lot 9). Soit `REQUIRED` l'ensemble des `doc_type` requis (Settings
+> `VERIFICATION_REQUIRED_DOC_TYPES`, défaut `cni,selfie`) :
+>
+> 1. Aucune ligne `verification` du tout → **NONE**.
+> 2. Pour chaque type de `REQUIRED`, ne retenir que la ligne la plus récente
+>    (`created_at` max) — un artisan peut resoumettre après un rejet.
+> 3. Tous les types de `REQUIRED` ont leur dernière ligne à `approved` → **VERIFIED**.
+> 4. Sinon, au moins un type de `REQUIRED` est absent (rien soumis) ou `pending` → **PENDING**.
+> 5. Sinon (au moins un type de `REQUIRED` `rejected`, rien en attente) → **REJECTED**.
+>
+> La colonne `verified_status` existe en base mais n'est **jamais lue telle
+> quelle** par la couche de lecture : les endpoints chargent les
+> `verification` (eager load) et appellent cette fonction à la volée. Elle
+> reste néanmoins tenue à jour à l'écriture (seed, et futur lot de
+> vérification admin) pour ne jamais diverger inutilement de la valeur
+> dérivée.
+>
+> **Dénormalisation `rating_avg`/`review_count`** : un `AVG(rating)` par
+> artisan sur chaque requête de liste ne tient pas à l'échelle.
+> `app.services.reviews.recalculate_artisan_rating` recalcule les deux
+> colonnes depuis les avis `publie` uniquement (masqué/signalé exclus),
+> appelée après toute mutation d'un avis (insertion ou changement de statut).
 
 #### `verification`
 Documents de vérification d'un artisan. **Plusieurs par artisan** (CNI, selfie,
@@ -396,15 +422,27 @@ GET  /api/v1/auth/me              (authentifié)                → user courant
 `/refresh` révoque systématiquement l'ancien token (rotation) — voir §4 pour
 le comportement en cas de rejeu d'un token déjà révoqué.
 
-**Artisans**
+**Artisans** (Lot 9 — lecture publique, sauf mention contraire)
 ```
-GET  /api/v1/artisans             ?trade=&near=lat,lng&radius=&min_rating=&available=
-                                   → liste triée par distance (PostGIS)
-GET  /api/v1/artisans/{id}                                     → profil + stats + réalisations
-GET  /api/v1/artisans/{id}/reviews                             → avis publiés
-GET  /api/v1/artisans/{id}/stats                               → revenus, note, taux réponse
-PATCH /api/v1/artisans/me         (artisan) { bio, availability, trades… }
+GET  /api/v1/artisans             ?trade=&near=lat,lng&radius_m=&min_rating=&available=&q=
+                                   &sort=distance|rating|recent&page=&page_size=
+                                   → { items: [...], pagination: {...} }, triée par distance si
+                                     `near` fourni (défaut rating sinon)
+GET  /api/v1/artisans/{id}                                     → profil détaillé (métiers,
+                                   verified_status dérivé, note), sans coordonnées/contact
+GET  /api/v1/artisans/{id}/reviews                             → avis publiés (status=publie), paginés
+GET  /api/v1/artisans/{id}/stats                               → indicateurs de réputation (public,
+                                   sans auth) ; + revenus si authentifié en tant que propriétaire ou
+                                   admin (403 STATISTIQUES_PRIVEES_INTERDITES pour un tiers authentifié)
+GET  /api/v1/trades                                            → référentiel des métiers actifs
+PATCH /api/v1/artisans/me         (artisan) { bio, availability, trades… }  -- hors périmètre Lot 9
 ```
+Erreurs normalisées spécifiques : `POSITION_INVALIDE` (near malformé/hors
+bornes), `RAYON_RECHERCHE_INVALIDE` (radius_m ≤0 ou > plafond),
+`TRI_DISTANCE_SANS_POSITION` (sort=distance sans near), `PAGE_HORS_BORNES`
+(page au-delà du plafond dur), `ARTISAN_NOT_FOUND` (404),
+`STATISTIQUES_PRIVEES_INTERDITES` (403). Détail de la recherche géo et de
+la pagination : §5.
 
 **Demandes & IA**
 ```
@@ -489,6 +527,55 @@ une reconnexion complète sur tous les appareils.
 - Le front envoie `near=lat,lng&radius=` ; il utilisera `navigator.geolocation`
   réel (aujourd'hui simulé par un sélecteur de quartier).
 
+### 5.1 Combinaison rayon client / zone artisan (Lot 9)
+
+`GET /api/v1/artisans` combine **deux contraintes géo indépendantes**, en ET
+logique — un artisan n'apparaît que si les deux tiennent :
+
+1. **Rayon de recherche du client** (`near` + `radius_m`) : pertinence pour
+   *cette* recherche — `ST_DWithin(base_location, near, radius_m)`.
+2. **Zone d'intervention de l'artisan** (par `artisan_trade`, celui filtré si
+   `trade` est fourni, sinon n'importe lequel via un `EXISTS` corrélé) :
+   capacité opérationnelle réelle de l'artisan, indépendamment de la
+   recherche du client — si `service_area` (polygone) est défini,
+   `ST_Covers(service_area, near)` (PostGIS ne supporte `ST_Contains`/
+   `ST_Within` qu'en `geometry`, pas `geography` — `ST_Covers` est le bon
+   choix) ; sinon `ST_DWithin(base_location, near, service_radius_m)`.
+
+Exemple concret : un artisan à 2 km d'un client mais dont la zone
+d'intervention ne couvre pas ce point est exclu, même si le client cherche
+dans un rayon de 20 km — et réciproquement, un artisan à 9 km reste exclu si
+son propre `service_radius_m` (5 km par défaut) ne l'atteint pas, même si le
+rayon de recherche du client est large. Cette combinaison est appliquée
+**systématiquement**, y compris sans `near`/`trade` actifs : un artisan sans
+aucun `artisan_trade` n'apparaît jamais dans une recherche.
+
+Tri : `sort=distance|rating|recent`. `near` absent → tri par défaut `rating`
+sans échouer. `near` présent sans `sort` explicite → tri par défaut
+`distance`. `sort=distance` explicite sans `near` → erreur normalisée
+(`TRI_DISTANCE_SANS_POSITION`). Tri `rating` avec `NULLS LAST` explicite
+(Postgres met les artisans jamais notés en tête en `DESC` par défaut). Un
+tie-breaker `id` est appliqué sur les 3 modes de tri pour une pagination
+déterministe.
+
+### 5.2 Pagination (Lot 9)
+
+Stratégie retenue : **offset borné**, pas de curseur composite. Justifiée
+par trois modes de tri dynamiques (distance/rating/recent) qui rendraient un
+curseur composite coûteux à maintenir pour un bénéfice marginal à l'échelle
+d'un marché artisan (résultat déjà borné par le filtre géo — centaines de
+lignes, pas de millions), et une UI de découverte qui veut des numéros de
+page, pas un scroll infini. Réutilisée par `GET /artisans` et
+`GET /artisans/{id}/reviews` via une enveloppe générique
+(`{ items, pagination: { page, page_size, total, total_pages } }`).
+
+Plafond dur **non contournable** : une page au-delà de
+`PAGINATION_MAX_PAGE` est rejetée explicitement (`422 PAGE_HORS_BORNES`),
+jamais clampée silencieusement. Une page au-delà du nombre réel de résultats
+mais dans les bornes autorisées reste `200` avec `items: []`. `page_size`
+est clampé silencieusement à `PAGINATION_PAGE_SIZE_MAX` (pas d'erreur — seul
+le plafond de `page` est un rejet dur).
+
 ---
 
 ## 6. Séquence des lots (Phase 2)
@@ -505,8 +592,14 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   vraies lignes). *But : la base reflète ce document.*
 - **Lot 8 — Auth OTP.** Endpoints auth, JWT, dépendance de rôle, provider SMS
   mock en dev. *But : sécurité réelle, fin du rôle auto-déclaré.*
-- **Lot 9 — Lecture artisans + géo.** `GET /artisans` (filtres + PostGIS),
-  `/artisans/{id}`, stats, avis. *But : le front peut lire du vrai.*
+- **Lot 9 — Lecture artisans + géo.** ✅ `GET /artisans` (filtres + proximité
+  PostGIS, combinant rayon client et zone d'intervention artisan, §5.1),
+  `/artisans/{id}`, `/artisans/{id}/reviews`, `/artisans/{id}/stats`
+  (indicateurs publics + revenus réservés au propriétaire/admin),
+  `GET /trades`. Architecture en couches `api → services → repositories →
+  schemas` instaurée (nouveau dossier `app/repositories/`), pagination
+  offset bornée (§5.2), `verified_status` dérivé et `rating_avg`/
+  `review_count` dénormalisés (§2.2). *But : le front peut lire du vrai.*
 - **Lot 10 — Bascule du front.** Implémentation `http` de la couche `api` du
   Lot 4, bascule `mock → http` (un seul point), gestion loading/erreur déjà en
   place. *But : le front parle à FastAPI.*

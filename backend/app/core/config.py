@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
+from app.models.enums import VerificationDocType
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -128,6 +130,40 @@ class Settings(BaseSettings):
     rate_limit_otp_per_phone_window_seconds: int = 600
     rate_limit_otp_per_ip_max: int = 10
     rate_limit_otp_per_ip_window_seconds: int = 600
+
+    # Rayon de recherche par défaut si le client ne précise pas `radius_m` sur
+    # GET /artisans, en mètres. 10 km couvre la quasi-totalité du Grand Dakar
+    # depuis un point central (Plateau -> Almadies ~9,3 km, cf. tests/test_geo.py).
+    artisan_search_default_radius_m: int = 10_000
+    # Plafond dur du rayon de recherche, en mètres -- au-delà, une recherche
+    # perd sa pertinence géo et dégrade la sélectivité de l'index GiST.
+    artisan_search_max_radius_m: int = 50_000
+
+    # Pagination offset bornée (BUILD_PLAN.md §6, Lot 9), réutilisée par
+    # GET /artisans et GET /artisans/{id}/reviews.
+    pagination_page_size_default: int = 20
+    pagination_page_size_max: int = 50
+    # Page maximale autorisée -- au-delà, rejet 422 explicite (PAGE_HORS_BORNES),
+    # jamais un clamp silencieux. À page_size max, plafonne l'offset scanné à
+    # 2 450 lignes -- large pour un marché artisan filtré par rayon géo.
+    pagination_max_page: int = 50
+
+    # Types de documents requis pour verified_status=VERIFIED (voir
+    # app.services.verification.compute_verified_status). CNI + selfie :
+    # preuve d'identité + preuve que la personne qui a soumis la CNI en est
+    # bien la titulaire -- le socle KYC minimal, avant une éventuelle
+    # accréditation métier (pas encore exigée par défaut).
+    verification_required_doc_types: Annotated[list[VerificationDocType], NoDecode] = [
+        VerificationDocType.CNI,
+        VerificationDocType.SELFIE,
+    ]
+
+    @field_validator("verification_required_doc_types", mode="before")
+    @classmethod
+    def split_verification_required_doc_types(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
 
 
 @lru_cache

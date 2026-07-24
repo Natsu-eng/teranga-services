@@ -106,6 +106,12 @@ uv run uvicorn app.main:app --reload --port 8000
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
 | `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
+| `ARTISAN_SEARCH_DEFAULT_RADIUS_M` | Non (`10000`) | Rayon de recherche par défaut (mètres) si `radius_m` n'est pas fourni sur `GET /artisans`. |
+| `ARTISAN_SEARCH_MAX_RADIUS_M` | Non (`50000`) | Plafond dur du rayon de recherche (mètres). |
+| `PAGINATION_PAGE_SIZE_DEFAULT` | Non (`20`) | Taille de page par défaut, réutilisée par `GET /artisans` et `GET /artisans/{id}/reviews`. |
+| `PAGINATION_PAGE_SIZE_MAX` | Non (`50`) | Plafond de taille de page. |
+| `PAGINATION_MAX_PAGE` | Non (`50`) | Page maximale autorisée -- au-delà, `422 PAGE_HORS_BORNES`. |
+| `VERIFICATION_REQUIRED_DOC_TYPES` | Non (`cni,selfie`) | Types de documents requis pour `verified_status=VERIFIED`, séparés par des virgules. |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
 
@@ -133,6 +139,25 @@ documentée : cet état est local au processus, il ne survit ni à un
 redémarrage ni à plusieurs instances/workers -- à remplacer par un backend
 partagé (Redis, ou une table dédiée) si le trafic ou le nombre d'instances
 grandit.
+
+## Lecture des artisans (recherche géo, avis, stats)
+
+`GET /api/v1/artisans` (proximité PostGIS, filtres `trade`/`min_rating`/
+`available`/`q`, tri `distance`/`rating`/`recent`, pagination), `GET
+/api/v1/artisans/{id}` (profil détaillé), `GET /api/v1/artisans/{id}/reviews`
+(avis publiés), `GET /api/v1/artisans/{id}/stats` (indicateurs de réputation
+publics ; revenus réservés au propriétaire ou à un admin authentifié), `GET
+/api/v1/trades` (référentiel des métiers). Aucune authentification requise
+sauf pour la vue enrichie de `/stats`. Détail complet (combinaison rayon
+client/zone artisan, stratégie de pagination, règle de dérivation de
+`verified_status`) : [BUILD_PLAN.md §5](../BUILD_PLAN.md#5-architecture-géo-postgis)
+et [§2.2](../BUILD_PLAN.md#22-tables).
+
+**Architecture en couches** (`app/api/v1/`, `app/services/`,
+`app/repositories/`, `app/schemas/`) instaurée sur ce lot, appliquée à
+`trades` et `artisans` -- gabarit pour le reste du projet. `app/api/v1/auth.py`
+n'a volontairement pas été réaligné dessus (flux déjà propre et testé,
+réalignement recommandé dans un lot dédié séparé si souhaité).
 
 ## Porte de validation
 
