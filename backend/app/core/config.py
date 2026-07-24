@@ -89,6 +89,36 @@ class Settings(BaseSettings):
     # ligne. 600 000 est la recommandation OWASP (2023) pour PBKDF2-SHA256.
     otp_hash_iterations: int = 600_000
 
+    # Secret de signature des JWT. Obligatoire, sans valeur par défaut :
+    # même principe fail-fast que DATABASE_URL (Lot 6). Générer une valeur
+    # avec `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+    # L'algorithme (HS256) n'est volontairement pas configurable via env --
+    # le rendre configurable ouvrirait une attaque par confusion d'algorithme.
+    jwt_secret: str
+    # Durée de vie de l'access token, en secondes. Défaut 15 min : court,
+    # car il n'est jamais révocable individuellement (JWT stateless).
+    jwt_access_ttl_seconds: int = 900
+    # Durée de vie du refresh token, en secondes. Défaut 30 jours : long,
+    # car révocable (table refresh_token) et soumis à rotation.
+    jwt_refresh_ttl_seconds: int = 2_592_000
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def validate_jwt_secret(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError(
+                "JWT_SECRET est vide. Renseignez une valeur forte dans backend/.env "
+                "(voir backend/.env.example) — aucune valeur par défaut n'est utilisée "
+                "pour la signature des JWT."
+            )
+        if len(v) < 32:
+            raise ValueError(
+                f"JWT_SECRET est trop court ({len(v)} caractères, minimum 32) pour signer "
+                "des JWT en sécurité. Générez une valeur aléatoire, ex. via "
+                '`python -c "import secrets; print(secrets.token_urlsafe(48))"`.'
+            )
+        return v
+
 
 @lru_cache
 def get_settings() -> Settings:
