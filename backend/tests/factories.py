@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from geoalchemy2.elements import WKTElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.artisan import ArtisanProfile
+from app.models.artisan import ArtisanProfile, Verification
 from app.models.commission import CommissionRate
 from app.models.enums import (
     ArtisanVerifiedStatus,
@@ -21,6 +21,8 @@ from app.models.enums import (
     ServiceRequestStatus,
     SubscriptionTier,
     Urgency,
+    VerificationDocType,
+    VerificationStatus,
 )
 from app.models.intervention import Intervention
 from app.models.request import ServiceRequest
@@ -79,6 +81,27 @@ async def make_artisan_profile(
     session.add(profile)
     await session.flush()
     return profile
+
+
+async def make_verification(
+    session: AsyncSession,
+    *,
+    artisan: ArtisanProfile,
+    doc_type: VerificationDocType = VerificationDocType.CNI,
+    status: VerificationStatus = VerificationStatus.APPROVED,
+    created_at: datetime | None = None,
+) -> Verification:
+    verification = Verification(
+        artisan_id=artisan.id,
+        doc_type=doc_type,
+        doc_url="https://example.invalid/test/doc.jpg",
+        status=status,
+    )
+    if created_at is not None:
+        verification.created_at = created_at
+    session.add(verification)
+    await session.flush()
+    return verification
 
 
 async def make_commission_rate(
