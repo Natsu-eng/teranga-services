@@ -82,6 +82,7 @@ user ──1:1── artisan_profile ──1:N── verification
  commission_rate (versionnée, dates d'effet) ◄─ figée sur l'intervention
  conversation ──1:N── message ◄── liée à service_request/intervention
  otp_code ──► user (auth)
+ user ──1:N── refresh_token (sessions JWT, rotation + révocation)
 
  trade (table de référence) ◄── artisan_trade.trade_id
                              ◄── service_request.trade_id
@@ -345,6 +346,27 @@ Codes OTP pour la connexion par téléphone.
 | attempts | int | anti-bruteforce |
 | created_at | timestamptz | |
 
+#### `refresh_token` (auth, Lot 8)
+Sessions de refresh JWT, persistées. **Ajout non prévu à l'origine dans ce
+document** : sans cette table, un refresh token volé reste valide jusqu'à
+expiration (jusqu'à 30 jours) sans qu'on puisse ni déconnecter un appareil
+précis, ni couper un compte compromis. La persistance permet la **rotation**
+(chaque `/refresh` révoque l'ancien token et en émet un nouveau) et la
+**révocation** (`/logout`, `/logout-all`, et la révocation de toute la
+famille si un token déjà révoqué est rejoué — signal de vol).
+
+| Champ | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| user_id | UUID FK → user | |
+| token_hash | text | **haché**, jamais en clair |
+| jti | UUID unique | identifiant du JWT (claim `jti`), indexé |
+| expires_at | timestamptz | miroir de l'`exp` du JWT |
+| revoked_at | timestamptz null | posé à la révocation (logout, rotation, vol détecté) |
+| created_at | timestamptz | |
+| user_agent | text null | contexte de l'appareil, pour affichage futur des sessions actives |
+| ip | text null | contexte de connexion, pour audit |
+
 ---
 
 ## 3. Contrats d'API (FastAPI)
@@ -363,11 +385,16 @@ généré automatiquement à `/docs`).
 
 **Auth**
 ```
-POST /api/v1/auth/request-otp     { phone }                    → 204
+POST /api/v1/auth/request-otp     { phone }                    → 204 (systématique, non énumérant)
 POST /api/v1/auth/verify-otp      { phone, code }              → { access, refresh, user }
-POST /api/v1/auth/refresh         { refresh }                  → { access }
-GET  /api/v1/auth/me                                           → user courant
+POST /api/v1/auth/refresh         { refresh }                  → { access, refresh } (rotation)
+POST /api/v1/auth/logout          { refresh }                  → 204 (révoque ce token)
+POST /api/v1/auth/logout-all      (authentifié)                → 204 (révoque toutes les sessions)
+GET  /api/v1/auth/me              (authentifié)                → user courant
 ```
+`phone` est normalisé en E.164 (§4) avant toute recherche ou écriture ;
+`/refresh` révoque systématiquement l'ancien token (rotation) — voir §4 pour
+le comportement en cas de rejeu d'un token déjà révoqué.
 
 **Artisans**
 ```
@@ -422,6 +449,35 @@ code en console) ; en prod, provider réel (à choisir : agrégateur SMS local).
 
 **Le rôle est porté par le serveur** (`user.role`), vérifié à chaque requête par
 une dépendance FastAPI. Fin définitive du `userRole` auto-déclarable côté client.
+Aucun endpoint ne permet à un utilisateur de modifier son propre rôle : le
+passage à `artisan` se fera via la création d'un `artisan_profile` (lot
+métier), et `admin` ne s'attribue que hors application (script/SQL direct).
+
+### 4.1 Normalisation E.164 du téléphone (Lot 8)
+
+Le téléphone est l'identifiant de connexion (`user.phone`) : sans normalisation,
+`"77 123 45 67"`, `"0771234567"` et `"+221771234567"` créeraient trois comptes
+distincts pour le même numéro. Toute écriture ou recherche passe donc par une
+normalisation canonique **avant** d'atteindre la base : `user.phone` ne stocke
+que la forme E.164. Implémentée via la bibliothèque `phonenumbers` (pas de
+regex maison), indicatif par défaut Sénégal (`+221`), configurable via env
+(`PHONE_DEFAULT_REGION`, `PHONE_ALLOWED_REGIONS`) pour préparer
+l'internationalisation. Un numéro invalide ou d'un pays non autorisé est
+rejeté explicitement (erreur en français), avant toute requête base.
+
+### 4.2 Sessions JWT et rotation du refresh (Lot 8)
+
+Access token court (défaut 15 min) + refresh token long (défaut 30 jours),
+signés HS256 avec un secret obligatoire (`JWT_SECRET`, fail-fast au démarrage
+si absent ou trop court — même principe que `DATABASE_URL` au Lot 6). Payload :
+`sub`, `role`, `jti`, `iat`, `exp`.
+
+Le refresh est **persisté** (table `refresh_token`, §2.2) : à chaque
+`POST /auth/refresh`, l'ancien token est révoqué et un nouveau émis
+(rotation). Si un refresh **déjà révoqué** est présenté, c'est le signal d'un
+vol (rejeu d'un token volé après que le titulaire légitime a déjà tourné) :
+**toute la famille de refresh tokens de l'utilisateur est révoquée**, forçant
+une reconnexion complète sur tous les appareils.
 
 ---
 

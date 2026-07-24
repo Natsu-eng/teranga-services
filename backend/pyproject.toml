@@ -12,6 +12,8 @@ dependencies = [
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
   "geoalchemy2>=0.15",
+  "phonenumbers>=8.13",
+  "pyjwt>=2.9",
 ]
 
 [dependency-groups]
