@@ -11,7 +11,10 @@ from app.services.sms import (
 
 
 def _settings(**overrides: object) -> Settings:
-    base: dict[str, object] = {"database_url": "postgresql+asyncpg://user:pass@localhost:5432/db"}
+    base: dict[str, object] = {
+        "database_url": "postgresql+asyncpg://user:pass@localhost:5432/db",
+        "jwt_secret": "x" * 32,
+    }
     base.update(overrides)
     return Settings(_env_file=None, **base)  # type: ignore[arg-type]
 

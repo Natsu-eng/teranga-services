@@ -75,6 +75,20 @@ class Settings(BaseSettings):
             )
         return v
 
+    # Longueur du code OTP (chiffres). 6 est le standard de l'industrie
+    # (SMS, apps bancaires) : assez d'entropie combiné au TTL court et au
+    # compteur d'attempts, assez court pour être saisi facilement.
+    otp_code_length: int = 6
+    # TTL du code OTP, en secondes. Défaut 5 min (BUILD_PLAN.md §4).
+    otp_ttl_seconds: int = 300
+    # Tentatives de vérification autorisées avant invalidation du code.
+    otp_max_attempts: int = 5
+    # Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. Un code à 6
+    # chiffres n'a que 10^6 combinaisons : un hachage rapide (SHA-256 seul)
+    # rendrait une fuite de la table `otp_code` triviale à bruteforcer hors
+    # ligne. 600 000 est la recommandation OWASP (2023) pour PBKDF2-SHA256.
+    otp_hash_iterations: int = 600_000
+
 
 @lru_cache
 def get_settings() -> Settings:

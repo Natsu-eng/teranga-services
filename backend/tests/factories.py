@@ -34,7 +34,11 @@ DEFAULT_LNG = -17.4441
 
 
 def unique_phone() -> str:
-    return f"+2217{uuid.uuid4().int % 10**8:08d}"
+    # Préfixe "77" fixe (opérateur mobile réellement alloué au Sénégal) --
+    # depuis le Lot 8, les numéros passent par une validation `phonenumbers`
+    # réelle (app.core.phone), un préfixe choisi au hasard ne serait valide
+    # qu'une partie du temps.
+    return f"+22177{uuid.uuid4().int % 10**7:07d}"
 
 
 def point(lat: float = DEFAULT_LAT, lng: float = DEFAULT_LNG) -> WKTElement:
