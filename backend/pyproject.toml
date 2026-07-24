@@ -36,6 +36,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 # argument par défaut — c'est le pattern idiomatique voulu, pas une erreur.
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+# E402 : le script insère backend/ sur sys.path avant d'importer `app` --
+# nécessaire car il s'exécute comme fichier (pas `python -m`), donc Python ne
+# met que scripts/ sur sys.path, pas backend/.
+"scripts/seed.py" = ["E402"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
