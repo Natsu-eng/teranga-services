@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from geoalchemy2 import Geography
+from geoalchemy2.elements import WKBElement, WKTElement
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -43,7 +44,7 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
     )
     bio: Mapped[str | None] = mapped_column(Text)
     years_experience: Mapped[int | None] = mapped_column(Integer)
-    base_location: Mapped[str | None] = mapped_column(
+    base_location: Mapped[WKBElement | WKTElement | None] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False)
     )
     avatar_url: Mapped[str | None] = mapped_column(Text)
@@ -134,7 +135,7 @@ class ArtisanTrade(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
     )
     hourly_rate_fcfa: Mapped[int] = mapped_column(Integer, nullable=False)
     service_radius_m: Mapped[int] = mapped_column(Integer, nullable=False)
-    service_area: Mapped[str | None] = mapped_column(
+    service_area: Mapped[WKBElement | WKTElement | None] = mapped_column(
         Geography(geometry_type="POLYGON", srid=4326, spatial_index=False)
     )
 

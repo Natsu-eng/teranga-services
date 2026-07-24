@@ -2,6 +2,7 @@ import uuid
 from typing import TYPE_CHECKING
 
 from geoalchemy2 import Geography
+from geoalchemy2.elements import WKBElement, WKTElement
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -35,7 +36,7 @@ class ServiceRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     photo_url: Mapped[str | None] = mapped_column(Text)
-    location: Mapped[str] = mapped_column(
+    location: Mapped[WKBElement | WKTElement] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False), nullable=False
     )
     urgency: Mapped[Urgency] = mapped_column(
