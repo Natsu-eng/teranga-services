@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.artisan import ArtisanProfile, Verification
     from app.models.intervention import Intervention
     from app.models.messaging import Conversation, Message
+    from app.models.refresh_token import RefreshToken
     from app.models.request import ServiceRequest
     from app.models.review import Review
 
@@ -47,3 +48,6 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
         back_populates="artisan_user", foreign_keys="Conversation.artisan_id"
     )
     messages_sent: Mapped[list["Message"]] = relationship(back_populates="sender")
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
