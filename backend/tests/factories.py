@@ -1,0 +1,133 @@
+"""Petites fabriques pour composer le graphe dont un test a besoin.
+
+Ce ne sont pas des fixtures : chaque fonction est appelée explicitement,
+avec les seuls paramètres qui comptent pour le test en cours. Aucun test
+n'a besoin du graphe complet.
+"""
+
+import uuid
+from datetime import UTC, datetime
+
+from geoalchemy2.elements import WKTElement
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.artisan import ArtisanProfile
+from app.models.commission import CommissionRate
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    InterventionStatus,
+    Locale,
+    Role,
+    ServiceRequestStatus,
+    SubscriptionTier,
+    Urgency,
+)
+from app.models.intervention import Intervention
+from app.models.request import ServiceRequest
+from app.models.trade import Trade
+from app.models.user import User
+
+# Le Plateau, Dakar -- utilisé comme point par défaut quand la position
+# géographique précise n'est pas ce que le test vérifie.
+DEFAULT_LAT = 14.6937
+DEFAULT_LNG = -17.4441
+
+
+def unique_phone() -> str:
+    return f"+2217{uuid.uuid4().int % 10**8:08d}"
+
+
+def point(lat: float = DEFAULT_LAT, lng: float = DEFAULT_LNG) -> WKTElement:
+    return WKTElement(f"POINT({lng} {lat})", srid=4326)
+
+
+async def make_trade(session: AsyncSession, *, code: str = "plomberie") -> Trade:
+    trade = Trade(code=f"{code}-{uuid.uuid4().hex[:8]}", label_fr=code.capitalize(), sort_order=1)
+    session.add(trade)
+    await session.flush()
+    return trade
+
+
+async def make_user(
+    session: AsyncSession, *, role: Role = Role.CLIENT, full_name: str = "Test User"
+) -> User:
+    user = User(phone=unique_phone(), full_name=full_name, role=role, locale=Locale.FR)
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def make_artisan_profile(
+    session: AsyncSession,
+    *,
+    user: User | None = None,
+    lat: float = DEFAULT_LAT,
+    lng: float = DEFAULT_LNG,
+) -> ArtisanProfile:
+    artisan_user = user or await make_user(session, role=Role.ARTISAN, full_name="Test Artisan")
+    profile = ArtisanProfile(
+        user_id=artisan_user.id,
+        base_location=point(lat, lng),
+        is_available=True,
+        verified_status=ArtisanVerifiedStatus.VERIFIED,
+        subscription_tier=SubscriptionTier.FREE,
+    )
+    session.add(profile)
+    await session.flush()
+    return profile
+
+
+async def make_commission_rate(
+    session: AsyncSession, *, rate_bps: int = 1000, trade_id: uuid.UUID | None = None
+) -> CommissionRate:
+    # `trade_id` par défaut à None (portée "tous métiers") entrerait en
+    # collision (contrainte d'exclusion) avec le taux par défaut semé par
+    # scripts/seed.py, réellement présent en base de dev -- d'où le scoping
+    # à un trade_id précis (celui du test appelant) par défaut des tests.
+    rate = CommissionRate(rate_bps=rate_bps, trade_id=trade_id, effective_from=datetime.now(UTC))
+    session.add(rate)
+    await session.flush()
+    return rate
+
+
+async def make_service_request(
+    session: AsyncSession,
+    *,
+    client: User,
+    trade: Trade,
+    lat: float = DEFAULT_LAT,
+    lng: float = DEFAULT_LNG,
+) -> ServiceRequest:
+    request = ServiceRequest(
+        client_id=client.id,
+        trade_id=trade.id,
+        description="Demande de test.",
+        location=point(lat, lng),
+        urgency=Urgency.NORMAL,
+        status=ServiceRequestStatus.CONVERTIE,
+    )
+    session.add(request)
+    await session.flush()
+    return request
+
+
+async def make_intervention(
+    session: AsyncSession,
+    *,
+    service_request: ServiceRequest,
+    client: User,
+    artisan: ArtisanProfile,
+    commission_rate: CommissionRate,
+    status: InterventionStatus = InterventionStatus.TERMINEE,
+) -> Intervention:
+    intervention = Intervention(
+        service_request_id=service_request.id,
+        client_id=client.id,
+        artisan_id=artisan.id,
+        status=status,
+        commission_rate_id=commission_rate.id,
+        completed_at=datetime.now(UTC) if status == InterventionStatus.TERMINEE else None,
+    )
+    session.add(intervention)
+    await session.flush()
+    return intervention

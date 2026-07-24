@@ -58,6 +58,21 @@ Pour revenir en arrière d'une révision :
 uv run alembic downgrade -1
 ```
 
+## Jeu de données de développement
+
+Sème un jeu de données cohérent (métiers, taux de commission par défaut,
+les 3 artisans du mock frontend avec de vraies coordonnées à Dakar, des
+avis liés à des interventions terminées). Idempotent : relancer la commande
+ne duplique rien. **Jamais exécuté automatiquement** — toujours à la main,
+après les migrations :
+
+```bash
+uv run python scripts/seed.py
+```
+
+Détail du contenu semé et des choix de conception : voir l'en-tête de
+[scripts/seed.py](scripts/seed.py).
+
 ## Lancer le serveur
 
 ```bash
