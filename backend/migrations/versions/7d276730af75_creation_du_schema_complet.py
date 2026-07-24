@@ -1,8 +1,8 @@
 """creation du schema complet
 
-Revision ID: 7bf6ced3ba10
+Revision ID: 7d276730af75
 Revises: ef1968cb5881
-Create Date: 2026-07-24 16:29:01.207946
+Create Date: 2026-07-24 17:06:35.988314
 
 Généré par `alembic revision --autogenerate` PUIS corrigé à la main :
 - ajout de l'import `geoalchemy2` (l'autogenerate référence
@@ -23,7 +23,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "7bf6ced3ba10"
+revision: str = "7d276730af75"
 down_revision: str | Sequence[str] | None = "ef1968cb5881"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -72,11 +72,20 @@ def upgrade() -> None:
         sa.Column("full_name", sa.String(length=150), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("CLIENT", "ARTISAN", "ADMIN", name="user_role", native_enum=False),
+            sa.Enum(
+                "client",
+                "artisan",
+                "admin",
+                name="user_role",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column(
-            "locale", sa.Enum("FR", "WO", name="user_locale", native_enum=False), nullable=False
+            "locale",
+            sa.Enum("fr", "wo", name="user_locale", native_enum=False, create_constraint=True),
+            nullable=False,
         ),
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column(
@@ -118,19 +127,24 @@ def upgrade() -> None:
         sa.Column(
             "verified_status",
             sa.Enum(
-                "NONE",
-                "PENDING",
-                "VERIFIED",
-                "REJECTED",
+                "none",
+                "pending",
+                "verified",
+                "rejected",
                 name="artisan_profile_verified_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
         sa.Column(
             "subscription_tier",
             sa.Enum(
-                "FREE", "VERIFIED", name="artisan_profile_subscription_tier", native_enum=False
+                "free",
+                "verified",
+                name="artisan_profile_subscription_tier",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -176,7 +190,13 @@ def upgrade() -> None:
         sa.Column("trade_id", sa.UUID(), nullable=True),
         sa.Column(
             "tier",
-            sa.Enum("FREE", "VERIFIED", name="commission_rate_tier", native_enum=False),
+            sa.Enum(
+                "free",
+                "verified",
+                name="commission_rate_tier",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=True,
         ),
         sa.Column("effective_from", sa.DateTime(timezone=True), nullable=False),
@@ -241,7 +261,12 @@ def upgrade() -> None:
         sa.Column(
             "urgency",
             sa.Enum(
-                "NORMAL", "URGENT", "IMMEDIAT", name="service_request_urgency", native_enum=False
+                "normal",
+                "urgent",
+                "immediat",
+                name="service_request_urgency",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -250,13 +275,14 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "OUVERTE",
-                "EN_RELATION",
-                "CONVERTIE",
-                "ANNULEE",
-                "EXPIREE",
+                "ouverte",
+                "en_relation",
+                "convertie",
+                "annulee",
+                "expiree",
                 name="service_request_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -368,14 +394,15 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PROPOSEE",
-                "ACCEPTEE",
-                "EN_COURS",
-                "TERMINEE",
-                "ANNULEE",
-                "LITIGE",
+                "proposee",
+                "acceptee",
+                "en_cours",
+                "terminee",
+                "annulee",
+                "litige",
                 name="intervention_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -448,12 +475,13 @@ def upgrade() -> None:
         sa.Column(
             "doc_type",
             sa.Enum(
-                "CNI",
-                "SELFIE",
-                "ACCREDITATION",
-                "ADDRESS_PROOF",
+                "cni",
+                "selfie",
+                "accreditation",
+                "address_proof",
                 name="verification_doc_type",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -461,7 +489,12 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PENDING", "APPROVED", "REJECTED", name="verification_status", native_enum=False
+                "pending",
+                "approved",
+                "rejected",
+                name="verification_status",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -552,25 +585,27 @@ def upgrade() -> None:
         sa.Column(
             "channel",
             sa.Enum(
-                "WAVE",
-                "ORANGE_MONEY",
-                "FREE_MONEY",
-                "CARTE",
-                "CASH",
+                "wave",
+                "orange_money",
+                "free_money",
+                "carte",
+                "cash",
                 name="payment_channel",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
         sa.Column(
             "status",
             sa.Enum(
-                "EN_ATTENTE",
-                "REUSSI",
-                "ECHOUE",
-                "REMBOURSE",
+                "en_attente",
+                "reussi",
+                "echoue",
+                "rembourse",
                 name="payment_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -611,12 +646,26 @@ def upgrade() -> None:
         sa.Column("amount_fcfa", sa.Integer(), nullable=False),
         sa.Column(
             "channel",
-            sa.Enum("WAVE", "ORANGE_MONEY", "BANK", name="payout_channel", native_enum=False),
+            sa.Enum(
+                "wave",
+                "orange_money",
+                "bank",
+                name="payout_channel",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column(
             "status",
-            sa.Enum("EN_ATTENTE", "ENVOYE", "ECHOUE", name="payout_status", native_enum=False),
+            sa.Enum(
+                "en_attente",
+                "envoye",
+                "echoue",
+                name="payout_status",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column("provider_ref", sa.String(length=255), nullable=True),
@@ -652,7 +701,12 @@ def upgrade() -> None:
         sa.Column(
             "kind",
             sa.Enum(
-                "COMMISSION", "SUBSCRIPTION", "LEAD", name="platform_fee_kind", native_enum=False
+                "commission",
+                "subscription",
+                "lead",
+                name="platform_fee_kind",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -660,7 +714,14 @@ def upgrade() -> None:
         sa.Column("commission_rate_id", sa.UUID(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("DUE", "COLLECTEE", "ANNULEE", name="platform_fee_status", native_enum=False),
+            sa.Enum(
+                "due",
+                "collectee",
+                "annulee",
+                name="platform_fee_status",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column("id", sa.UUID(), nullable=False),
@@ -704,7 +765,13 @@ def upgrade() -> None:
         sa.Column(
             "status",
             sa.Enum(
-                "PROPOSE", "ACCEPTE", "REFUSE", "EXPIRE", name="quote_status", native_enum=False
+                "propose",
+                "accepte",
+                "refuse",
+                "expire",
+                name="quote_status",
+                native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -741,7 +808,14 @@ def upgrade() -> None:
         sa.Column("contact_verified", sa.Boolean(), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("PUBLIE", "MASQUE", "SIGNALE", name="review_status", native_enum=False),
+            sa.Enum(
+                "publie",
+                "masque",
+                "signale",
+                name="review_status",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column("id", sa.UUID(), nullable=False),
@@ -782,7 +856,14 @@ def upgrade() -> None:
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column(
             "kind",
-            sa.Enum("TEXTE", "DEVIS", "SYSTEME", name="message_kind", native_enum=False),
+            sa.Enum(
+                "texte",
+                "devis",
+                "systeme",
+                name="message_kind",
+                native_enum=False,
+                create_constraint=True,
+            ),
             nullable=False,
         ),
         sa.Column("id", sa.UUID(), nullable=False),
@@ -857,7 +938,7 @@ def downgrade() -> None:
         "app_metadata",
         sa.Column("key", sa.TEXT(), autoincrement=False, nullable=False),
         sa.Column("value", sa.TEXT(), autoincrement=False, nullable=False),
-        sa.PrimaryKeyConstraint("key", name=op.f("app_metadata_pkey")),
+        sa.PrimaryKeyConstraint("key", name=op.f("pk_app_metadata")),
     )
     op.drop_index(op.f("ix_message_sender_id"), table_name="message")
     op.drop_index(op.f("ix_message_conversation_id"), table_name="message")

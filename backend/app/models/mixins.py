@@ -18,8 +18,26 @@ def enum_column(enum_cls: type[PyEnum], name: str, **kwargs: Any) -> SAEnum:
     ne s'altère pas proprement (ajouter/retirer une valeur est une opération
     DDL délicate) et Alembic ne le supprime pas au downgrade, ce qui casserait
     la réversibilité des migrations (cf. BUILD_PLAN.md §2.2).
+
+    `values_callable` : sans lui, SQLAlchemy persiste le *nom* Python de
+    l'enum (ex. "TERMINEE"), pas sa *valeur* (ex. "terminee") -- or c'est la
+    valeur qui est le vocabulaire métier documenté dans BUILD_PLAN.md et
+    attendu par le SQL écrit à la main (triggers, requêtes ad hoc).
+
+    `create_constraint=True` : depuis SQLAlchemy 2.0, un `Enum` non natif ne
+    pose PAS de CHECK par défaut (choix conservateur de la librairie). Sans
+    ce paramètre explicite, la colonne ne serait qu'un VARCHAR non contraint
+    -- silencieusement, aucune valeur invalide ne serait jamais rejetée.
     """
-    return SAEnum(enum_cls, name=name, native_enum=False, validate_strings=True, **kwargs)
+    return SAEnum(
+        enum_cls,
+        name=name,
+        native_enum=False,
+        validate_strings=True,
+        create_constraint=True,
+        values_callable=lambda cls: [member.value for member in cls],
+        **kwargs,
+    )
 
 
 class UUIDPrimaryKeyMixin:
