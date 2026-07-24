@@ -45,3 +45,22 @@ class ArtisanListItemOut(BaseModel):
 class ArtisanDetailOut(ArtisanListItemOut):
     cover_url: str | None
     created_at: datetime
+
+
+class ArtisanStatsPublicOut(BaseModel):
+    """Indicateurs de réputation, accessibles sans authentification."""
+
+    rating_avg: float | None
+    review_count: int
+    interventions_count: int
+    # Toujours `null` dans ce lot : aucun signal de réactivité artisan
+    # (ex. `responded_at`) n'existe encore dans le modèle -- calcul réel
+    # reporté à un lot qui ajoute ce tracking (BUILD_PLAN.md §6, Lot 9).
+    response_rate: float | None
+
+
+class ArtisanStatsPrivateOut(ArtisanStatsPublicOut):
+    """Ajoute les statistiques financières -- artisan propriétaire ou admin
+    uniquement (BUILD_PLAN.md §5, §6 Lot 9)."""
+
+    revenue_fcfa: int

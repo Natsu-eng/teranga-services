@@ -17,6 +17,8 @@ from app.models.enums import (
     ArtisanVerifiedStatus,
     InterventionStatus,
     Locale,
+    PaymentChannel,
+    PaymentStatus,
     ReviewStatus,
     Role,
     ServiceRequestStatus,
@@ -26,6 +28,7 @@ from app.models.enums import (
     VerificationStatus,
 )
 from app.models.intervention import Intervention
+from app.models.payment import Payment
 from app.models.request import ServiceRequest
 from app.models.review import Review
 from app.models.trade import Trade
@@ -198,6 +201,22 @@ async def make_intervention(
     session.add(intervention)
     await session.flush()
     return intervention
+
+
+async def make_payment(
+    session: AsyncSession,
+    *,
+    intervention: Intervention,
+    amount_fcfa: int,
+    status: PaymentStatus = PaymentStatus.REUSSI,
+    channel: PaymentChannel = PaymentChannel.WAVE,
+) -> Payment:
+    payment = Payment(
+        intervention_id=intervention.id, amount_fcfa=amount_fcfa, channel=channel, status=status
+    )
+    session.add(payment)
+    await session.flush()
+    return payment
 
 
 async def make_review(

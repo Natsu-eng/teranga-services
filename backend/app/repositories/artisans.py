@@ -27,6 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, joinedload, selectinload
 
 from app.models.artisan import ArtisanProfile, ArtisanTrade
+from app.models.enums import InterventionStatus, PaymentStatus
+from app.models.intervention import Intervention
+from app.models.payment import Payment
 from app.models.trade import Trade
 from app.models.user import User
 
@@ -167,3 +170,31 @@ async def get_artisan_by_id(session: AsyncSession, artisan_id: uuid.UUID) -> Art
         )
     )
     return (await session.execute(stmt)).unique().scalar_one_or_none()
+
+
+async def count_completed_interventions(session: AsyncSession, artisan_id: uuid.UUID) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(Intervention)
+        .where(
+            Intervention.artisan_id == artisan_id,
+            Intervention.status == InterventionStatus.TERMINEE,
+        )
+    )
+    return (await session.execute(stmt)).scalar_one()
+
+
+async def sum_revenue_fcfa(session: AsyncSession, artisan_id: uuid.UUID) -> int | None:
+    """Revenus dérivés des paiements réussis sur les interventions de
+    l'artisan. `None` si aucun paiement -- laisse le service décider de la
+    valeur d'affichage (BUILD_PLAN.md §5, réservé au propriétaire/admin)."""
+    stmt = (
+        select(func.sum(Payment.amount_fcfa))
+        .select_from(Payment)
+        .join(Intervention, Intervention.id == Payment.intervention_id)
+        .where(
+            Intervention.artisan_id == artisan_id,
+            Payment.status == PaymentStatus.REUSSI,
+        )
+    )
+    return (await session.execute(stmt)).scalar_one()

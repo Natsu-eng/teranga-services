@@ -12,10 +12,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_optional
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
+from app.models.user import User
 from app.repositories.artisans import ArtisanSort
-from app.schemas.artisans import ArtisanDetailOut, ArtisanListItemOut
+from app.schemas.artisans import (
+    ArtisanDetailOut,
+    ArtisanListItemOut,
+    ArtisanStatsPrivateOut,
+    ArtisanStatsPublicOut,
+)
 from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
@@ -79,3 +86,17 @@ async def list_artisan_reviews(
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
     )
+
+
+@router.get("/{artisan_id}/stats", response_model=None)
+async def get_artisan_stats(
+    artisan_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    requester: Annotated[User | None, Depends(get_current_user_optional)],
+) -> ArtisanStatsPublicOut | ArtisanStatsPrivateOut:
+    # response_model=None explicite : désactive la dérivation de FastAPI
+    # depuis l'annotation de retour (union de deux schémas), qui réintroduit
+    # sinon la même ambiguïté qu'un response_model=Union[...] explicite --
+    # le retour Pydantic est alors sérialisé tel quel, avec exactement ses
+    # propres champs, sans risque qu'un membre de l'union masque l'autre.
+    return await artisans_service.get_stats(session, artisan_id=artisan_id, requester=requester)

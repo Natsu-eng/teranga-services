@@ -15,10 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.models.artisan import ArtisanProfile
-from app.models.enums import VerificationDocType
+from app.models.enums import Role, VerificationDocType
+from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories.artisans import ArtisanSearchFilters, ArtisanSort
-from app.schemas.artisans import ArtisanDetailOut, ArtisanListItemOut, ArtisanTradeOut
+from app.schemas.artisans import (
+    ArtisanDetailOut,
+    ArtisanListItemOut,
+    ArtisanStatsPrivateOut,
+    ArtisanStatsPublicOut,
+    ArtisanTradeOut,
+)
 from app.schemas.pagination import Page
 from app.schemas.trades import TradeOut
 from app.services.verification import compute_verified_status
@@ -63,6 +70,15 @@ class PageHorsBornesError(AppError):
 class ArtisanIntrouvableError(AppError):
     def __init__(self) -> None:
         super().__init__(code="ARTISAN_NOT_FOUND", message="Artisan introuvable.", status_code=404)
+
+
+class StatistiquesPriveesInterditesError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="STATISTIQUES_PRIVEES_INTERDITES",
+            message="Vous n'avez pas accès aux statistiques financières de cet artisan.",
+            status_code=403,
+        )
 
 
 def _parse_near(raw: str) -> tuple[float, float]:
@@ -216,3 +232,40 @@ async def get_artisan_detail(
     profile = await get_artisan_or_404(session, artisan_id)
     required_doc_types = list(settings.verification_required_doc_types)
     return _to_detail(profile, required_doc_types=required_doc_types)
+
+
+def _is_owner_or_admin(profile: ArtisanProfile, requester: User) -> bool:
+    return requester.role is Role.ADMIN or profile.user_id == requester.id
+
+
+async def get_stats(
+    session: AsyncSession, *, artisan_id: uuid.UUID, requester: User | None
+) -> ArtisanStatsPublicOut | ArtisanStatsPrivateOut:
+    """Statistiques d'un artisan (BUILD_PLAN.md §5, §6 Lot 9).
+
+    - Anonyme : indicateurs de réputation seulement (200), aucun champ
+      financier dans la réponse.
+    - Propriétaire (artisan dont `artisan_profile.user_id == requester.id`)
+      ou admin : indicateurs + revenus (200).
+    - Authentifié mais ni l'un ni l'autre : 403 -- les statistiques
+      financières ne sont jamais dégradées silencieusement pour un tiers
+      identifié, contrairement à un visiteur anonyme qui ne les a jamais
+      demandées.
+    """
+    profile = await get_artisan_or_404(session, artisan_id)
+    interventions_count = await artisans_repository.count_completed_interventions(
+        session, artisan_id
+    )
+    public = ArtisanStatsPublicOut(
+        rating_avg=float(profile.rating_avg) if profile.rating_avg is not None else None,
+        review_count=profile.review_count,
+        interventions_count=interventions_count,
+        response_rate=None,
+    )
+
+    if requester is None:
+        return public
+    if _is_owner_or_admin(profile, requester):
+        revenue_fcfa = await artisans_repository.sum_revenue_fcfa(session, artisan_id)
+        return ArtisanStatsPrivateOut(**public.model_dump(), revenue_fcfa=revenue_fcfa or 0)
+    raise StatistiquesPriveesInterditesError()
