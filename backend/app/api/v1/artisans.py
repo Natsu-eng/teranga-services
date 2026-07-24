@@ -6,6 +6,7 @@ bornes triviales déléguées à FastAPI/Pydantic), toute la logique métier
 dans `app.services.artisans`.
 """
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.repositories.artisans import ArtisanSort
-from app.schemas.artisans import ArtisanListItemOut
+from app.schemas.artisans import ArtisanDetailOut, ArtisanListItemOut
 from app.schemas.pagination import Page
 from app.services import artisans as artisans_service
 
@@ -50,3 +51,12 @@ async def list_artisans(
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
     )
+
+
+@router.get("/{artisan_id}", response_model=ArtisanDetailOut)
+async def get_artisan(
+    artisan_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ArtisanDetailOut:
+    return await artisans_service.get_artisan_detail(session, artisan_id, settings=settings)

@@ -5,8 +5,10 @@ assemble les schémas de sortie depuis les entités ORM chargées par le
 repository -- jamais l'inverse, le repository ne connaît pas Pydantic.
 """
 
+import uuid
 from collections.abc import Sequence
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +18,7 @@ from app.models.artisan import ArtisanProfile
 from app.models.enums import VerificationDocType
 from app.repositories import artisans as artisans_repository
 from app.repositories.artisans import ArtisanSearchFilters, ArtisanSort
-from app.schemas.artisans import ArtisanListItemOut, ArtisanTradeOut
+from app.schemas.artisans import ArtisanDetailOut, ArtisanListItemOut, ArtisanTradeOut
 from app.schemas.pagination import Page
 from app.schemas.trades import TradeOut
 from app.services.verification import compute_verified_status
@@ -58,6 +60,11 @@ class PageHorsBornesError(AppError):
         )
 
 
+class ArtisanIntrouvableError(AppError):
+    def __init__(self) -> None:
+        super().__init__(code="ARTISAN_NOT_FOUND", message="Artisan introuvable.", status_code=404)
+
+
 def _parse_near(raw: str) -> tuple[float, float]:
     parts = raw.split(",")
     if len(parts) != 2:
@@ -90,25 +97,31 @@ def _resolve_radius(
     return value
 
 
-def _to_list_item(
+def _common_fields(
     profile: ArtisanProfile,
     distance_m: int | None,
     *,
     required_doc_types: Sequence[VerificationDocType],
-) -> ArtisanListItemOut:
-    return ArtisanListItemOut(
-        id=profile.id,
-        full_name=profile.user.full_name,
-        avatar_url=profile.avatar_url,
-        bio=profile.bio,
-        years_experience=profile.years_experience,
-        is_available=profile.is_available,
-        verified_status=compute_verified_status(profile.verifications, required_doc_types),
-        subscription_tier=profile.subscription_tier,
-        rating_avg=float(profile.rating_avg) if profile.rating_avg is not None else None,
-        review_count=profile.review_count,
-        distance_m=distance_m,
-        trades=[
+) -> dict[str, Any]:
+    """Champs partagés entre `ArtisanListItemOut` et `ArtisanDetailOut`.
+
+    Jamais de coordonnées brutes ni de contact (BUILD_PLAN.md §2.2) : seule
+    `distance_m` porte un signal de position, uniquement quand `near` a été
+    fourni à la recherche.
+    """
+    return {
+        "id": profile.id,
+        "full_name": profile.user.full_name,
+        "avatar_url": profile.avatar_url,
+        "bio": profile.bio,
+        "years_experience": profile.years_experience,
+        "is_available": profile.is_available,
+        "verified_status": compute_verified_status(profile.verifications, required_doc_types),
+        "subscription_tier": profile.subscription_tier,
+        "rating_avg": float(profile.rating_avg) if profile.rating_avg is not None else None,
+        "review_count": profile.review_count,
+        "distance_m": distance_m,
+        "trades": [
             ArtisanTradeOut(
                 trade=TradeOut.model_validate(artisan_trade.trade),
                 hourly_rate_fcfa=artisan_trade.hourly_rate_fcfa,
@@ -117,6 +130,27 @@ def _to_list_item(
             )
             for artisan_trade in profile.artisan_trades
         ],
+    }
+
+
+def _to_list_item(
+    profile: ArtisanProfile,
+    distance_m: int | None,
+    *,
+    required_doc_types: Sequence[VerificationDocType],
+) -> ArtisanListItemOut:
+    return ArtisanListItemOut(
+        **_common_fields(profile, distance_m, required_doc_types=required_doc_types)
+    )
+
+
+def _to_detail(
+    profile: ArtisanProfile, *, required_doc_types: Sequence[VerificationDocType]
+) -> ArtisanDetailOut:
+    return ArtisanDetailOut(
+        **_common_fields(profile, None, required_doc_types=required_doc_types),
+        cover_url=profile.cover_url,
+        created_at=profile.created_at,
     )
 
 
@@ -167,3 +201,18 @@ async def list_artisans(
         for profile, distance in rows
     ]
     return Page.of(items, page=page, page_size=resolved_page_size, total=total)
+
+
+async def get_artisan_or_404(session: AsyncSession, artisan_id: uuid.UUID) -> ArtisanProfile:
+    profile = await artisans_repository.get_artisan_by_id(session, artisan_id)
+    if profile is None:
+        raise ArtisanIntrouvableError()
+    return profile
+
+
+async def get_artisan_detail(
+    session: AsyncSession, artisan_id: uuid.UUID, *, settings: Settings
+) -> ArtisanDetailOut:
+    profile = await get_artisan_or_404(session, artisan_id)
+    required_doc_types = list(settings.verification_required_doc_types)
+    return _to_detail(profile, required_doc_types=required_doc_types)
