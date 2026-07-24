@@ -41,7 +41,14 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with _test_engine.connect() as conn:
         await conn.begin()
         await conn.begin_nested()
-        session = AsyncSession(bind=conn, join_transaction_mode="create_savepoint")
+        # expire_on_commit=False : miroir de app.db.session.async_session_maker.
+        # Sans ça, un endpoint qui commit puis sérialise l'objet ORM (ex.
+        # verify-otp -> UserOut.model_validate(user)) plante avec
+        # MissingGreenlet -- l'expiration post-commit déclencherait un
+        # rechargement lazy hors contexte async.
+        session = AsyncSession(
+            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
 
         @event.listens_for(session.sync_session, "after_transaction_end")
         def _restart_savepoint(sync_session: Session, transaction: object) -> None:

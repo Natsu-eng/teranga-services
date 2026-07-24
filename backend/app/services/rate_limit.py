@@ -42,3 +42,11 @@ class SlidingWindowRateLimiter:
 
 
 otp_rate_limiter = SlidingWindowRateLimiter()
+
+
+def get_otp_rate_limiter() -> SlidingWindowRateLimiter:
+    """Dépendance FastAPI -- indirection nécessaire pour que les tests
+    puissent substituer une instance fraîche par requête (`dependency_overrides`)
+    sans se marcher dessus via le singleton partagé par tout le processus.
+    """
+    return otp_rate_limiter

@@ -130,6 +130,12 @@ async def request_otp(
         code_hash=hash_code(code, iterations=settings.otp_hash_iterations),
         expires_at=now + timedelta(seconds=settings.otp_ttl_seconds),
         attempts=0,
+        # Explicite plutôt que le server_default `now()` de la colonne :
+        # `now()` renvoie l'heure de *début de transaction* sous Postgres,
+        # pas l'heure de l'instruction -- deux OTP émis dans la même
+        # transaction (ex. tests) partageraient sinon le même `created_at`,
+        # rendant le tri "le plus récent" de `verify_otp` indéterminé.
+        created_at=now,
     )
     session.add(otp)
     await session.flush()
@@ -152,7 +158,16 @@ async def verify_otp(
     now = datetime.now(UTC)
 
     result = await session.execute(
-        select(OtpCode).where(OtpCode.phone == phone).order_by(OtpCode.created_at.desc()).limit(1)
+        select(OtpCode)
+        .where(OtpCode.phone == phone)
+        # Le code actif (non consommé, s'il y en a un -- il y en a au plus
+        # un, `request_otp` invalidant les précédents) passe toujours
+        # avant les codes déjà consommés, quel que soit `created_at` :
+        # une simple comparaison de dates ne suffit pas à elle seule (deux
+        # lignes émises dans la même transaction peuvent partager le même
+        # `created_at`, ex. sous le mode savepoint des tests).
+        .order_by(OtpCode.consumed_at.is_(None).desc(), OtpCode.created_at.desc())
+        .limit(1)
     )
     otp = result.scalar_one_or_none()
     if otp is None:
