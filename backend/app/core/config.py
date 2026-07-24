@@ -22,6 +22,24 @@ class Settings(BaseSettings):
     # (BUILD_PLAN.md §4). "unconfigured" échoue explicitement à l'envoi,
     # pour ne jamais retomber silencieusement sur le provider console hors dev.
     sms_provider: Literal["console", "unconfigured"] = "console"
+
+    # Région par défaut pour interpréter un numéro écrit sans indicatif
+    # (ex. "771234567" -> Sénégal). Code région ISO 3166-1 alpha-2 attendu
+    # par `phonenumbers`. Configurable pour préparer l'internationalisation
+    # (BUILD_PLAN.md §4.1) sans toucher au code.
+    phone_default_region: str = "SN"
+    # Régions dont les numéros sont acceptés -- un numéro valide mais d'une
+    # région absente de cette liste est explicitement rejeté (on ne veut pas
+    # créer de comptes avec des numéros qu'on ne sait pas encore servir).
+    phone_allowed_regions: Annotated[list[str], NoDecode] = ["SN"]
+
+    @field_validator("phone_allowed_regions", mode="before")
+    @classmethod
+    def split_phone_allowed_regions(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [region.strip().upper() for region in v.split(",") if region.strip()]
+        return v
+
     # NoDecode : sans ça, pydantic-settings tente de parser la valeur brute
     # de l'env en JSON avant même d'atteindre le validator ci-dessous, ce qui
     # échoue pour une liste séparée par des virgules comme CORS_ORIGINS.
