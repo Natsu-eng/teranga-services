@@ -5,6 +5,7 @@ import type {
   JobRequest,
   AIAnalysisResult,
   CurrentUser,
+  Trade,
 } from '../../types';
 
 export type ApiErrorCode = 'not_found' | 'validation' | 'network' | 'unknown';
@@ -20,9 +21,16 @@ export class ApiError extends Error {
 }
 
 export interface ArtisanFilters {
+  /** HTTP impl: the backend's trade *code* (e.g. "plomberie"), from `listTrades()`. Mock impl: matches by label, for backward compatibility with its own tests. */
   trade?: string;
   search?: string;
   minRating?: number;
+  near?: { lat: number; lng: number };
+  radiusM?: number;
+  available?: boolean;
+  sort?: 'distance' | 'rating' | 'recent';
+  page?: number;
+  pageSize?: number;
 }
 
 export interface JobRequestFilters {
@@ -42,4 +50,5 @@ export interface ApiClient {
   analyzeProblem(description: string): Promise<AIAnalysisResult>;
   getArtisanStats(artisanId: string): Promise<ArtisanStats>;
   getCurrentUser(): Promise<CurrentUser>;
+  listTrades(): Promise<Trade[]>;
 }

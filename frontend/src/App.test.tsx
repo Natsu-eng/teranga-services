@@ -1,7 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import App, { AppRoutes } from './App';
+
+// App-level tests are routing/layout smoke tests, not data-fetching
+// fidelity tests (that's covered by http.test.ts and http-impl.test.ts,
+// which mock at the fetch boundary). They exercise the mock backend
+// directly rather than the real one, so no network call is needed here.
+vi.mock('./lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lib/api')>();
+  const { mockApiClient } = await import('./lib/api/mock');
+  return { ...actual, api: mockApiClient };
+});
 
 afterEach(cleanup);
 

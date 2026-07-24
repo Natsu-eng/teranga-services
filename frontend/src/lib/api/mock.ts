@@ -5,8 +5,20 @@ import {
   ARTISAN_STATS_BY_ID,
   CURRENT_USER,
 } from '../../data/mockData';
-import type { AIAnalysisResult, ChatMessage } from '../../types';
+import type { AIAnalysisResult, ChatMessage, Trade } from '../../types';
 import { ApiError, type ApiClient, type ArtisanFilters, type JobRequestFilters } from './types';
+
+// Matches the trade codes seeded server-side (backend/scripts/seed.py) —
+// this mock reference list only backs mockApiClient.listTrades, unused in
+// production once index.ts routes listTrades to the HTTP implementation.
+const MOCK_TRADES: Trade[] = [
+  { id: 'trade-plomberie', code: 'plomberie', labelFr: 'Plomberie' },
+  { id: 'trade-electricite', code: 'electricite', labelFr: 'Électricité' },
+  { id: 'trade-climatisation', code: 'climatisation', labelFr: 'Climatisation' },
+  { id: 'trade-menuiserie', code: 'menuiserie', labelFr: 'Menuiserie' },
+  { id: 'trade-maconnerie', code: 'maconnerie', labelFr: 'Maçonnerie' },
+  { id: 'trade-peinture', code: 'peinture', labelFr: 'Peinture' },
+];
 
 // Simulated network latency, in milliseconds. Screens must learn to handle
 // loading/error states from day one, since Phase 2 swaps this for real HTTP.
@@ -179,5 +191,10 @@ export const mockApiClient: ApiClient = {
   async getCurrentUser() {
     await simulateNetworkLatency();
     return CURRENT_USER;
+  },
+
+  async listTrades() {
+    await simulateNetworkLatency();
+    return [...MOCK_TRADES];
   },
 };
