@@ -9,7 +9,6 @@ booléen dérivé -- même principe de protection que pour `base_location`
 
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -33,7 +32,11 @@ class ArtisanListItemOut(BaseModel):
     is_available: bool
     verified_status: ArtisanVerifiedStatus
     subscription_tier: SubscriptionTier
-    rating_avg: Decimal | None
+    # float, pas Decimal : Pydantic sérialise Decimal en chaîne JSON ("5.00"),
+    # peu pratique côté frontend pour une note -- converti explicitement en
+    # float à l'assemblage (app.services.artisans), jamais stocké ainsi
+    # (la colonne DB reste Numeric(3,2), cf. app.models.artisan).
+    rating_avg: float | None
     review_count: int
     distance_m: int | None
     trades: list[ArtisanTradeOut]

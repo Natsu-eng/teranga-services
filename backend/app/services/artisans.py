@@ -105,7 +105,7 @@ def _to_list_item(
         is_available=profile.is_available,
         verified_status=compute_verified_status(profile.verifications, required_doc_types),
         subscription_tier=profile.subscription_tier,
-        rating_avg=profile.rating_avg,
+        rating_avg=float(profile.rating_avg) if profile.rating_avg is not None else None,
         review_count=profile.review_count,
         distance_m=distance_m,
         trades=[
