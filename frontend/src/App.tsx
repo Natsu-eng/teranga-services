@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
+import { AuthProvider } from './features/auth/AuthProvider';
 import { UserRole } from './types';
 import { MainLayout } from './components/layout/MainLayout';
 import { NoBottomNavLayout } from './components/layout/NoBottomNavLayout';
@@ -19,49 +20,51 @@ export function AppRoutes() {
   const [location, setLocation] = useState<string>('Dakar Plateau');
 
   return (
-    <Routes>
-      <Route element={<MinimalLayout />}>
-        <Route index element={<LandingScreen setUserRole={setUserRole} />} />
-      </Route>
+    <AuthProvider>
+      <Routes>
+        <Route element={<MinimalLayout />}>
+          <Route index element={<LandingScreen setUserRole={setUserRole} />} />
+        </Route>
 
-      <Route
-        element={
-          <NoBottomNavLayout
-            userRole={userRole}
-            setUserRole={setUserRole}
-            location={location}
-            setLocation={setLocation}
-          />
-        }
-      >
-        <Route path="demande" element={<DescribeProblemScreen />} />
-      </Route>
-
-      <Route
-        element={
-          <MainLayout
-            userRole={userRole}
-            setUserRole={setUserRole}
-            location={location}
-            setLocation={setLocation}
-          />
-        }
-      >
-        <Route path="accueil" element={<ClientHomeScreen />} />
-        <Route path="recherche" element={<SearchScreen />} />
-        <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
-        <Route path="messages/:conversationId" element={<ChatScreen />} />
-        <Route path="pro" element={<ArtisanDashboardScreen />} />
         <Route
-          path="profil"
           element={
-            <UserProfileScreen userRole={userRole} setUserRole={setUserRole} location={location} />
+            <NoBottomNavLayout
+              userRole={userRole}
+              setUserRole={setUserRole}
+              location={location}
+              setLocation={setLocation}
+            />
           }
-        />
-      </Route>
+        >
+          <Route path="demande" element={<DescribeProblemScreen />} />
+        </Route>
 
-      <Route path="*" element={<NotFoundScreen />} />
-    </Routes>
+        <Route
+          element={
+            <MainLayout
+              userRole={userRole}
+              setUserRole={setUserRole}
+              location={location}
+              setLocation={setLocation}
+            />
+          }
+        >
+          <Route path="accueil" element={<ClientHomeScreen />} />
+          <Route path="recherche" element={<SearchScreen />} />
+          <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
+          <Route path="messages/:conversationId" element={<ChatScreen />} />
+          <Route path="pro" element={<ArtisanDashboardScreen />} />
+          <Route
+            path="profil"
+            element={
+              <UserProfileScreen userRole={userRole} setUserRole={setUserRole} location={location} />
+            }
+          />
+        </Route>
+
+        <Route path="*" element={<NotFoundScreen />} />
+      </Routes>
+    </AuthProvider>
   );
 }
 
