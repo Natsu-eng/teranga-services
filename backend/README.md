@@ -89,11 +89,50 @@ uv run uvicorn app.main:app --reload --port 8000
 | Variable | Requise | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | Oui | URL de connexion Postgres, driver `asyncpg` obligatoire. Aucune valeur par défaut : le démarrage échoue explicitement si absente ou malformée. |
-| `APP_ENV` | Non (`dev`) | `dev` \| `staging` \| `prod`. Contrôle le format des logs (lisible en dev, JSON en prod). |
+| `APP_ENV` | Non (`dev`) | `dev` \| `staging` \| `prod`. Contrôle le format des logs (lisible en dev, JSON en prod) et si le provider SMS console journalise le code OTP. |
 | `LOG_LEVEL` | Non (`INFO`) | Niveau de log Python standard. |
 | `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules. Pas de wildcard. |
+| `JWT_SECRET` | Oui | Secret de signature des JWT. Aucune valeur par défaut : le démarrage échoue si absent ou trop court (< 32 caractères). |
+| `JWT_ACCESS_TTL_SECONDS` | Non (`900`) | Durée de vie de l'access token (secondes). |
+| `JWT_REFRESH_TTL_SECONDS` | Non (`2592000`) | Durée de vie du refresh token (secondes, 30 jours par défaut). |
+| `SMS_PROVIDER` | Non (`console`) | `console` \| `unconfigured`. Fournisseur d'envoi des codes OTP -- voir [Authentification](#authentification-téléphone--otp). |
+| `PHONE_DEFAULT_REGION` | Non (`SN`) | Région ISO 3166-1 alpha-2 utilisée pour interpréter un numéro écrit sans indicatif. |
+| `PHONE_ALLOWED_REGIONS` | Non (`SN`) | Régions dont les numéros sont acceptés, séparées par des virgules. |
+| `OTP_CODE_LENGTH` | Non (`6`) | Longueur du code OTP (chiffres). |
+| `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
+| `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
+| `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
+| `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
+| `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
+| `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
+| `RATE_LIMIT_OTP_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
+
+## Authentification (téléphone + OTP)
+
+Flux : `POST /api/v1/auth/request-otp` (toujours 204, non énumérant) →
+`POST /api/v1/auth/verify-otp` (crée le compte au premier login, renvoie
+`{ access, refresh, user }`) → requêtes authentifiées via
+`Authorization: Bearer <access>`. `POST /api/v1/auth/refresh` fait tourner
+la session (rotation, l'ancien refresh est révoqué) ; `POST /auth/logout`
+et `POST /auth/logout-all` révoquent respectivement une session ou toutes.
+Détail complet des garde-fous de sécurité : [BUILD_PLAN.md §4](../BUILD_PLAN.md#4-authentification-téléphone--otp).
+
+**Provider SMS** : `SMS_PROVIDER=console` (défaut, dev) journalise le code
+en clair dans les logs -- uniquement si `APP_ENV=dev` (vérifié deux fois :
+au choix du provider *et* dans le provider lui-même, pour ne jamais faire
+fuiter un code hors dev même mal configuré). Aucun fournisseur SMS
+commercial n'est branché à ce stade ; ce choix reste à trancher avant la
+mise en production (`SMS_PROVIDER=unconfigured` échoue explicitement en
+attendant).
+
+**Rate limiting** sur `request-otp` : fenêtre glissante **en mémoire**
+(`app/services/rate_limit.py`), par numéro et par IP. Dette technique
+documentée : cet état est local au processus, il ne survit ni à un
+redémarrage ni à plusieurs instances/workers -- à remplacer par un backend
+partagé (Redis, ou une table dédiée) si le trafic ou le nombre d'instances
+grandit.
 
 ## Porte de validation
 
