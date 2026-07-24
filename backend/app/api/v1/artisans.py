@@ -17,7 +17,9 @@ from app.db.session import get_session
 from app.repositories.artisans import ArtisanSort
 from app.schemas.artisans import ArtisanDetailOut, ArtisanListItemOut
 from app.schemas.pagination import Page
+from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
+from app.services import reviews as reviews_service
 
 router = APIRouter(prefix="/artisans", tags=["artisans"])
 
@@ -60,3 +62,20 @@ async def get_artisan(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ArtisanDetailOut:
     return await artisans_service.get_artisan_detail(session, artisan_id, settings=settings)
+
+
+@router.get("/{artisan_id}/reviews", response_model=Page[ReviewOut])
+async def list_artisan_reviews(
+    artisan_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int | None, Query(ge=1)] = None,
+) -> Page[ReviewOut]:
+    return await reviews_service.list_artisan_reviews(
+        session,
+        artisan_id,
+        page=page,
+        page_size=page_size or settings.pagination_page_size_default,
+        settings=settings,
+    )
