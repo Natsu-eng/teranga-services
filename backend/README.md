@@ -140,6 +140,25 @@ redémarrage ni à plusieurs instances/workers -- à remplacer par un backend
 partagé (Redis, ou une table dédiée) si le trafic ou le nombre d'instances
 grandit.
 
+## Lecture des artisans (recherche géo, avis, stats)
+
+`GET /api/v1/artisans` (proximité PostGIS, filtres `trade`/`min_rating`/
+`available`/`q`, tri `distance`/`rating`/`recent`, pagination), `GET
+/api/v1/artisans/{id}` (profil détaillé), `GET /api/v1/artisans/{id}/reviews`
+(avis publiés), `GET /api/v1/artisans/{id}/stats` (indicateurs de réputation
+publics ; revenus réservés au propriétaire ou à un admin authentifié), `GET
+/api/v1/trades` (référentiel des métiers). Aucune authentification requise
+sauf pour la vue enrichie de `/stats`. Détail complet (combinaison rayon
+client/zone artisan, stratégie de pagination, règle de dérivation de
+`verified_status`) : [BUILD_PLAN.md §5](../BUILD_PLAN.md#5-architecture-géo-postgis)
+et [§2.2](../BUILD_PLAN.md#22-tables).
+
+**Architecture en couches** (`app/api/v1/`, `app/services/`,
+`app/repositories/`, `app/schemas/`) instaurée sur ce lot, appliquée à
+`trades` et `artisans` -- gabarit pour le reste du projet. `app/api/v1/auth.py`
+n'a volontairement pas été réaligné dessus (flux déjà propre et testé,
+réalignement recommandé dans un lot dédié séparé si souhaité).
+
 ## Porte de validation
 
 Commande unique (ruff check, ruff format --check, mypy strict, pytest) :
