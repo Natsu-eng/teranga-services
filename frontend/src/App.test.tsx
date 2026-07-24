@@ -40,6 +40,34 @@ function renderAt(path: string) {
   );
 }
 
+/** Simulates an already-logged-in visitor: a persisted refresh token that AuthProvider silently exchanges for a fresh session on mount. */
+function stubAuthenticatedSession() {
+  authStore.setTokens({ access: '', refresh: 'persisted-refresh' });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/auth/me')) {
+        return authStore.getAccessToken() === 'fresh-access'
+          ? Promise.resolve(
+              jsonResponse(200, {
+                id: 'u1',
+                phone: '+221771234501',
+                full_name: 'Diandé Diallo',
+                role: 'client',
+                locale: 'fr',
+                phone_verified_at: '2026-01-01T00:00:00Z',
+              }),
+            )
+          : Promise.resolve(jsonResponse(401, { error: { code: 'TOKEN_INVALIDE', message: 'x' } }));
+      }
+      if (url.endsWith('/auth/refresh')) {
+        return Promise.resolve(jsonResponse(200, { access: 'fresh-access', refresh: 'fresh-refresh' }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+}
+
 describe('App', () => {
   it('renders the landing screen without crashing', () => {
     render(<App />);
@@ -104,34 +132,27 @@ describe('routing', () => {
   });
 
   it('grants access to the (protected) profile once a session is restored from a persisted refresh token', async () => {
-    authStore.setTokens({ access: '', refresh: 'persisted-refresh' });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if (url.endsWith('/auth/me')) {
-          return authStore.getAccessToken() === 'fresh-access'
-            ? Promise.resolve(
-                jsonResponse(200, {
-                  id: 'u1',
-                  phone: '+221771234501',
-                  full_name: 'Diandé Diallo',
-                  role: 'client',
-                  locale: 'fr',
-                  phone_verified_at: '2026-01-01T00:00:00Z',
-                }),
-              )
-            : Promise.resolve(jsonResponse(401, { error: { code: 'TOKEN_INVALIDE', message: 'x' } }));
-        }
-        if (url.endsWith('/auth/refresh')) {
-          return Promise.resolve(jsonResponse(200, { access: 'fresh-access', refresh: 'fresh-refresh' }));
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }),
-    );
+    stubAuthenticatedSession();
 
     renderAt('/profil');
 
     await waitFor(() => expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument());
+  });
+
+  it('shows the honest "coming soon" state (not the old mock dashboard) at /pro once authenticated', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/pro');
+
+    expect(await screen.findByText("L'espace Artisan Pro arrive bientôt")).toBeInTheDocument();
+  });
+
+  it('shows the honest "coming soon" state (not the old mock chat) at /messages/:conversationId once authenticated', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/messages/idrissa-diop');
+
+    expect(await screen.findByText('La messagerie arrive bientôt')).toBeInTheDocument();
   });
 
   it('renders a 404 with a link back to /accueil for an unknown route', () => {

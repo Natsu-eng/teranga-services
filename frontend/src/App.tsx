@@ -11,11 +11,10 @@ import { OtpScreen } from './features/auth/OtpScreen';
 import { ClientHomeScreen } from './features/artisans/ClientHomeScreen';
 import { DescribeProblemScreen } from './features/ai/DescribeProblemScreen';
 import { ArtisanProfileScreen } from './features/artisans/ArtisanProfileScreen';
-import { ChatScreen } from './features/chat/ChatScreen';
-import { ArtisanDashboardScreen } from './features/requests/ArtisanDashboardScreen';
 import { SearchScreen } from './features/artisans/SearchScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
+import { ComingSoon } from './components/ui/ComingSoon';
 
 export function AppRoutes() {
   const [location, setLocation] = useState<string>('Dakar Plateau');
@@ -41,7 +40,10 @@ export function AppRoutes() {
             path="messages/:conversationId"
             element={
               <ProtectedRoute>
-                <ChatScreen />
+                <ComingSoon
+                  title="La messagerie arrive bientôt"
+                  description="Les échanges avec les artisans depuis l'application seront bientôt disponibles."
+                />
               </ProtectedRoute>
             }
           />
@@ -49,7 +51,10 @@ export function AppRoutes() {
             path="pro"
             element={
               <ProtectedRoute>
-                <ArtisanDashboardScreen />
+                <ComingSoon
+                  title="L'espace Artisan Pro arrive bientôt"
+                  description="Le tableau de bord artisan (demandes, revenus, devis) sera bientôt disponible."
+                />
               </ProtectedRoute>
             }
           />
