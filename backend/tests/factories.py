@@ -17,6 +17,7 @@ from app.models.enums import (
     ArtisanVerifiedStatus,
     InterventionStatus,
     Locale,
+    ReviewStatus,
     Role,
     ServiceRequestStatus,
     SubscriptionTier,
@@ -26,6 +27,7 @@ from app.models.enums import (
 )
 from app.models.intervention import Intervention
 from app.models.request import ServiceRequest
+from app.models.review import Review
 from app.models.trade import Trade
 from app.models.user import User
 
@@ -158,3 +160,29 @@ async def make_intervention(
     session.add(intervention)
     await session.flush()
     return intervention
+
+
+async def make_review(
+    session: AsyncSession,
+    *,
+    intervention: Intervention,
+    author: User,
+    artisan: ArtisanProfile,
+    rating: int = 5,
+    status: ReviewStatus = ReviewStatus.PUBLIE,
+    comment: str = "Avis de test.",
+) -> Review:
+    # Le trigger DB `trg_review_requires_completed_intervention` exige que
+    # `intervention` soit déjà TERMINEE -- voir make_intervention.
+    review = Review(
+        intervention_id=intervention.id,
+        author_id=author.id,
+        artisan_id=artisan.id,
+        rating=rating,
+        comment=comment,
+        contact_verified=True,
+        status=status,
+    )
+    session.add(review)
+    await session.flush()
+    return review
