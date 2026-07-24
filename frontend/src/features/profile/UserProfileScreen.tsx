@@ -1,27 +1,29 @@
 import React, { useState } from 'react';
 import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
-import { UserRole } from '../../types';
+import { useNavigate } from 'react-router';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { useAuth } from '../auth/hooks/useAuth';
+import { toDisplayRole } from '../auth/role';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useCurrentUser } from './hooks/useCurrentUser';
 
 interface UserProfileScreenProps {
-  userRole: UserRole;
-  setUserRole: (role: UserRole) => void;
   location: string;
 }
 
-export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
-  userRole,
-  setUserRole,
-  location,
-}) => {
+export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }) => {
   const navigate = useNavigate();
+  const auth = useAuth();
+  const userRole = toDisplayRole(auth.role);
   const { data: currentUser, isLoading, error, reload } = useCurrentUser();
   const { data: proArtisan } = useArtisan(userRole === 'artisan' ? currentUser?.artisanId ?? null : null);
   const [paymentMethod, setPaymentMethod] = useState<'wave' | 'om' | 'card'>('wave');
+
+  const handleLogout = async () => {
+    await auth.logout();
+    navigate('/');
+  };
 
   return (
     <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
@@ -53,26 +55,14 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
         </div>
       ) : null}
 
-      {/* Role Switcher */}
-      <div className="bg-surface-muted p-4 rounded-2xl border border-border flex justify-between items-center">
-        <div>
-          <h4 className="font-bold text-sm text-foreground">Mode actuel</h4>
-          <p className="text-xs font-sora text-muted-foreground-soft">
-            {userRole === 'client'
-              ? 'Espace Client (Demandes de services)'
-              : `Espace Artisan Pro${proArtisan ? ` (${proArtisan.name})` : ''}`}
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            const next = userRole === 'client' ? 'artisan' : 'client';
-            setUserRole(next);
-            navigate(next === 'artisan' ? '/pro' : '/accueil');
-          }}
-          className="bg-primary text-white px-4 py-2 rounded-full font-sora text-xs font-bold hover:opacity-90 transition-all cursor-pointer"
-        >
-          Bascule vers {userRole === 'client' ? 'Pro' : 'Client'}
-        </button>
+      {/* Mode : dérivé du compte connecté (auth.role), plus un choix client — corrige le point d'audit du toggle auto-déclaré. */}
+      <div className="bg-surface-muted p-4 rounded-2xl border border-border">
+        <h4 className="font-bold text-sm text-foreground">Mode actuel</h4>
+        <p className="text-xs font-sora text-muted-foreground-soft">
+          {userRole === 'client'
+            ? 'Espace Client (Demandes de services)'
+            : `Espace Artisan Pro${proArtisan ? ` (${proArtisan.name})` : ''}`}
+        </p>
       </div>
 
       {/* Payment Options (Senegal preferred) */}
@@ -139,13 +129,13 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({
 
       {/* Account actions */}
       <div className="bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle space-y-1">
-        <Link
-          to="/"
+        <button
+          onClick={handleLogout}
           className="w-full text-left px-4 py-3 text-sm font-sora text-destructive font-semibold flex items-center gap-2 hover:bg-destructive-soft/20 rounded-xl transition-colors cursor-pointer"
         >
           <LogOut className="w-6 h-6" />
-          <span>Déconnexion / Retour à l&apos;accueil</span>
-        </Link>
+          <span>Déconnexion</span>
+        </button>
       </div>
     </main>
   );
