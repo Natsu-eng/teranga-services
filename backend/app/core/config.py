@@ -119,6 +119,16 @@ class Settings(BaseSettings):
             )
         return v
 
+    # Rate limiting sur /auth/request-otp, fenêtre glissante en mémoire
+    # (voir app/services/rate_limit.py). Dette documentée pour Railway : un
+    # limiteur en mémoire ne survit ni à un redémarrage, ni à plusieurs
+    # instances -- acceptable pour le lancement, à remplacer par un backend
+    # partagé (Redis, ou la base) si le trafic ou le nombre d'instances grandit.
+    rate_limit_otp_per_phone_max: int = 3
+    rate_limit_otp_per_phone_window_seconds: int = 600
+    rate_limit_otp_per_ip_max: int = 10
+    rate_limit_otp_per_ip_window_seconds: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:
