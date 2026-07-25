@@ -12,7 +12,7 @@
  * neutral, honest placeholders (see `mapArtisan` below) — never an invented
  * number or address.
  */
-import type { Artisan, Review, Trade } from '../../types';
+import type { AIAnalysisResult, Artisan, Review, Trade } from '../../types';
 import { apiRequest } from './http';
 import type { ApiClient, ArtisanFilters } from './types';
 
@@ -62,7 +62,40 @@ interface BackendPage<T> {
   pagination: { page: number; page_size: number; total: number; total_pages: number };
 }
 
+interface BackendSuggestedQuote {
+  labor_fcfa: number;
+  materials_fcfa: number;
+  total_fcfa: number;
+}
+
+interface BackendTriageResult {
+  trade_code: string;
+  price_min_fcfa: number;
+  price_max_fcfa: number;
+  urgency: 'normal' | 'urgent' | 'immediat';
+  suggested_quote: BackendSuggestedQuote;
+}
+
 const REVIEWS_PAGE_SIZE = 20;
+
+// The backend's closed urgency enum (app/models/enums.py) mapped to the
+// French adjectives the screen already expects (AIAnalysisResult.urgency).
+const URGENCY_LABELS: Record<BackendTriageResult['urgency'], string> = {
+  normal: 'normale',
+  urgent: 'haute',
+  immediat: 'immédiate',
+};
+
+// A plain space, not `toLocaleString('fr-FR')`'s narrow no-break space
+// (U+202F) — matches the literal thousands-separator style already used for
+// this string elsewhere in the codebase (mock.ts's fallback defaults).
+function formatFcfaThousands(n: number): string {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+
+function formatPriceRangeFcfa(minFcfa: number, maxFcfa: number): string {
+  return `${formatFcfaThousands(minFcfa)} – ${formatFcfaThousands(maxFcfa)} FCFA`;
+}
 
 function formatDistanceM(distanceM: number): string {
   if (distanceM < 1000) return `${Math.round(distanceM)} m`;
@@ -167,7 +200,10 @@ async function fetchArtisanReviews(artisanId: string): Promise<Review[]> {
   return page.items.map(mapReview);
 }
 
-export const httpApiClient: Pick<ApiClient, 'listArtisans' | 'getArtisanById' | 'listTrades'> = {
+export const httpApiClient: Pick<
+  ApiClient,
+  'listArtisans' | 'getArtisanById' | 'listTrades' | 'analyzeProblem'
+> = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
       `/artisans${buildArtisanQuery(filters)}`,
@@ -187,5 +223,40 @@ export const httpApiClient: Pick<ApiClient, 'listArtisans' | 'getArtisanById' | 
   async listTrades(): Promise<Trade[]> {
     const trades = await apiRequest<BackendTrade[]>('/trades');
     return trades.map(mapTrade);
+  },
+
+  // Migration of the old Express /api/analyze-problem (Lot 11, BUILD_PLAN.md
+  // SS3.2, SS6): the backend now validates the AI output strictly (schema,
+  // amounts, trade_code existence) and always falls back to a heuristic
+  // rather than erroring, so this call never needs its own try/catch beyond
+  // what apiRequest already provides.
+  async analyzeProblem(description: string): Promise<AIAnalysisResult> {
+    const [result, trades] = await Promise.all([
+      apiRequest<BackendTriageResult>('/ai/analyze', {
+        method: 'POST',
+        body: { description },
+      }),
+      apiRequest<BackendTrade[]>('/trades').then((list) => list.map(mapTrade)),
+    ]);
+
+    // trade_code is guaranteed to reference an active trade by the backend
+    // (app.services.ai_triage) -- falling back to the raw code here only
+    // guards against a race with a trade deactivated between the two calls.
+    const tradeLabel = trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code;
+
+    return {
+      trade: tradeLabel,
+      priceEstimate: formatPriceRangeFcfa(result.price_min_fcfa, result.price_max_fcfa),
+      recommendedCount: 3,
+      explanation:
+        "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+      urgency: URGENCY_LABELS[result.urgency],
+      suggestedDevis: {
+        title: tradeLabel,
+        labor: result.suggested_quote.labor_fcfa,
+        materials: result.suggested_quote.materials_fcfa,
+        total: result.suggested_quote.total_fcfa,
+      },
+    };
   },
 };

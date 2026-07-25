@@ -174,4 +174,100 @@ describe('httpApiClient', () => {
       expect(trades).toEqual([{ id: 't1', code: 'plomberie', labelFr: 'Plomberie' }]);
     });
   });
+
+  describe('analyzeProblem', () => {
+    const backendTriageResult = {
+      trade_code: 'plomberie',
+      price_min_fcfa: 8000,
+      price_max_fcfa: 15000,
+      urgency: 'normal' as const,
+      suggested_quote: { labor_fcfa: 8000, materials_fcfa: 4000, total_fcfa: 12000 },
+    };
+    const backendTrades = [
+      { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+      { id: 't2', code: 'electricite', label_fr: 'Électricité' },
+    ];
+
+    it('posts the description to /ai/analyze and maps the TriageResult into an AIAnalysisResult', async () => {
+      const fetchMock = vi.fn().mockImplementation((url: string) => {
+        if (url.includes('/ai/analyze')) return Promise.resolve(jsonResponse(200, backendTriageResult));
+        return Promise.resolve(jsonResponse(200, backendTrades));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await httpApiClient.analyzeProblem!("Le robinet fuit sous l'évier.");
+
+      expect(result.trade).toBe('Plomberie');
+      expect(result.priceEstimate).toBe('8 000 – 15 000 FCFA');
+      expect(result.urgency).toBe('normale');
+      expect(result.suggestedDevis).toEqual({
+        title: 'Plomberie',
+        labor: 8000,
+        materials: 4000,
+        total: 12000,
+      });
+
+      const [analyzeUrl, analyzeOptions] = fetchMock.mock.calls.find((call: unknown[]) =>
+        (call[0] as string).includes('/ai/analyze'),
+      ) as [string, RequestInit];
+      expect(analyzeUrl).toContain('/api/v1/ai/analyze');
+      expect(analyzeOptions.method).toBe('POST');
+      expect(JSON.parse(analyzeOptions.body as string)).toEqual({
+        description: "Le robinet fuit sous l'évier.",
+      });
+    });
+
+    it('maps urgent/immediat to their French display labels', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/ai/analyze')) {
+            return Promise.resolve(jsonResponse(200, { ...backendTriageResult, urgency: 'immediat' }));
+          }
+          return Promise.resolve(jsonResponse(200, backendTrades));
+        }),
+      );
+
+      const result = await httpApiClient.analyzeProblem!('Fuite urgente.');
+      expect(result.urgency).toBe('immédiate');
+    });
+
+    it('falls back to the raw trade_code when it is missing from the trades list', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/ai/analyze')) {
+            return Promise.resolve(jsonResponse(200, { ...backendTriageResult, trade_code: 'peinture' }));
+          }
+          return Promise.resolve(jsonResponse(200, backendTrades));
+        }),
+      );
+
+      const result = await httpApiClient.analyzeProblem!('...');
+      expect(result.trade).toBe('peinture');
+    });
+
+    it('propagates a backend error (e.g. rate limited) as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((url: string) => {
+          if (url.includes('/ai/analyze')) {
+            return Promise.resolve(
+              jsonResponse(429, {
+                error: { code: 'TROP_DE_DEMANDES', message: "Trop de demandes d'analyse IA, merci de réessayer plus tard." },
+              }),
+            );
+          }
+          return Promise.resolve(jsonResponse(200, backendTrades));
+        }),
+      );
+
+      const promise = httpApiClient.analyzeProblem!('...');
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        code: 'validation',
+        message: "Trop de demandes d'analyse IA, merci de réessayer plus tard.",
+      });
+    });
+  });
 });

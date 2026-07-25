@@ -447,10 +447,26 @@ la pagination : §5.
 **Demandes & IA**
 ```
 POST /api/v1/requests             (client) { trade?, description, photo?, location, urgency }
-POST /api/v1/ai/analyze           { description }  → { trade, price_range, urgency, suggested_quote }
-                                   (migration de /api/analyze-problem, provider-agnostique)
+POST /api/v1/ai/analyze           { description }
+                                   → { trade_code, price_min_fcfa, price_max_fcfa, urgency,
+                                        suggested_quote: { labor_fcfa, materials_fcfa, total_fcfa } }
+                                   (migration de /api/analyze-problem, provider-agnostique —
+                                   Mistral par défaut, fallback heuristique, §6 Lot 11)
 GET  /api/v1/requests/me                                       → mes demandes
 ```
+
+`POST /ai/analyze` est **public, non authentifié** (l'écran `/demande` du
+front n'exige pas de connexion) mais protégé par rate limiting par IP (même
+mécanisme que `/auth/request-otp`, `TROP_DE_DEMANDES` en cas de dépassement)
+: chaque appel routé vers un fournisseur réseau coûte potentiellement de
+l'argent réel. La sortie du fournisseur IA est strictement validée
+(montants, cohérence du total, énumération d'urgence fermée) et son
+`trade_code` doit référencer un métier actif de la table `trade` — sinon,
+rejet et bascule silencieuse sur l'heuristique, jamais d'erreur 500 pour un
+incident IA. Détail complet des fournisseurs et de la logique de fallback :
+`backend/app/services/ai_triage.py` et `ai_triage_providers.py`.
+`POST /requests` (persistance de la demande) n'est pas couvert par le
+Lot 11 — voir la note de portée du Lot 11 ci-dessous (§6).
 
 **Interventions, devis, avis**
 ```
@@ -603,9 +619,17 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
 - **Lot 10 — Bascule du front.** Implémentation `http` de la couche `api` du
   Lot 4, bascule `mock → http` (un seul point), gestion loading/erreur déjà en
   place. *But : le front parle à FastAPI.*
-- **Lot 11 — Demandes + IA migrée.** `POST /requests`, upload photo réel,
-  migration de `/analyze-problem` vers `/ai/analyze` **provider-agnostique**
-  (Gemini aujourd'hui, swappable). *But : l'IA vit dans FastAPI.*
+- **Lot 11 — IA migrée.** ✅ Migration de `/analyze-problem` (Express + Gemini)
+  vers `POST /api/v1/ai/analyze` **provider-agnostique** (`Protocol
+  AiTriageProvider`, Mistral par défaut derrière `AI_TRIAGE_PROVIDER`,
+  fallback heuristique sans réseau), sortie strictement validée (schéma,
+  montants, `trade_code` vérifié contre la table `trade`), rate limiting par
+  IP. Le front (`DescribeProblemScreen`) est basculé dessus. *Portée réduite
+  par rapport à l'intention initiale de ce lot* : `POST /requests` (persistance
+  de la demande) et l'upload photo réel restent hors périmètre, reportés à un
+  lot ultérieur (candidat naturel : Lot 12, en même temps que le reste de
+  l'entonnoir) — les relier à `service_request.ai_estimate_min_fcfa`/
+  `ai_estimate_max_fcfa` (§2.2) à ce moment-là. *But : l'IA vit dans FastAPI.*
 - **Lot 12 — Interventions, devis, avis** (entonnoir + commission figée + avis
   conditionné). *But : le cœur métier et la monétisation.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
