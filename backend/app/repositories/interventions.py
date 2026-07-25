@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.models.artisan import ArtisanProfile
+from app.models.commission import CommissionRate
 from app.models.intervention import Intervention
 from app.models.request import ServiceRequest
 
@@ -36,22 +37,28 @@ def _eager_load(
     return stmt.options(
         joinedload(Intervention.service_request).joinedload(ServiceRequest.trade),
         joinedload(Intervention.artisan).joinedload(ArtisanProfile.user),
+        joinedload(Intervention.commission_rate),
     )
 
 
 async def create_intervention(
     session: AsyncSession,
     *,
-    service_request_id: uuid.UUID,
+    service_request: ServiceRequest,
     client_id: uuid.UUID,
-    artisan_id: uuid.UUID,
-    commission_rate_id: uuid.UUID,
+    artisan: ArtisanProfile,
+    commission_rate: CommissionRate,
 ) -> Intervention:
+    # `service_request=`/`artisan=`/`commission_rate=` (pas leurs `_id`) :
+    # peuple les relations en mémoire immédiatement à partir des entités déjà
+    # chargées par l'appelant (avec `trade`/`user` eager-loadés) -- la sortie
+    # API peut les lire sans requête supplémentaire ni lazy load hors
+    # contexte async.
     intervention = Intervention(
-        service_request_id=service_request_id,
+        service_request=service_request,
         client_id=client_id,
-        artisan_id=artisan_id,
-        commission_rate_id=commission_rate_id,
+        artisan=artisan,
+        commission_rate=commission_rate,
     )
     session.add(intervention)
     await session.flush()

@@ -72,7 +72,10 @@ def _validate_ai_estimate(min_fcfa: int | None, max_fcfa: int | None) -> None:
         raise EstimationIaInvalideError()
 
 
-def _to_out(request: ServiceRequest) -> ServiceRequestOut:
+def to_service_request_out(request: ServiceRequest) -> ServiceRequestOut:
+    """Assemble `ServiceRequestOut` depuis une entité déjà chargée (avec
+    `trade` eager-loadé) -- réutilisé par `app.services.interventions` pour
+    nicher la demande dans `InterventionOut`."""
     lat, lng = location_to_lat_lng(request)
     return ServiceRequestOut(
         id=request.id,
@@ -110,7 +113,7 @@ async def create_request(
         ai_estimate_min_fcfa=payload.ai_estimate_min_fcfa,
         ai_estimate_max_fcfa=payload.ai_estimate_max_fcfa,
     )
-    return _to_out(request)
+    return to_service_request_out(request)
 
 
 async def get_request_or_404(session: AsyncSession, request_id: uuid.UUID) -> ServiceRequest:
@@ -129,13 +132,13 @@ async def get_request_for_user(
     request = await get_request_or_404(session, request_id)
 
     if request.client_id == user.id:
-        return _to_out(request)
+        return to_service_request_out(request)
     if user.role is Role.ARTISAN:
         is_concerned = await interventions_repository.request_has_intervention_for_artisan_user(
             session, request_id=request_id, user_id=user.id
         )
         if is_concerned:
-            return _to_out(request)
+            return to_service_request_out(request)
     raise ServiceRequestAccesInterditError()
 
 
@@ -152,5 +155,5 @@ async def list_my_requests(
     )
     total = await requests_repository.count_by_client(session, client.id)
 
-    items = [_to_out(request) for request in requests]
+    items = [to_service_request_out(request) for request in requests]
     return Page.of(items, page=page, page_size=resolved_page_size, total=total)
