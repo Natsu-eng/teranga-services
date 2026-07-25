@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle, ClipboardList, CreditCard, LogOut } from 'lucide-react';
+import { CheckCircle, ClipboardList, CreditCard, LogOut, Wrench } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -65,17 +65,30 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }
         </p>
       </div>
 
-      {/* Client-only entry point to their service_request history (Lot 12). */}
+      {/* Client-only entry points to their service_request/intervention history (Lot 12). */}
       {userRole === 'client' && (
-        <Link
-          to="/mes-demandes"
-          className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
-        >
-          <div className="flex items-center gap-3">
-            <ClipboardList className="text-primary w-6 h-6" />
-            <span className="font-sora text-sm font-semibold text-foreground">Mes demandes</span>
-          </div>
-        </Link>
+        <div className="space-y-3">
+          <Link
+            to="/mes-demandes"
+            className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <ClipboardList className="text-primary w-6 h-6" />
+              <span className="font-sora text-sm font-semibold text-foreground">Mes demandes</span>
+            </div>
+          </Link>
+          <Link
+            to="/mes-interventions"
+            className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <Wrench className="text-primary w-6 h-6" />
+              <span className="font-sora text-sm font-semibold text-foreground">
+                Mes interventions
+              </span>
+            </div>
+          </Link>
+        </div>
       )}
 
       {/* Payment Options (Senegal preferred) */}

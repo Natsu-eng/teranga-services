@@ -5,11 +5,13 @@ import {
   ARTISAN_STATS_BY_ID,
   CURRENT_USER,
 } from '../../data/mockData';
-import type { AIAnalysisResult, ChatMessage, ServiceRequest, Trade } from '../../types';
+import type { AIAnalysisResult, ChatMessage, Intervention, Review, ServiceRequest, Trade } from '../../types';
 import {
   ApiError,
   type ApiClient,
   type ArtisanFilters,
+  type CreateQuoteInput,
+  type CreateReviewInput,
   type CreateServiceRequestInput,
   type JobRequestFilters,
 } from './types';
@@ -241,5 +243,50 @@ export const mockApiClient: ApiClient = {
   async listMyServiceRequests(): Promise<ServiceRequest[]> {
     await simulateNetworkLatency();
     return [];
+  },
+
+  async listMyInterventions(): Promise<Intervention[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async getInterventionById(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async acceptIntervention(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async declineIntervention(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async createQuote(_interventionId: string, _input: CreateQuoteInput): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async acceptQuote(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async refuseQuote(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async completeIntervention(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async createReview(_interventionId: string, _input: CreateReviewInput): Promise<Review> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
   },
 };

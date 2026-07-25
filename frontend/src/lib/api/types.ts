@@ -2,9 +2,11 @@ import type {
   Artisan,
   ArtisanStats,
   ChatMessage,
+  Intervention,
   JobRequest,
   AIAnalysisResult,
   CurrentUser,
+  Review,
   ServiceRequest,
   Trade,
 } from '../../types';
@@ -48,6 +50,16 @@ export interface CreateServiceRequestInput {
   aiEstimateMaxFcfa?: number | null;
 }
 
+export interface CreateQuoteInput {
+  laborFcfa: number;
+  materialsFcfa: number;
+}
+
+export interface CreateReviewInput {
+  rating: number;
+  comment: string;
+}
+
 /**
  * Contract for all data access, independent of implementation. `src/lib/api/index.ts`
  * is the only place that picks which implementation (mock today, HTTP later) satisfies it.
@@ -64,4 +76,13 @@ export interface ApiClient {
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   listMyServiceRequests(): Promise<ServiceRequest[]>;
+  listMyInterventions(): Promise<Intervention[]>;
+  getInterventionById(id: string): Promise<Intervention>;
+  acceptIntervention(id: string): Promise<Intervention>;
+  declineIntervention(id: string, reason?: string | null): Promise<Intervention>;
+  createQuote(interventionId: string, input: CreateQuoteInput): Promise<Intervention>;
+  acceptQuote(interventionId: string): Promise<Intervention>;
+  refuseQuote(interventionId: string): Promise<Intervention>;
+  completeIntervention(id: string): Promise<Intervention>;
+  createReview(interventionId: string, input: CreateReviewInput): Promise<Review>;
 }

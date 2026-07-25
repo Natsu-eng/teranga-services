@@ -12,9 +12,23 @@
  * neutral, honest placeholders (see `mapArtisan` below) — never an invented
  * number or address.
  */
-import type { AIAnalysisResult, Artisan, Review, ServiceRequest, Trade } from '../../types';
+import type {
+  AIAnalysisResult,
+  Artisan,
+  Intervention,
+  Quote,
+  Review,
+  ServiceRequest,
+  Trade,
+} from '../../types';
 import { apiRequest } from './http';
-import type { ApiClient, ArtisanFilters, CreateServiceRequestInput } from './types';
+import type {
+  ApiClient,
+  ArtisanFilters,
+  CreateQuoteInput,
+  CreateReviewInput,
+  CreateServiceRequestInput,
+} from './types';
 
 interface BackendTrade {
   id: string;
@@ -95,6 +109,31 @@ interface BackendServiceRequest {
   created_at: string;
 }
 
+interface BackendQuote {
+  id: string;
+  labor_fcfa: number;
+  materials_fcfa: number;
+  total_fcfa: number;
+  status: 'propose' | 'accepte' | 'refuse' | 'expire';
+  created_at: string;
+}
+
+interface BackendIntervention {
+  id: string;
+  service_request: BackendServiceRequest;
+  client_id: string;
+  artisan_id: string;
+  status: 'proposee' | 'acceptee' | 'en_cours' | 'terminee' | 'annulee' | 'litige';
+  commission_rate_bps: number;
+  agreed_amount_fcfa: number | null;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  decline_reason: string | null;
+  quote: BackendQuote | null;
+  review: BackendReview | null;
+  created_at: string;
+}
+
 const REVIEWS_PAGE_SIZE = 20;
 
 // The backend's closed urgency enum (app/models/enums.py) mapped to the
@@ -164,6 +203,35 @@ function mapServiceRequest(request: BackendServiceRequest): ServiceRequest {
     aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
     status: request.status,
     createdAt: request.created_at,
+  };
+}
+
+function mapQuote(quote: BackendQuote): Quote {
+  return {
+    id: quote.id,
+    laborFcfa: quote.labor_fcfa,
+    materialsFcfa: quote.materials_fcfa,
+    totalFcfa: quote.total_fcfa,
+    status: quote.status,
+    createdAt: quote.created_at,
+  };
+}
+
+function mapIntervention(intervention: BackendIntervention): Intervention {
+  return {
+    id: intervention.id,
+    serviceRequest: mapServiceRequest(intervention.service_request),
+    clientId: intervention.client_id,
+    artisanId: intervention.artisan_id,
+    status: intervention.status,
+    commissionRateBps: intervention.commission_rate_bps,
+    agreedAmountFcfa: intervention.agreed_amount_fcfa,
+    scheduledAt: intervention.scheduled_at,
+    completedAt: intervention.completed_at,
+    declineReason: intervention.decline_reason,
+    quote: intervention.quote ? mapQuote(intervention.quote) : null,
+    review: intervention.review ? mapReview(intervention.review) : null,
+    createdAt: intervention.created_at,
   };
 }
 
@@ -243,6 +311,15 @@ export const httpApiClient: Pick<
   | 'analyzeProblem'
   | 'createServiceRequest'
   | 'listMyServiceRequests'
+  | 'listMyInterventions'
+  | 'getInterventionById'
+  | 'acceptIntervention'
+  | 'declineIntervention'
+  | 'createQuote'
+  | 'acceptQuote'
+  | 'refuseQuote'
+  | 'completeIntervention'
+  | 'createReview'
 > = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
@@ -323,5 +400,69 @@ export const httpApiClient: Pick<
   async listMyServiceRequests(): Promise<ServiceRequest[]> {
     const page = await apiRequest<BackendPage<BackendServiceRequest>>('/requests/me');
     return page.items.map(mapServiceRequest);
+  },
+
+  async listMyInterventions(): Promise<Intervention[]> {
+    const page = await apiRequest<BackendPage<BackendIntervention>>('/interventions/me');
+    return page.items.map(mapIntervention);
+  },
+
+  async getInterventionById(id: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}`);
+    return mapIntervention(intervention);
+  },
+
+  async acceptIntervention(id: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}/accept`, {
+      method: 'POST',
+    });
+    return mapIntervention(intervention);
+  },
+
+  async declineIntervention(id: string, reason?: string | null): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}/decline`, {
+      method: 'POST',
+      body: { reason: reason ?? null },
+    });
+    return mapIntervention(intervention);
+  },
+
+  async createQuote(interventionId: string, input: CreateQuoteInput): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(
+      `/interventions/${interventionId}/quote`,
+      { method: 'POST', body: { labor_fcfa: input.laborFcfa, materials_fcfa: input.materialsFcfa } },
+    );
+    return mapIntervention(intervention);
+  },
+
+  async acceptQuote(interventionId: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(
+      `/interventions/${interventionId}/quote/accept`,
+      { method: 'POST' },
+    );
+    return mapIntervention(intervention);
+  },
+
+  async refuseQuote(interventionId: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(
+      `/interventions/${interventionId}/quote/refuse`,
+      { method: 'POST' },
+    );
+    return mapIntervention(intervention);
+  },
+
+  async completeIntervention(id: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}/complete`, {
+      method: 'POST',
+    });
+    return mapIntervention(intervention);
+  },
+
+  async createReview(interventionId: string, input: CreateReviewInput): Promise<Review> {
+    const review = await apiRequest<BackendReview>(`/interventions/${interventionId}/review`, {
+      method: 'POST',
+      body: { rating: input.rating, comment: input.comment },
+    });
+    return mapReview(review);
   },
 };
