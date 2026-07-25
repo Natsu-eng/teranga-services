@@ -19,6 +19,7 @@ from app.models.enums import (
     Locale,
     PaymentChannel,
     PaymentStatus,
+    QuoteStatus,
     ReviewStatus,
     Role,
     ServiceRequestStatus,
@@ -27,7 +28,7 @@ from app.models.enums import (
     VerificationDocType,
     VerificationStatus,
 )
-from app.models.intervention import Intervention
+from app.models.intervention import Intervention, Quote
 from app.models.payment import Payment
 from app.models.request import ServiceRequest
 from app.models.review import Review
@@ -201,6 +202,26 @@ async def make_intervention(
     session.add(intervention)
     await session.flush()
     return intervention
+
+
+async def make_quote(
+    session: AsyncSession,
+    *,
+    intervention: Intervention,
+    labor_fcfa: int = 8_000,
+    materials_fcfa: int = 4_000,
+    status: QuoteStatus = QuoteStatus.PROPOSE,
+) -> Quote:
+    quote = Quote(
+        intervention_id=intervention.id,
+        labor_fcfa=labor_fcfa,
+        materials_fcfa=materials_fcfa,
+        total_fcfa=labor_fcfa + materials_fcfa,
+        status=status,
+    )
+    session.add(quote)
+    await session.flush()
+    return quote
 
 
 async def make_payment(

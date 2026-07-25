@@ -13,13 +13,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.models.artisan import ArtisanProfile
 from app.models.enums import InterventionStatus, ReviewStatus
 from app.models.intervention import Intervention
 from app.models.review import Review
+from app.models.user import User
 from app.repositories import reviews as reviews_repository
 from app.schemas.pagination import Page
-from app.schemas.reviews import ReviewOut
+from app.schemas.reviews import ReviewCreateIn, ReviewOut
+from app.services import interventions as interventions_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
 
 
@@ -32,6 +35,24 @@ def ensure_intervention_completed(intervention: Intervention) -> None:
         raise InterventionNotCompletedError(
             "Un avis ne peut être laissé que sur une intervention terminée "
             f"(statut actuel : {intervention.status.value})."
+        )
+
+
+class AvisInterventionNonTermineeError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="AVIS_INTERVENTION_NON_TERMINEE",
+            message="Un avis ne peut être laissé que sur une intervention terminée.",
+            status_code=409,
+        )
+
+
+class AvisDejaDeposeError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="AVIS_DEJA_DEPOSE",
+            message="Un avis a déjà été déposé pour cette intervention.",
+            status_code=409,
         )
 
 
@@ -89,3 +110,44 @@ async def list_artisan_reviews(
         for review in reviews
     ]
     return Page.of(items, page=page, page_size=resolved_page_size, total=total)
+
+
+async def create_review(
+    session: AsyncSession, *, intervention_id: uuid.UUID, client_user: User, payload: ReviewCreateIn
+) -> ReviewOut:
+    """Dépose un avis (BUILD_PLAN.md §6 Lot 12b). Autorisé uniquement au
+    client propriétaire de l'intervention, uniquement si elle est `terminee`
+    (revalidé ici -- une erreur normalisée claire, jamais l'erreur DB brute
+    du trigger `review_requires_completed_intervention`, qui reste le filet
+    de sécurité final), et une seule fois par intervention. Recalcule
+    `rating_avg`/`review_count` de l'artisan à la volée.
+    """
+    intervention = await interventions_service.get_intervention_or_404(session, intervention_id)
+    interventions_service.ensure_is_client(intervention, client_user)
+
+    if intervention.review is not None:
+        raise AvisDejaDeposeError()
+
+    try:
+        ensure_intervention_completed(intervention)
+    except InterventionNotCompletedError as exc:
+        raise AvisInterventionNonTermineeError() from exc
+
+    review = await reviews_repository.create_review(
+        session,
+        intervention=intervention,
+        author_id=client_user.id,
+        artisan_id=intervention.artisan_id,
+        rating=payload.rating,
+        comment=payload.comment,
+        contact_verified=client_user.phone_verified_at is not None,
+    )
+    await recalculate_artisan_rating(session, intervention.artisan_id)
+
+    return ReviewOut(
+        id=review.id,
+        rating=review.rating,
+        comment=review.comment,
+        author_name=client_user.full_name,
+        created_at=review.created_at,
+    )

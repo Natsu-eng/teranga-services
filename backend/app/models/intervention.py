@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,6 +58,9 @@ class Intervention(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     agreed_amount_fcfa: Mapped[int | None] = mapped_column(Integer)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Motif optionnel du refus par l'artisan (BUILD_PLAN.md §6 Lot 12b) --
+    # purement informatif, jamais exploité par une contrainte.
+    decline_reason: Mapped[str | None] = mapped_column(Text)
 
     service_request: Mapped["ServiceRequest"] = relationship(back_populates="interventions")
     client: Mapped["User"] = relationship(back_populates="interventions_as_client")

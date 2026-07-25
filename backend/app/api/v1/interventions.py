@@ -16,9 +16,13 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.enums import Role
 from app.models.user import User
-from app.schemas.interventions import InterventionCreateIn, InterventionOut
+from app.schemas.interventions import InterventionCreateIn, InterventionDeclineIn, InterventionOut
 from app.schemas.pagination import Page
+from app.schemas.quotes import QuoteCreateIn
+from app.schemas.reviews import ReviewCreateIn, ReviewOut
 from app.services import interventions as interventions_service
+from app.services import quotes as quotes_service
+from app.services import reviews as reviews_service
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
@@ -63,3 +67,99 @@ async def get_intervention(
     return await interventions_service.get_intervention_for_user(
         session, intervention_id=intervention_id, user=user
     )
+
+
+@router.post("/{intervention_id}/accept", response_model=InterventionOut)
+async def accept_intervention(
+    intervention_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> InterventionOut:
+    result = await interventions_service.accept_intervention(
+        session, intervention_id=intervention_id, artisan_user=artisan
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/decline", response_model=InterventionOut)
+async def decline_intervention(
+    intervention_id: uuid.UUID,
+    payload: InterventionDeclineIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> InterventionOut:
+    result = await interventions_service.decline_intervention(
+        session, intervention_id=intervention_id, artisan_user=artisan, reason=payload.reason
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/complete", response_model=InterventionOut)
+async def complete_intervention(
+    intervention_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> InterventionOut:
+    result = await interventions_service.complete_intervention(
+        session, intervention_id=intervention_id, client_user=client
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/quote", response_model=InterventionOut)
+async def create_quote(
+    intervention_id: uuid.UUID,
+    payload: QuoteCreateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> InterventionOut:
+    result = await quotes_service.create_quote(
+        session, intervention_id=intervention_id, artisan_user=artisan, payload=payload
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/quote/accept", response_model=InterventionOut)
+async def accept_quote(
+    intervention_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> InterventionOut:
+    result = await quotes_service.accept_quote(
+        session, intervention_id=intervention_id, client_user=client
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/quote/refuse", response_model=InterventionOut)
+async def refuse_quote(
+    intervention_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> InterventionOut:
+    result = await quotes_service.refuse_quote(
+        session, intervention_id=intervention_id, client_user=client
+    )
+    await session.commit()
+    return result
+
+
+@router.post(
+    "/{intervention_id}/review", response_model=ReviewOut, status_code=status.HTTP_201_CREATED
+)
+async def create_review(
+    intervention_id: uuid.UUID,
+    payload: ReviewCreateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> ReviewOut:
+    result = await reviews_service.create_review(
+        session, intervention_id=intervention_id, client_user=client, payload=payload
+    )
+    await session.commit()
+    return result
