@@ -1,6 +1,7 @@
 """Test d'intégration de `/api/v1/requests` (BUILD_PLAN.md §3.2, §6 Lot 12)."""
 
 from collections.abc import AsyncGenerator, Generator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -163,6 +164,12 @@ async def test_list_my_requests_is_isolated_per_client_and_sorted_by_date_desc(
     older = await make_service_request(db_session, client=me, trade=trade)
     newer = await make_service_request(db_session, client=me, trade=trade)
     await make_service_request(db_session, client=someone_else, trade=trade)
+    # `now()` Postgres est figée pour toute la transaction du test : sans cet
+    # écart explicite, `older`/`newer` partageraient le même `created_at` et
+    # le tri ne serait plus déterministe (BUILD_PLAN.md §6 Lot 12, tri "par date").
+    older.created_at = datetime.now(UTC) - timedelta(minutes=5)
+    newer.created_at = datetime.now(UTC)
+    await db_session.flush()
 
     async with await _client() as http:
         response = await http.get("/api/v1/requests/me", headers=_auth_headers(me))
