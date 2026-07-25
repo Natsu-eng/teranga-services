@@ -155,19 +155,24 @@ export interface Intervention {
   createdAt: string;
 }
 
-export interface WeeklyRevenuePoint {
-  label: string; // e.g. "Semaine 1", "Cette semaine"
-  amount: number; // FCFA
-  isCurrent: boolean;
-}
-
+/**
+ * Mirrors `GET /artisans/{id}/stats` (BUILD_PLAN.md §3.2, §5 Lot 9) exactly —
+ * every field is either a real reputation indicator or `null` when the
+ * backend has nothing honest to report yet, never an invented number.
+ */
 export interface ArtisanStats {
-  monthlyRevenue: number; // FCFA
-  monthlyRevenueChangePercent: number; // vs mois dernier
-  weeklyRevenues: WeeklyRevenuePoint[];
-  acceptedRequestsCount: number;
-  averageRating: number;
-  responseRatePercent: number;
+  ratingAvg: number | null;
+  reviewCount: number;
+  interventionsCount: number;
+  // Mirrors the backend's `response_rate` verbatim (BUILD_PLAN.md §3.2) —
+  // always `null` today: no `responded_at` tracking exists yet in the
+  // backend model (Lot 9) to compute a real rate. No unit/scale is assumed
+  // here since the backend has never populated it.
+  responseRate: number | null;
+  // Only present when the caller is the artisan owner or an admin
+  // (`ArtisanStatsPrivateOut`) — `null` for the public view, never 0
+  // standing in for "not authorized to see this".
+  revenueFcfa: number | null;
 }
 
 export interface CurrentUser {

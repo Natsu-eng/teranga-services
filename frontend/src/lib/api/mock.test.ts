@@ -100,8 +100,8 @@ describe('mockApiClient', () => {
   describe('getArtisanStats', () => {
     it('resolves stats for a known artisan', async () => {
       const stats = await mockApiClient.getArtisanStats('idrissa-diop');
-      expect(stats.acceptedRequestsCount).toBeGreaterThan(0);
-      expect(stats.weeklyRevenues.length).toBeGreaterThan(0);
+      expect(stats.interventionsCount).toBeGreaterThan(0);
+      expect(stats.revenueFcfa).toBeGreaterThan(0);
     });
 
     it('rejects with a not_found ApiError for an artisan without stats', async () => {

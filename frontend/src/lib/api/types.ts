@@ -72,6 +72,7 @@ export interface ApiClient {
   sendChatMessage(conversationId: string, text: string): Promise<ChatMessage>;
   analyzeProblem(description: string): Promise<AIAnalysisResult>;
   getArtisanStats(artisanId: string): Promise<ArtisanStats>;
+  updateArtisanAvailability(isAvailable: boolean): Promise<Artisan>;
   getCurrentUser(): Promise<CurrentUser>;
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;

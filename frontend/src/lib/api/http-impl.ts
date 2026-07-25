@@ -15,6 +15,7 @@
 import type {
   AIAnalysisResult,
   Artisan,
+  ArtisanStats,
   Intervention,
   Quote,
   Review,
@@ -62,6 +63,23 @@ interface BackendArtisanListItem {
 interface BackendArtisanDetail extends BackendArtisanListItem {
   cover_url: string | null;
 }
+
+interface BackendArtisanStatsPublic {
+  rating_avg: number | null;
+  review_count: number;
+  interventions_count: number;
+  response_rate: number | null;
+}
+
+// `GET /artisans/{id}/stats` returns this wider shape instead when the
+// caller is the artisan owner or an admin (app/schemas/artisans.py
+// ArtisanStatsPrivateOut) -- `revenue_fcfa` is absent entirely from the
+// JSON body otherwise, never sent as `null` (BUILD_PLAN.md §5 Lot 9).
+interface BackendArtisanStatsPrivate extends BackendArtisanStatsPublic {
+  revenue_fcfa: number;
+}
+
+type BackendArtisanStats = BackendArtisanStatsPublic | BackendArtisanStatsPrivate;
 
 interface BackendReview {
   id: string;
@@ -277,6 +295,16 @@ function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }
   };
 }
 
+function mapArtisanStats(stats: BackendArtisanStats): ArtisanStats {
+  return {
+    ratingAvg: stats.rating_avg,
+    reviewCount: stats.review_count,
+    interventionsCount: stats.interventions_count,
+    responseRate: stats.response_rate,
+    revenueFcfa: 'revenue_fcfa' in stats ? stats.revenue_fcfa : null,
+  };
+}
+
 function mapTrade(trade: BackendTrade): Trade {
   return { id: trade.id, code: trade.code, labelFr: trade.label_fr };
 }
@@ -320,6 +348,8 @@ export const httpApiClient: Pick<
   | 'refuseQuote'
   | 'completeIntervention'
   | 'createReview'
+  | 'getArtisanStats'
+  | 'updateArtisanAvailability'
 > = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
@@ -335,6 +365,19 @@ export const httpApiClient: Pick<
     const detail = await apiRequest<BackendArtisanDetail>(`/artisans/${id}`);
     const reviews = await fetchArtisanReviews(id);
     return mapArtisan(detail, reviews);
+  },
+
+  async getArtisanStats(artisanId: string): Promise<ArtisanStats> {
+    const stats = await apiRequest<BackendArtisanStats>(`/artisans/${artisanId}/stats`);
+    return mapArtisanStats(stats);
+  },
+
+  async updateArtisanAvailability(isAvailable: boolean): Promise<Artisan> {
+    const detail = await apiRequest<BackendArtisanDetail>('/artisans/me', {
+      method: 'PATCH',
+      body: { is_available: isAvailable },
+    });
+    return mapArtisan(detail, []);
   },
 
   async listTrades(): Promise<Trade[]> {
