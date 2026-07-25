@@ -1,15 +1,70 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import App, { AppRoutes } from './App';
+import { authStore } from './lib/api/auth-store';
 
-afterEach(cleanup);
+// App-level tests are routing/layout smoke tests, not data-fetching
+// fidelity tests (that's covered by http.test.ts and http-impl.test.ts,
+// which mock at the fetch boundary). They exercise the mock backend
+// directly rather than the real one, so no network call is needed here.
+vi.mock('./lib/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./lib/api')>();
+  const { mockApiClient } = await import('./lib/api/mock');
+  return { ...actual, api: mockApiClient };
+});
+
+function jsonResponse(status: number, body: unknown): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => (body === undefined ? '' : JSON.stringify(body)),
+  } as Response;
+}
+
+beforeEach(() => {
+  authStore.clear();
+  authStore.onForcedLogout(null);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <AppRoutes />
     </MemoryRouter>,
+  );
+}
+
+/** Simulates an already-logged-in visitor: a persisted refresh token that AuthProvider silently exchanges for a fresh session on mount. */
+function stubAuthenticatedSession() {
+  authStore.setTokens({ access: '', refresh: 'persisted-refresh' });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/auth/me')) {
+        return authStore.getAccessToken() === 'fresh-access'
+          ? Promise.resolve(
+              jsonResponse(200, {
+                id: 'u1',
+                phone: '+221771234501',
+                full_name: 'Diandé Diallo',
+                role: 'client',
+                locale: 'fr',
+                phone_verified_at: '2026-01-01T00:00:00Z',
+              }),
+            )
+          : Promise.resolve(jsonResponse(401, { error: { code: 'TOKEN_INVALIDE', message: 'x' } }));
+      }
+      if (url.endsWith('/auth/refresh')) {
+        return Promise.resolve(jsonResponse(200, { access: 'fresh-access', refresh: 'fresh-refresh' }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
   );
 }
 
@@ -43,14 +98,14 @@ describe('routing', () => {
     expect(screen.queryByText('Recherche')).not.toBeInTheDocument();
   });
 
-  it('renders the artisan dashboard at /pro', () => {
+  it('redirects to /connexion when visiting the (protected) artisan dashboard at /pro without a session', async () => {
     renderAt('/pro');
-    expect(screen.getByText(/Prêt pour vos services d.aujourd.hui/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
   });
 
-  it('renders the user profile screen at /profil', () => {
+  it('redirects to /connexion when visiting the (protected) user profile at /profil without a session', async () => {
     renderAt('/profil');
-    expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
   });
 
   it('renders the artisan profile for a known id at /artisans/:artisanId', async () => {
@@ -59,9 +114,45 @@ describe('routing', () => {
     expect(await screen.findByText('Idrissa Diop')).toBeInTheDocument();
   });
 
-  it('renders the chat for a known conversation at /messages/:conversationId', async () => {
+  it('redirects to /connexion when visiting the (protected) chat at /messages/:conversationId without a session', async () => {
     renderAt('/messages/idrissa-diop');
-    expect(await screen.findByText('Idrissa Diop')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+  });
+
+  it('renders the phone screen at /connexion', () => {
+    renderAt('/connexion');
+    expect(screen.getByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('+221771234567')).toBeInTheDocument();
+  });
+
+  it('sends /connexion/code back to /connexion when reached directly (no phone in navigation state)', async () => {
+    renderAt('/connexion/code');
+    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('+221771234567')).toBeInTheDocument();
+  });
+
+  it('grants access to the (protected) profile once a session is restored from a persisted refresh token', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/profil');
+
+    await waitFor(() => expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument());
+  });
+
+  it('shows the honest "coming soon" state (not the old mock dashboard) at /pro once authenticated', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/pro');
+
+    expect(await screen.findByText("L'espace Artisan Pro arrive bientôt")).toBeInTheDocument();
+  });
+
+  it('shows the honest "coming soon" state (not the old mock chat) at /messages/:conversationId once authenticated', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/messages/idrissa-diop');
+
+    expect(await screen.findByText('La messagerie arrive bientôt')).toBeInTheDocument();
   });
 
   it('renders a 404 with a link back to /accueil for an unknown route', () => {

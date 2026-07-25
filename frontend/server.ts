@@ -1,15 +1,40 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
+// URL du backend FastAPI (Lots 6-9), jamais codée en dur dans le code du
+// front : lue depuis l'environnement, avec un défaut cohérent avec
+// `uv run uvicorn app.main:app --reload --port 8000` (backend/README.md).
+// En production, /api/v1 est servi par un reverse proxy/la plateforme —
+// ce module de proxy n'est monté qu'en dev (voir plus bas).
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  if (process.env.NODE_ENV !== 'production') {
+    // Le front n'appelle jamais l'URL absolue du backend : il parle en
+    // relatif à /api/v1, et c'est ce middleware de dev qui route vers
+    // FastAPI. /api/analyze-problem (ci-dessous) reste géré par Express.
+    app.use(
+      '/api/v1',
+      createProxyMiddleware({
+        // Express strips the '/api/v1' mount prefix from req.url before this
+        // middleware runs, so it must be included in the target to be
+        // preserved when forwarding to the backend (http-proxy-middleware
+        // does not reconstruct it automatically).
+        target: `${BACKEND_URL}/api/v1`,
+        changeOrigin: true,
+      }),
+    );
+  }
 
   app.use(express.json());
 

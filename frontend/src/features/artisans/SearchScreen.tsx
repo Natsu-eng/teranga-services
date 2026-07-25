@@ -6,14 +6,16 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { useArtisans } from './hooks/useArtisans';
+import { useTrades } from './hooks/useTrades';
 
 export const SearchScreen: React.FC = () => {
   const { data: artisans, isLoading, error, reload } = useArtisans();
+  const { data: tradesData } = useTrades();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTrade, setSelectedTrade] = useState('Tous');
   const [minRating, setMinRating] = useState<number>(0);
 
-  const trades = ['Tous', 'Plomberie', 'Électricité', 'Climatisation', 'Menuiserie'];
+  const trades = ['Tous', ...(tradesData ?? []).map((trade) => trade.labelFr)];
 
   const filtered = (artisans ?? []).filter((art) => {
     const matchesSearch =

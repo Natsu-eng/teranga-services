@@ -1,14 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { ClientHomeScreen } from './ClientHomeScreen';
 import { useArtisans } from './hooks/useArtisans';
+import { useTrades } from './hooks/useTrades';
 import { ApiError } from '../../lib/api';
 import type { Artisan } from '../../types';
 
 vi.mock('./hooks/useArtisans');
+vi.mock('./hooks/useTrades');
+
+afterEach(cleanup);
 
 const mockedUseArtisans = vi.mocked(useArtisans);
+const mockedUseTrades = vi.mocked(useTrades);
 
 const artisanFixture: Artisan = {
   id: 'test-artisan',
@@ -34,6 +39,7 @@ const artisanFixture: Artisan = {
 describe('ClientHomeScreen', () => {
   beforeEach(() => {
     mockedUseArtisans.mockReset();
+    mockedUseTrades.mockReturnValue({ data: [], isLoading: false, error: null, reload: vi.fn() });
   });
 
   it('shows a loading skeleton while artisans are being fetched', () => {

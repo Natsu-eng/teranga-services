@@ -1,25 +1,20 @@
 import React from 'react';
-import { Bell, Check, ChevronDown, MapPin, ArrowLeftRight } from 'lucide-react';
+import { Bell, Check, ChevronDown, MapPin } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
-import { UserRole } from '../../types';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { toDisplayRole } from '../../features/auth/role';
 import { useCurrentUser } from '../../features/profile/hooks/useCurrentUser';
 
 interface HeaderProps {
-  userRole: UserRole;
-  setUserRole: (role: UserRole) => void;
   location: string;
   setLocation: (loc: string) => void;
   unreadCount?: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  userRole,
-  setUserRole,
-  location,
-  setLocation,
-  unreadCount = 2,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ location, setLocation, unreadCount = 2 }) => {
   const navigate = useNavigate();
+  const auth = useAuth();
+  const userRole = toDisplayRole(auth.role);
   const { data: currentUser } = useCurrentUser();
   const [showLocationPicker, setShowLocationPicker] = React.useState(false);
 
@@ -102,22 +97,17 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right side controls */}
       <div className="flex items-center gap-2">
-        {/* Role Switcher Pill */}
-        <button
-          onClick={() => {
-            const nextRole = userRole === 'client' ? 'artisan' : 'client';
-            setUserRole(nextRole);
-            navigate(nextRole === 'artisan' ? '/pro' : '/accueil');
-          }}
-          className="px-3 py-1.5 rounded-full bg-accent-soft/50 text-accent-foreground text-xs font-sora font-semibold flex items-center gap-1.5 border border-accent-soft hover:bg-accent-soft transition-all"
-          title="Basculer entre l'espace Client et l'espace Artisan Pro"
-        >
-          <ArrowLeftRight className="w-4 h-4" />
-          <span className="hidden sm:inline">
-            {userRole === 'client' ? 'Mode Artisan Pro' : 'Espace Client'}
-          </span>
-          <span className="sm:hidden">{userRole === 'client' ? 'Pro' : 'Client'}</span>
-        </button>
+        {/* The role is derived from the logged-in account (auth.role) — no
+            more a self-declared client/artisan toggle (audit finding). An
+            anonymous visitor is invited to log in instead. */}
+        {!auth.isAuthenticated && (
+          <Link
+            to="/connexion"
+            className="px-3 py-1.5 rounded-full bg-accent-soft/50 text-accent-foreground text-xs font-sora font-semibold border border-accent-soft hover:bg-accent-soft transition-all"
+          >
+            Se connecter
+          </Link>
+        )}
 
         {/* Notifications */}
         <button

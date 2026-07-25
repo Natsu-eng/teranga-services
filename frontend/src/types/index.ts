@@ -16,12 +16,18 @@ export interface Realisation {
   altText: string;
 }
 
+export interface Trade {
+  id: string;
+  code: string;
+  labelFr: string;
+}
+
 export interface Artisan {
   id: string;
   name: string;
   trade: string; // e.g., 'Plomberie', 'Électricité', 'Climatisation'
-  avatarUrl: string;
-  coverUrl: string;
+  avatarUrl: string | null;
+  coverUrl: string | null;
   verified: boolean;
   rating: number;
   reviewCount: number;

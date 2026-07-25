@@ -1,16 +1,15 @@
 import React from 'react';
 import { ClipboardList, Wallet, MessageCircle, User, Home, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { UserRole } from '../../types';
+import { useAuth } from '../../features/auth/hooks/useAuth';
+import { toDisplayRole } from '../../features/auth/role';
 import { useCurrentUser } from '../../features/profile/hooks/useCurrentUser';
 
-interface BottomNavProps {
-  userRole: UserRole;
-}
-
-export const BottomNav: React.FC<BottomNavProps> = ({ userRole }) => {
+export const BottomNav: React.FC = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const auth = useAuth();
+  const userRole = toDisplayRole(auth.role);
   const { data: currentUser } = useCurrentUser();
 
   const goToMessages = () => {
