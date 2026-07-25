@@ -198,3 +198,62 @@ async def sum_revenue_fcfa(session: AsyncSession, artisan_id: uuid.UUID) -> int 
         )
     )
     return (await session.execute(stmt)).scalar_one()
+
+
+async def get_artisan_profile_id_by_user_id(
+    session: AsyncSession, user_id: uuid.UUID
+) -> uuid.UUID | None:
+    """Le `artisan_profile.id` d'un `user`, ou `None` s'il n'en a pas (compte
+    client, ou artisan sans profil créé). Ferme le lien `user <-> artisan_profile`
+    jamais exposé jusqu'ici (AUDIT_PHASE2.md §6, BUILD_PLAN.md §6 Lot 12) --
+    utilisé par `GET /auth/me` et par les endpoints `/interventions` pour
+    résoudre "l'artisan courant" à partir de l'utilisateur authentifié.
+    """
+    stmt = select(ArtisanProfile.id).where(
+        ArtisanProfile.user_id == user_id, ArtisanProfile.deleted_at.is_(None)
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def artisan_exercises_trade(
+    session: AsyncSession, *, artisan_id: uuid.UUID, trade_id: uuid.UUID
+) -> bool:
+    stmt = (
+        select(ArtisanTrade.id)
+        .where(ArtisanTrade.artisan_id == artisan_id, ArtisanTrade.trade_id == trade_id)
+        .limit(1)
+    )
+    return (await session.execute(stmt)).first() is not None
+
+
+async def is_artisan_reachable_for_trade(
+    session: AsyncSession, *, artisan_id: uuid.UUID, trade_id: uuid.UUID, lat: float, lng: float
+) -> bool:
+    """La zone d'intervention de l'artisan pour ce métier (`service_area` si
+    définie, sinon `service_radius_m` autour de `base_location`) couvre-t-elle
+    (lat, lng) ? Même règle que la recherche multi-artisans (Lot 9,
+    BUILD_PLAN.md §5.1), scopée ici à un artisan et un métier déjà connus --
+    utilisée à la création d'une intervention (BUILD_PLAN.md §6 Lot 12) : un
+    artisan hors zone ne peut pas être mis en relation sur cette demande.
+    """
+    target = _to_point(lat, lng)
+    stmt = (
+        select(ArtisanTrade.id)
+        .join(ArtisanProfile, ArtisanProfile.id == ArtisanTrade.artisan_id)
+        .where(
+            ArtisanTrade.artisan_id == artisan_id,
+            ArtisanTrade.trade_id == trade_id,
+            or_(
+                and_(
+                    ArtisanTrade.service_area.is_not(None),
+                    ST_Covers(ArtisanTrade.service_area, target),
+                ),
+                and_(
+                    ArtisanTrade.service_area.is_(None),
+                    ST_DWithin(ArtisanProfile.base_location, target, ArtisanTrade.service_radius_m),
+                ),
+            ),
+        )
+        .limit(1)
+    )
+    return (await session.execute(stmt)).first() is not None
