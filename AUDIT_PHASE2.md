@@ -64,6 +64,46 @@ changé depuis) :
 
 ---
 
+## Mise à jour — `feat/artisan-dashboard` (Lot 12c)
+
+Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
+
+- **§3, point 1 (« le dashboard artisan n'existe pas »)** : corrigé plus
+  avant que prévu. `/pro` était déjà passé d'un `ComingSoon` à
+  `InterventionsScreen` nu (Lot 12b) ; il rend maintenant
+  `ArtisanDashboardScreen` — toggle de disponibilité, stats réelles,
+  demandes regroupées par statut.
+- **§3, point 2 et §6 (BottomNav artisan)** : "Demandes" et "Revenus"
+  pointaient tous deux vers `/pro`. Fusionnés en une seule entrée
+  "Tableau de bord" — `/pro` étant désormais un écran unique qui réunit
+  déjà les deux, deux liens distincts vers le même contenu n'auraient
+  rien apporté.
+- **§2/§4, `PATCH /artisans/me`** : n'existait pas ("hors périmètre Lot 9"
+  dans le plan initial). Existe maintenant, strictement limité à
+  `is_available` (rôle artisan, scopé à son propre profil résolu depuis
+  le token) — l'édition complète du profil (bio, métiers, zone) reste un
+  chantier distinct (onboarding artisan), non anticipé ici.
+- **§6, `GET /artisans/{id}/stats` jamais consommé côté front** : corrigé.
+  Le hook `useArtisanStats` était orphelin pour deux raisons cumulées, pas
+  une seule : aucun écran ne l'appelait (vrai jusqu'à ce lot), **et**
+  `httpApiClient` n'implémentait même pas `getArtisanStats` — l'appel
+  serait de toute façon retombé silencieusement sur `mockApiClient` (données
+  fictives : `monthlyRevenue`, `weeklyRevenues`...) via le mécanisme de
+  fallback méthode-par-méthode d'`index.ts`. Le type `ArtisanStats` a été
+  aligné sur le contrat réel du backend (`rating_avg`, `review_count`,
+  `interventions_count`, `response_rate`, `revenue_fcfa`) et
+  `httpApiClient.getArtisanStats` ajouté.
+- **Cohérence des stats vérifiée** : `rating_avg`/`review_count` (dénormalisés,
+  Lot 9), `interventions_count` (compte réel des `intervention.status =
+  terminee`), et `revenue_fcfa` (somme des `payment.status = reussi` liés aux
+  interventions de l'artisan) sont bien dérivés de données réelles, aucune
+  n'est en dur. Nuance à garder en tête : `revenue_fcfa` vaudra 0 pour
+  n'importe quel artisan tant que le Lot 14 (paiements) n'est pas construit,
+  puisqu'aucun endpoint ne permet encore de créer un `payment` — ce n'est
+  pas une valeur factice, juste une source de données encore vide par
+  construction. `response_rate` reste `null` (déjà le cas avant ce lot,
+  aucun champ `responded_at` n'existe dans le modèle pour le calculer).
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.
