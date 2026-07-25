@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Star } from 'lucide-react';
 import { ApiError, api } from '../../lib/api';
+import { formatFcfa } from '../../lib/format';
 import type { Intervention, InterventionStatus, UserRole } from '../../types';
 
 const STATUS_LABELS: Record<InterventionStatus, string> = {
@@ -20,12 +21,6 @@ const STATUS_STYLES: Record<InterventionStatus, string> = {
   annulee: 'bg-destructive-soft/30 text-destructive',
   litige: 'bg-destructive-soft/30 text-destructive',
 };
-
-// Même convention d'espace insécable que le formatage FCFA déjà utilisé côté
-// backend/http-impl.ts (séparateur de milliers par espace, pas de virgule).
-function formatFcfa(amount: number): string {
-  return `${Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} FCFA`;
-}
 
 interface InterventionCardProps {
   intervention: Intervention;

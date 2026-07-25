@@ -161,6 +161,87 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('getArtisanStats', () => {
+    it('maps the public stats shape (no revenue_fcfa in the response body)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            rating_avg: 4.8,
+            review_count: 12,
+            interventions_count: 9,
+            response_rate: null,
+          }),
+        ),
+      );
+
+      const stats = await httpApiClient.getArtisanStats!('a1');
+
+      expect(stats).toEqual({
+        ratingAvg: 4.8,
+        reviewCount: 12,
+        interventionsCount: 9,
+        responseRate: null,
+        revenueFcfa: null,
+      });
+    });
+
+    it('maps the private stats shape (owner/admin, revenue_fcfa present) without inventing it otherwise', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            rating_avg: 4.8,
+            review_count: 12,
+            interventions_count: 9,
+            response_rate: null,
+            revenue_fcfa: 150000,
+          }),
+        ),
+      );
+
+      const stats = await httpApiClient.getArtisanStats!('a1');
+      expect(stats.revenueFcfa).toBe(150000);
+    });
+  });
+
+  describe('updateArtisanAvailability', () => {
+    it('sends a PATCH to /artisans/me with is_available and maps the updated Artisan', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, is_available: false }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const artisan = await httpApiClient.updateArtisanAvailability!(false);
+
+      expect(artisan.available).toBe(false);
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body as string)).toEqual({ is_available: false });
+    });
+
+    it('propagates a backend error (e.g. role check) as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(403, {
+            error: {
+              code: 'ROLE_INSUFFISANT',
+              message: "Vous n'avez pas les droits nécessaires pour cette action.",
+            },
+          }),
+        ),
+      );
+
+      const promise = httpApiClient.updateArtisanAvailability!(true);
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        message: "Vous n'avez pas les droits nécessaires pour cette action.",
+      });
+    });
+  });
+
   describe('listTrades', () => {
     it('maps the backend trade reference list', async () => {
       vi.stubGlobal(

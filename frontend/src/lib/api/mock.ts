@@ -5,7 +5,15 @@ import {
   ARTISAN_STATS_BY_ID,
   CURRENT_USER,
 } from '../../data/mockData';
-import type { AIAnalysisResult, ChatMessage, Intervention, Review, ServiceRequest, Trade } from '../../types';
+import type {
+  AIAnalysisResult,
+  Artisan,
+  ChatMessage,
+  Intervention,
+  Review,
+  ServiceRequest,
+  Trade,
+} from '../../types';
 import {
   ApiError,
   type ApiClient,
@@ -288,5 +296,10 @@ export const mockApiClient: ApiClient = {
   async createReview(_interventionId: string, _input: CreateReviewInput): Promise<Review> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async updateArtisanAvailability(_isAvailable: boolean): Promise<Artisan> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
   },
 };

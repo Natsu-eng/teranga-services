@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, Wallet, MessageCircle, User, Home, Search } from 'lucide-react';
+import { LayoutDashboard, MessageCircle, User, Home, Search } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { toDisplayRole } from '../../features/auth/role';
@@ -29,16 +29,8 @@ export const BottomNav: React.FC = () => {
               : 'text-muted-foreground hover:bg-surface-muted'
           }`}
         >
-          <ClipboardList className="w-5 h-5" />
-          <span className="font-sora text-[11px] font-medium mt-0.5">Demandes</span>
-        </Link>
-
-        <Link
-          to="/pro"
-          className="flex flex-col items-center justify-center px-4 py-1.5 rounded-full text-muted-foreground hover:bg-surface-muted transition-all"
-        >
-          <Wallet className="w-5 h-5" />
-          <span className="font-sora text-[11px] font-medium mt-0.5">Revenus</span>
+          <LayoutDashboard className="w-5 h-5" />
+          <span className="font-sora text-[11px] font-medium mt-0.5">Tableau de bord</span>
         </Link>
 
         <button

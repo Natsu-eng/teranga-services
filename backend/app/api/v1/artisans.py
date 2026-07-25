@@ -12,12 +12,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user_optional
+from app.api.deps import get_current_user_optional, require_role
 from app.core.config import Settings, get_settings
 from app.db.session import get_session
+from app.models.enums import Role
 from app.models.user import User
 from app.repositories.artisans import ArtisanSort
 from app.schemas.artisans import (
+    ArtisanAvailabilityUpdateIn,
     ArtisanDetailOut,
     ArtisanListItemOut,
     ArtisanStatsPrivateOut,
@@ -60,6 +62,20 @@ async def list_artisans(
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
     )
+
+
+@router.patch("/me", response_model=ArtisanDetailOut)
+async def update_my_availability(
+    payload: ArtisanAvailabilityUpdateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanDetailOut:
+    result = await artisans_service.update_availability(
+        session, user=artisan, payload=payload, settings=settings
+    )
+    await session.commit()
+    return result
 
 
 @router.get("/{artisan_id}", response_model=ArtisanDetailOut)

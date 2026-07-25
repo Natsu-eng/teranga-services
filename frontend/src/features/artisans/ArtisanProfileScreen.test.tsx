@@ -47,7 +47,13 @@ describe('ArtisanProfileScreen', () => {
   });
 
   it('shows a loading skeleton while the artisan is being fetched', () => {
-    mockedUseArtisan.mockReturnValue({ data: null, isLoading: true, error: null, reload: vi.fn() });
+    mockedUseArtisan.mockReturnValue({
+      data: null,
+      isLoading: true,
+      error: null,
+      reload: vi.fn(),
+      setData: vi.fn(),
+    });
 
     const { container } = renderAtArtisan('test-artisan');
 
@@ -62,6 +68,7 @@ describe('ArtisanProfileScreen', () => {
       isLoading: false,
       error: new ApiError('not_found', "Cet artisan n'existe pas ou n'est plus disponible."),
       reload,
+      setData: vi.fn(),
     });
 
     renderAtArtisan('missing');
@@ -79,6 +86,7 @@ describe('ArtisanProfileScreen', () => {
       isLoading: false,
       error: null,
       reload: vi.fn(),
+      setData: vi.fn(),
     });
 
     renderAtArtisan(artisanFixture.id);

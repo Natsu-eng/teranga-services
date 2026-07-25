@@ -16,6 +16,15 @@ from app.models.enums import ArtisanVerifiedStatus, SubscriptionTier
 from app.schemas.trades import TradeOut
 
 
+class ArtisanAvailabilityUpdateIn(BaseModel):
+    """`PATCH /artisans/me` (BUILD_PLAN.md §3.2) -- volontairement limité à
+    `is_available` pour ce lot. L'édition complète du profil artisan (bio,
+    métiers, zone) est un chantier ultérieur (onboarding artisan), pas
+    anticipé ici."""
+
+    is_available: bool
+
+
 class ArtisanTradeOut(BaseModel):
     trade: TradeOut
     hourly_rate_fcfa: int

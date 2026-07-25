@@ -140,16 +140,17 @@ describe('routing', () => {
     await waitFor(() => expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument());
   });
 
-  it('renders the real interventions screen (not the old "coming soon" placeholder) at /pro once authenticated', async () => {
+  it('renders the real artisan dashboard (not the old "coming soon" placeholder) at /pro once authenticated', async () => {
     stubAuthenticatedSession();
 
     renderAt('/pro');
 
     // The stubbed session is a client account (role: 'client') -- the
-    // screen still mounts for real (GET /interventions/me via mockApiClient,
-    // which resolves to an empty list), it just renders the client-facing
-    // copy rather than the artisan one for this fixture.
-    expect(await screen.findByText('Mes interventions')).toBeInTheDocument();
+    // screen mounts for real (no more ComingSoon placeholder), but /pro is
+    // the artisan-only workspace (ArtisanDashboardScreen, BUILD_PLAN.md
+    // §3.2): a client sees an honest "not for you" message, never the
+    // artisan's own stats/toggle/requests.
+    expect(await screen.findByText('Cet espace est réservé aux artisans.')).toBeInTheDocument();
     expect(screen.queryByText("L'espace Artisan Pro arrive bientôt")).not.toBeInTheDocument();
   });
 

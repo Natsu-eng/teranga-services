@@ -20,6 +20,7 @@ from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories.artisans import ArtisanSearchFilters, ArtisanSort
 from app.schemas.artisans import (
+    ArtisanAvailabilityUpdateIn,
     ArtisanDetailOut,
     ArtisanListItemOut,
     ArtisanStatsPrivateOut,
@@ -78,6 +79,15 @@ class StatistiquesPriveesInterditesError(AppError):
             code="STATISTIQUES_PRIVEES_INTERDITES",
             message="Vous n'avez pas accès aux statistiques financières de cet artisan.",
             status_code=403,
+        )
+
+
+class ArtisanProfilIntrouvableError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ARTISAN_PROFIL_INTROUVABLE",
+            message="Aucun profil artisan n'est associé à ce compte.",
+            status_code=404,
         )
 
 
@@ -269,3 +279,20 @@ async def get_stats(
         revenue_fcfa = await artisans_repository.sum_revenue_fcfa(session, artisan_id)
         return ArtisanStatsPrivateOut(**public.model_dump(), revenue_fcfa=revenue_fcfa or 0)
     raise StatistiquesPriveesInterditesError()
+
+
+async def update_availability(
+    session: AsyncSession, *, user: User, payload: ArtisanAvailabilityUpdateIn, settings: Settings
+) -> ArtisanDetailOut:
+    """`PATCH /artisans/me` (BUILD_PLAN.md §3.2) : bascule `is_available` du
+    `artisan_profile` de l'utilisateur courant -- jamais celui d'un tiers,
+    l'id est résolu depuis `user.id` (JWT), jamais reçu du client. Portée
+    strictement limitée à `is_available` pour ce lot."""
+    artisan_id = await artisans_repository.get_artisan_profile_id_by_user_id(session, user.id)
+    if artisan_id is None:
+        raise ArtisanProfilIntrouvableError()
+    profile = await get_artisan_or_404(session, artisan_id)
+    profile.is_available = payload.is_available
+    await session.flush()
+    required_doc_types = list(settings.verification_required_doc_types)
+    return _to_detail(profile, required_doc_types=required_doc_types)

@@ -152,7 +152,7 @@ Extension 1:1 d'un `user` de rôle `artisan`.
 | years_experience | int | |
 | base_location | geography(Point,4326) | domicile/atelier (PostGIS) |
 | avatar_url / cover_url | text | |
-| is_available | bool | toggle dispo |
+| is_available | bool | toggle dispo — modifiable via `PATCH /artisans/me` (Lot 12c) |
 | verified_status | enum(`none`,`pending`,`verified`,`rejected`) | dérivé des `verification`, **pas** un booléen — voir encadré ci-dessous |
 | subscription_tier | enum(`free`,`verified`) | monétisation (abonnement) |
 | rating_avg | numeric(3,2) null | **dénormalisé** depuis `review` (avis `publie` uniquement) — recalculé par `recalculate_artisan_rating`, jamais saisi (Lot 9) |
@@ -439,7 +439,11 @@ GET  /api/v1/artisans/{id}/stats                               → indicateurs d
                                    sans auth) ; + revenus si authentifié en tant que propriétaire ou
                                    admin (403 STATISTIQUES_PRIVEES_INTERDITES pour un tiers authentifié)
 GET  /api/v1/trades                                            → référentiel des métiers actifs
-PATCH /api/v1/artisans/me         (artisan) { bio, availability, trades… }  -- hors périmètre Lot 9
+PATCH /api/v1/artisans/me         (artisan) { is_available }                                  ✅ Lot 12c
+                                   -- bascule sa propre disponibilité, scopée à son
+                                   artisan_profile (résolu depuis le token). Volontairement
+                                   limité à ce seul champ ; l'édition complète (bio, métiers,
+                                   zone) reste hors périmètre, reportée à l'onboarding artisan.
 ```
 Erreurs normalisées spécifiques : `POSITION_INVALIDE` (near malformé/hors
 bornes), `RAYON_RECHERCHE_INVALIDE` (radius_m ≤0 ou > plafond),
@@ -731,6 +735,31 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
     disponible") et sur la nouvelle route cliente `/mes-interventions`.
     *Portée différée* : `conversation`/`message` (messagerie) restent hors
     périmètre — aucun endpoint pour ce domaine n'existe encore.
+  - **Troisième partie ✅ (`feat/artisan-dashboard`) : vrai dashboard artisan
+    sur `/pro`.** `PATCH /api/v1/artisans/me { is_available }` (artisan
+    uniquement, scopé à son propre `artisan_profile` résolu depuis le token
+    — jamais reçu du client ; portée volontairement limitée à ce seul champ,
+    l'édition complète du profil artisan est un chantier d'onboarding
+    ultérieur). `GET /artisans/{id}/stats` : revenus dérivés des `payment`
+    réussis liés aux interventions de l'artisan (`revenue_fcfa` sera 0 pour
+    tout artisan tant que le Lot 14 — paiements — n'est pas construit,
+    aucun `payment` ne peut encore être créé par l'API ; c'est une valeur
+    réellement dérivée, pas un placeholder en dur, juste une source encore
+    vide), `interventions_count` (interventions `terminee`), `rating_avg`/
+    `review_count` (dénormalisés, Lot 9), `response_rate` (toujours `null`,
+    aucun tracking `responded_at` n'existe). Front : `ArtisanDashboardScreen`
+    remplace l'écran d'interventions nu sur `/pro` — en-tête distincte
+    (fond `bg-primary` sombre, identité "Espace Pro") avec le toggle de
+    disponibilité (optimiste, rollback si le PATCH échoue), les cartes de
+    stats (hook `useArtisanStats`, orphelin depuis le Lot 9, enfin branché
+    — `httpApiClient` n'implémentait pas `getArtisanStats`, le hook
+    retombait silencieusement sur des données mock fictives, AUDIT_PHASE2.md
+    §6), et les demandes de l'artisan regroupées par statut (nouveau
+    composant partagé `InterventionsList`, extrait d'`InterventionsScreen`
+    pour éviter la duplication, utilisé flat sur `/mes-interventions` et
+    groupé ici). `BottomNav` artisan : "Demandes"/"Revenus" (deux liens vers
+    le même `/pro`, AUDIT_PHASE2.md §6) fusionnés en une seule entrée
+    "Tableau de bord".
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
