@@ -19,6 +19,7 @@ const backendUser = {
   role: 'client',
   locale: 'fr',
   phone_verified_at: '2026-01-01T00:00:00Z',
+  artisan_profile_id: null,
 };
 
 function Probe() {

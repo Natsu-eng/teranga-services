@@ -125,8 +125,9 @@ async def verify_otp(
         user_agent=request.headers.get("user-agent"),
         ip=_client_ip(request),
     )
+    user_out = await auth_service.to_user_out(session, user)
     await session.commit()
-    return AuthResponseOut(access=access, refresh=refresh, user=UserOut.model_validate(user))
+    return AuthResponseOut(access=access, refresh=refresh, user=user_out)
 
 
 @router.post("/refresh", response_model=TokenPairOut)
@@ -175,5 +176,8 @@ async def logout_all(
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: Annotated[User, Depends(get_current_user)]) -> UserOut:
-    return UserOut.model_validate(user)
+async def me(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(get_current_user)],
+) -> UserOut:
+    return await auth_service.to_user_out(session, user)

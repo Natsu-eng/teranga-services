@@ -5,6 +5,7 @@ import type {
   JobRequest,
   AIAnalysisResult,
   CurrentUser,
+  ServiceRequest,
   Trade,
 } from '../../types';
 
@@ -37,6 +38,16 @@ export interface JobRequestFilters {
   status?: JobRequest['status'];
 }
 
+export interface CreateServiceRequestInput {
+  tradeCode: string;
+  description: string;
+  photoUrl?: string | null;
+  location: { lat: number; lng: number };
+  urgency: 'normal' | 'urgent' | 'immediat';
+  aiEstimateMinFcfa?: number | null;
+  aiEstimateMaxFcfa?: number | null;
+}
+
 /**
  * Contract for all data access, independent of implementation. `src/lib/api/index.ts`
  * is the only place that picks which implementation (mock today, HTTP later) satisfies it.
@@ -51,4 +62,6 @@ export interface ApiClient {
   getArtisanStats(artisanId: string): Promise<ArtisanStats>;
   getCurrentUser(): Promise<CurrentUser>;
   listTrades(): Promise<Trade[]>;
+  createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
+  listMyServiceRequests(): Promise<ServiceRequest[]>;
 }

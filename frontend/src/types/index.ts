@@ -82,16 +82,42 @@ export interface JobRequest {
 
 export interface AIAnalysisResult {
   trade: string;
+  // Backend trade code (e.g. "plomberie") backing `trade` (its French label) —
+  // the value a service_request/artisan search actually filters on, kept
+  // alongside the display label instead of forcing callers to reverse-map it.
+  tradeCode: string;
   priceEstimate: string;
+  // Raw FCFA bounds backing `priceEstimate`'s formatted string — needed to
+  // relay the AI's estimate to `POST /requests` (ai_estimate_min/max_fcfa).
+  priceMinFcfa: number;
+  priceMaxFcfa: number;
   recommendedCount: number;
   explanation: string;
   urgency: string;
+  // Backend urgency enum backing `urgency` (its French display label).
+  urgencyCode: 'normal' | 'urgent' | 'immediat';
   suggestedDevis: {
     title: string;
     labor: number;
     materials: number;
     total: number;
   };
+}
+
+export type ServiceRequestStatus = 'ouverte' | 'en_relation' | 'convertie' | 'annulee' | 'expiree';
+
+export interface ServiceRequest {
+  id: string;
+  tradeCode: string;
+  tradeLabel: string;
+  description: string;
+  photoUrl: string | null;
+  location: { lat: number; lng: number };
+  urgency: string;
+  aiEstimateMinFcfa: number | null;
+  aiEstimateMaxFcfa: number | null;
+  status: ServiceRequestStatus;
+  createdAt: string;
 }
 
 export interface WeeklyRevenuePoint {
@@ -114,5 +140,7 @@ export interface CurrentUser {
   name: string;
   initials: string;
   verified: boolean;
-  artisanId: string; // linked artisan profile when switching to "Pro" mode
+  // Real artisan_profile.id (from GET /auth/me), null for a client or an
+  // artisan account without a profile yet — never a placeholder.
+  artisanId: string | null;
 }

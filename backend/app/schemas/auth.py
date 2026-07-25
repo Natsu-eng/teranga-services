@@ -31,6 +31,10 @@ class UserOut(BaseModel):
     locale: Locale
     phone_verified_at: datetime | None
     created_at: datetime
+    # `None` si l'utilisateur n'a pas de profil artisan (client, ou artisan
+    # sans profil créé) -- ferme le lien user <-> artisan_profile jamais
+    # exposé jusqu'ici (AUDIT_PHASE2.md §6, BUILD_PLAN.md §6 Lot 12).
+    artisan_profile_id: uuid.UUID | None
 
 
 class TokenPairOut(BaseModel):

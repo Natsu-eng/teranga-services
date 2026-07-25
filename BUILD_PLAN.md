@@ -420,7 +420,11 @@ GET  /api/v1/auth/me              (authentifié)                → user courant
 ```
 `phone` est normalisé en E.164 (§4) avant toute recherche ou écriture ;
 `/refresh` révoque systématiquement l'ancien token (rotation) — voir §4 pour
-le comportement en cas de rejeu d'un token déjà révoqué.
+le comportement en cas de rejeu d'un token déjà révoqué. Depuis le Lot 12,
+`user` (`verify-otp`, `/me`) porte aussi `artisan_profile_id` (`null` pour un
+client ou un artisan sans profil) : ferme le lien `user <-> artisan_profile`
+qu'un placeholder front (`artisanId = user.id`) comblait jusque-là
+(AUDIT_PHASE2.md §6).
 
 **Artisans** (Lot 9 — lecture publique, sauf mention contraire)
 ```
@@ -446,13 +450,15 @@ la pagination : §5.
 
 **Demandes & IA**
 ```
-POST /api/v1/requests             (client) { trade?, description, photo?, location, urgency }
+POST /api/v1/requests             (client) { trade_code, description, photo_url?, location, urgency,
+                                   ai_estimate_min_fcfa?, ai_estimate_max_fcfa? }             ✅ Lot 12
+GET  /api/v1/requests/me                                       → mes demandes, paginé         ✅ Lot 12
+GET  /api/v1/requests/{id}        (propriétaire ou artisan concerné)                          ✅ Lot 12
 POST /api/v1/ai/analyze           { description }
                                    → { trade_code, price_min_fcfa, price_max_fcfa, urgency,
                                         suggested_quote: { labor_fcfa, materials_fcfa, total_fcfa } }
                                    (migration de /api/analyze-problem, provider-agnostique —
                                    Mistral par défaut, fallback heuristique, §6 Lot 11)
-GET  /api/v1/requests/me                                       → mes demandes
 ```
 
 `POST /ai/analyze` est **public, non authentifié** (l'écran `/demande` du
@@ -465,17 +471,32 @@ l'argent réel. La sortie du fournisseur IA est strictement validée
 rejet et bascule silencieuse sur l'heuristique, jamais d'erreur 500 pour un
 incident IA. Détail complet des fournisseurs et de la logique de fallback :
 `backend/app/services/ai_triage.py` et `ai_triage_providers.py`.
-`POST /requests` (persistance de la demande) n'est pas couvert par le
-Lot 11 — voir la note de portée du Lot 11 ci-dessous (§6).
+`POST /requests` (persistance de la demande), différé par le Lot 11, est
+maintenant couvert par la première moitié du Lot 12 (§6) : `ai_estimate_min_fcfa`/
+`ai_estimate_max_fcfa` sont acceptés en entrée mais **re-validés côté serveur**
+(`app.services.requests._validate_ai_estimate`) — jamais fait confiance
+aveuglément à ce que le client transmet.
 
 **Interventions, devis, avis**
 ```
-POST /api/v1/interventions        (issue d'une demande + artisan)  → fige commission_rate
+POST /api/v1/interventions        (client, issue d'une demande + artisan) → fige               ✅ Lot 12
+                                   commission_rate_id (résolu par app.services.commission :
+                                   le plus spécifique métier > global, en vigueur à l'instant T)
+GET  /api/v1/interventions/me     (vue adaptée au rôle client/artisan)                         ✅ Lot 12
+GET  /api/v1/interventions/{id}   (client ou artisan concernés)                                ✅ Lot 12
 POST /api/v1/interventions/{id}/quote      (artisan) { labor, materials }
 POST /api/v1/interventions/{id}/quote/accept (client)
 POST /api/v1/interventions/{id}/complete   → completed_at, ouvre l'avis
 POST /api/v1/interventions/{id}/review     (client, si terminée) { rating, comment }
 ```
+Règles vérifiées à la création d'une intervention (`app.services.interventions.create_intervention`) :
+demande `ouverte` et possédée par le client courant, artisan existant et
+`verified_status == VERIFIED`, exerçant le métier de la demande, et dont la
+zone d'intervention (réutilise la logique rayon/zone géo du Lot 9, §5.1)
+couvre la position de la demande — sinon rejet normalisé
+(`DEMANDE_AUTRUI_INTERDITE`, `DEMANDE_NON_OUVERTE`, `ARTISAN_NON_VERIFIE`,
+`ARTISAN_METIER_NON_EXERCE`, `ARTISAN_HORS_ZONE`). `quote`/`quote/accept`/
+`complete`/`review` restent hors périmètre de cette première moitié.
 
 **Paiements (Phase 2 tardive)**
 ```
@@ -632,6 +653,28 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   `ai_estimate_max_fcfa` (§2.2) à ce moment-là. *But : l'IA vit dans FastAPI.*
 - **Lot 12 — Interventions, devis, avis** (entonnoir + commission figée + avis
   conditionné). *But : le cœur métier et la monétisation.*
+  - **Première moitié ✅ (`feat/requests-interventions`) : demandes et mise en
+    relation.** `POST /api/v1/requests` (persistance, `ai_estimate_min_fcfa`/
+    `ai_estimate_max_fcfa` acceptés mais re-validés côté serveur — referme la
+    portée différée du Lot 11), `GET /requests/me`, `GET /requests/{id}`
+    (propriétaire ou artisan concerné). `POST /api/v1/interventions` : figeage
+    du `commission_rate_id` (résolu par `app.services.commission`, le plus
+    spécifique métier > global, en vigueur à l'instant `T` — jamais recalculé
+    ensuite), avec la séquence complète de garde-fous (demande `ouverte` et
+    possédée par le client, artisan vérifié, exerçant le métier, couvrant
+    géographiquement la position — réutilise la géo du Lot 9), `GET
+    /interventions/me` (vue adaptée au rôle client/artisan, base du futur
+    dashboard artisan), `GET /interventions/{id}`. `GET /auth/me` expose
+    désormais `artisan_profile_id` (ferme le lien `user <-> artisan_profile`,
+    AUDIT_PHASE2.md §6). Front : `/demande` crée réellement une
+    `service_request` avec le `trade_code` détecté par l'IA (fin du matching
+    factice sur un artisan fixe) et redirige vers `/recherche` filtrée
+    côté serveur (`trade`, `near`) ; écran `/mes-demandes` (client). *Portée
+    différée à la seconde moitié de ce lot* : `quote` (devis), `review`
+    (écriture, conditionnée à `intervention.status = terminee`),
+    `conversation`/`message` — aucun endpoint pour ces domaines n'existe
+    encore.
+  - **Seconde moitié (à faire) : devis, avis, messagerie.**
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,

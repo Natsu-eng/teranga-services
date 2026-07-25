@@ -28,10 +28,10 @@ export function useCurrentUser() {
         name: user.fullName,
         initials: initialsFrom(user.fullName),
         verified: user.phoneVerifiedAt != null,
-        // No user -> artisan_profile link exposed by the backend yet — a
-        // placeholder, harmless because the screens that would use it
-        // (chat, artisan dashboard) are masked behind "Bientôt disponible".
-        artisanId: user.id,
+        // Real artisan_profile.id from GET /auth/me (Lot 12) — null for a
+        // client, closing the placeholder this used to be (`= user.id`,
+        // AUDIT_PHASE2.md §6).
+        artisanId: user.artisanProfileId,
       }
     : null;
 

@@ -26,6 +26,8 @@ from app.core.security import (
 )
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
+from app.repositories import artisans as artisans_repository
+from app.schemas.auth import UserOut
 
 
 class RefreshInvalideError(AppError):
@@ -46,6 +48,27 @@ class RefreshReutiliseError(AppError):
             ),
             status_code=401,
         )
+
+
+async def to_user_out(session: AsyncSession, user: User) -> UserOut:
+    """Assemble `UserOut` en fermant le lien `user <-> artisan_profile`
+    (AUDIT_PHASE2.md §6) : `artisan_profile_id` est résolu depuis la base,
+    jamais lu depuis une relation ORM potentiellement non chargée. `None`
+    pour un client, ou un artisan sans profil créé.
+    """
+    artisan_profile_id = await artisans_repository.get_artisan_profile_id_by_user_id(
+        session, user.id
+    )
+    return UserOut(
+        id=user.id,
+        phone=user.phone,
+        full_name=user.full_name,
+        role=user.role,
+        locale=user.locale,
+        phone_verified_at=user.phone_verified_at,
+        created_at=user.created_at,
+        artisan_profile_id=artisan_profile_id,
+    )
 
 
 def _hash_token(token: str) -> str:
