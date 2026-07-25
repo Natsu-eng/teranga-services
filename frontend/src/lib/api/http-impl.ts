@@ -12,9 +12,9 @@
  * neutral, honest placeholders (see `mapArtisan` below) — never an invented
  * number or address.
  */
-import type { AIAnalysisResult, Artisan, Review, Trade } from '../../types';
+import type { AIAnalysisResult, Artisan, Review, ServiceRequest, Trade } from '../../types';
 import { apiRequest } from './http';
-import type { ApiClient, ArtisanFilters } from './types';
+import type { ApiClient, ArtisanFilters, CreateServiceRequestInput } from './types';
 
 interface BackendTrade {
   id: string;
@@ -76,6 +76,25 @@ interface BackendTriageResult {
   suggested_quote: BackendSuggestedQuote;
 }
 
+interface BackendLocation {
+  lat: number;
+  lng: number;
+}
+
+interface BackendServiceRequest {
+  id: string;
+  client_id: string;
+  trade: BackendTrade;
+  description: string;
+  photo_url: string | null;
+  location: BackendLocation;
+  urgency: 'normal' | 'urgent' | 'immediat';
+  ai_estimate_min_fcfa: number | null;
+  ai_estimate_max_fcfa: number | null;
+  status: 'ouverte' | 'en_relation' | 'convertie' | 'annulee' | 'expiree';
+  created_at: string;
+}
+
 const REVIEWS_PAGE_SIZE = 20;
 
 // The backend's closed urgency enum (app/models/enums.py) mapped to the
@@ -129,6 +148,22 @@ function mapReview(review: BackendReview): Review {
     rating: review.rating,
     date: formatRelativeDate(review.created_at),
     comment: review.comment,
+  };
+}
+
+function mapServiceRequest(request: BackendServiceRequest): ServiceRequest {
+  return {
+    id: request.id,
+    tradeCode: request.trade.code,
+    tradeLabel: request.trade.label_fr,
+    description: request.description,
+    photoUrl: request.photo_url,
+    location: { lat: request.location.lat, lng: request.location.lng },
+    urgency: request.urgency,
+    aiEstimateMinFcfa: request.ai_estimate_min_fcfa,
+    aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
+    status: request.status,
+    createdAt: request.created_at,
   };
 }
 
@@ -202,7 +237,12 @@ async function fetchArtisanReviews(artisanId: string): Promise<Review[]> {
 
 export const httpApiClient: Pick<
   ApiClient,
-  'listArtisans' | 'getArtisanById' | 'listTrades' | 'analyzeProblem'
+  | 'listArtisans'
+  | 'getArtisanById'
+  | 'listTrades'
+  | 'analyzeProblem'
+  | 'createServiceRequest'
+  | 'listMyServiceRequests'
 > = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
@@ -246,11 +286,15 @@ export const httpApiClient: Pick<
 
     return {
       trade: tradeLabel,
+      tradeCode: result.trade_code,
       priceEstimate: formatPriceRangeFcfa(result.price_min_fcfa, result.price_max_fcfa),
+      priceMinFcfa: result.price_min_fcfa,
+      priceMaxFcfa: result.price_max_fcfa,
       recommendedCount: 3,
       explanation:
         "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
       urgency: URGENCY_LABELS[result.urgency],
+      urgencyCode: result.urgency,
       suggestedDevis: {
         title: tradeLabel,
         labor: result.suggested_quote.labor_fcfa,
@@ -258,5 +302,26 @@ export const httpApiClient: Pick<
         total: result.suggested_quote.total_fcfa,
       },
     };
+  },
+
+  async createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest> {
+    const request = await apiRequest<BackendServiceRequest>('/requests', {
+      method: 'POST',
+      body: {
+        trade_code: input.tradeCode,
+        description: input.description,
+        photo_url: input.photoUrl ?? null,
+        location: input.location,
+        urgency: input.urgency,
+        ai_estimate_min_fcfa: input.aiEstimateMinFcfa ?? null,
+        ai_estimate_max_fcfa: input.aiEstimateMaxFcfa ?? null,
+      },
+    });
+    return mapServiceRequest(request);
+  },
+
+  async listMyServiceRequests(): Promise<ServiceRequest[]> {
+    const page = await apiRequest<BackendPage<BackendServiceRequest>>('/requests/me');
+    return page.items.map(mapServiceRequest);
   },
 };

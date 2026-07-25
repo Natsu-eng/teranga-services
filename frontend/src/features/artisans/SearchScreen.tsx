@@ -1,15 +1,31 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Search, Star, ArrowRight, SearchX } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
+import type { ArtisanFilters } from '../../lib/api/types';
 import { useArtisans } from './hooks/useArtisans';
 import { useTrades } from './hooks/useTrades';
 
 export const SearchScreen: React.FC = () => {
-  const { data: artisans, isLoading, error, reload } = useArtisans();
+  const [searchParams] = useSearchParams();
+  // Entry point from /demande (Lot 12) : the AI-detected trade + the
+  // client's position, applied server-side (GET /artisans?trade=&near=),
+  // never a client-memory filter — see AUDIT_PHASE2.md §6.
+  const initialTradeCode = searchParams.get('trade');
+  const initialLat = searchParams.get('lat');
+  const initialLng = searchParams.get('lng');
+  const serverFilters = useMemo<ArtisanFilters | undefined>(() => {
+    if (!initialTradeCode && !(initialLat && initialLng)) return undefined;
+    return {
+      trade: initialTradeCode ?? undefined,
+      near: initialLat && initialLng ? { lat: Number(initialLat), lng: Number(initialLng) } : undefined,
+    };
+  }, [initialTradeCode, initialLat, initialLng]);
+
+  const { data: artisans, isLoading, error, reload } = useArtisans(serverFilters);
   const { data: tradesData } = useTrades();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTrade, setSelectedTrade] = useState('Tous');

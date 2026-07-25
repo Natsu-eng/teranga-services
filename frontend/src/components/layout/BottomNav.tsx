@@ -13,7 +13,7 @@ export const BottomNav: React.FC = () => {
   const { data: currentUser } = useCurrentUser();
 
   const goToMessages = () => {
-    if (currentUser) navigate(`/messages/${currentUser.artisanId}`);
+    if (currentUser) navigate(`/messages/${currentUser.artisanId ?? currentUser.id}`);
   };
 
   const isMessagesActive = pathname.startsWith('/messages');

@@ -32,7 +32,7 @@ export const Header: React.FC<HeaderProps> = ({ location, setLocation, unreadCou
       navigate('/pro');
       return;
     }
-    if (currentUser) navigate(`/messages/${currentUser.artisanId}`);
+    if (currentUser) navigate(`/messages/${currentUser.artisanId ?? currentUser.id}`);
   };
 
   return (

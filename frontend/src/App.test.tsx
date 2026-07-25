@@ -56,6 +56,7 @@ function stubAuthenticatedSession() {
                 role: 'client',
                 locale: 'fr',
                 phone_verified_at: '2026-01-01T00:00:00Z',
+                artisan_profile_id: null,
               }),
             )
           : Promise.resolve(jsonResponse(401, { error: { code: 'TOKEN_INVALIDE', message: 'x' } }));

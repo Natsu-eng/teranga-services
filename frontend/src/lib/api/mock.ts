@@ -5,8 +5,14 @@ import {
   ARTISAN_STATS_BY_ID,
   CURRENT_USER,
 } from '../../data/mockData';
-import type { AIAnalysisResult, ChatMessage, Trade } from '../../types';
-import { ApiError, type ApiClient, type ArtisanFilters, type JobRequestFilters } from './types';
+import type { AIAnalysisResult, ChatMessage, ServiceRequest, Trade } from '../../types';
+import {
+  ApiError,
+  type ApiClient,
+  type ArtisanFilters,
+  type CreateServiceRequestInput,
+  type JobRequestFilters,
+} from './types';
 
 // Matches the trade codes seeded server-side (backend/scripts/seed.py) —
 // this mock reference list only backs mockApiClient.listTrades, unused in
@@ -58,6 +64,16 @@ interface RawAnalysisResponse {
     total?: number;
   };
 }
+
+// This mock impl of analyzeProblem delegates to the legacy Express endpoint
+// (see comment below) — dead in production (index.ts always routes
+// analyzeProblem to httpApiClient) and its response shape never carries a
+// trade_code/urgency enum, so tradeCode/urgencyCode/priceMin/MaxFcfa fall
+// back to fixed defaults consistent with this function's other fallbacks.
+const FALLBACK_TRADE_CODE = 'plomberie';
+const FALLBACK_URGENCY_CODE: AIAnalysisResult['urgencyCode'] = 'normal';
+const FALLBACK_PRICE_MIN_FCFA = 8_000;
+const FALLBACK_PRICE_MAX_FCFA = 15_000;
 
 export const mockApiClient: ApiClient = {
   async listArtisans(filters?: ArtisanFilters) {
@@ -164,12 +180,16 @@ export const mockApiClient: ApiClient = {
     const data = (await response.json()) as RawAnalysisResponse;
     return {
       trade: data.trade ?? 'Plomberie — fuite',
+      tradeCode: FALLBACK_TRADE_CODE,
       priceEstimate: data.priceEstimate ?? '8 000 – 15 000 FCFA',
+      priceMinFcfa: FALLBACK_PRICE_MIN_FCFA,
+      priceMaxFcfa: FALLBACK_PRICE_MAX_FCFA,
       recommendedCount: data.recommendedCount ?? 3,
       explanation:
         data.explanation ??
         "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
       urgency: data.urgency ?? 'moyenne',
+      urgencyCode: FALLBACK_URGENCY_CODE,
       suggestedDevis: {
         title: data.suggestedDevis?.title ?? "Réparation de fuite d'eau",
         labor: data.suggestedDevis?.labor ?? 8000,
@@ -196,5 +216,30 @@ export const mockApiClient: ApiClient = {
   async listTrades() {
     await simulateNetworkLatency();
     return [...MOCK_TRADES];
+  },
+
+  // Dead in production (index.ts always routes these to httpApiClient) — kept
+  // only so mockApiClient remains a complete ApiClient for mock.test.ts.
+  async createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest> {
+    await simulateNetworkLatency();
+    const trade = MOCK_TRADES.find((item) => item.code === input.tradeCode);
+    return {
+      id: createMessageId('request'),
+      tradeCode: input.tradeCode,
+      tradeLabel: trade?.labelFr ?? input.tradeCode,
+      description: input.description,
+      photoUrl: input.photoUrl ?? null,
+      location: input.location,
+      urgency: input.urgency,
+      aiEstimateMinFcfa: input.aiEstimateMinFcfa ?? null,
+      aiEstimateMaxFcfa: input.aiEstimateMaxFcfa ?? null,
+      status: 'ouverte',
+      createdAt: new Date().toISOString(),
+    };
+  },
+
+  async listMyServiceRequests(): Promise<ServiceRequest[]> {
+    await simulateNetworkLatency();
+    return [];
   },
 };

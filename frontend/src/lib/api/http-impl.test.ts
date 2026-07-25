@@ -198,8 +198,12 @@ describe('httpApiClient', () => {
       const result = await httpApiClient.analyzeProblem!("Le robinet fuit sous l'évier.");
 
       expect(result.trade).toBe('Plomberie');
+      expect(result.tradeCode).toBe('plomberie');
       expect(result.priceEstimate).toBe('8 000 – 15 000 FCFA');
+      expect(result.priceMinFcfa).toBe(8000);
+      expect(result.priceMaxFcfa).toBe(15000);
       expect(result.urgency).toBe('normale');
+      expect(result.urgencyCode).toBe('normal');
       expect(result.suggestedDevis).toEqual({
         title: 'Plomberie',
         labor: 8000,
@@ -268,6 +272,119 @@ describe('httpApiClient', () => {
         code: 'validation',
         message: "Trop de demandes d'analyse IA, merci de réessayer plus tard.",
       });
+    });
+  });
+
+  describe('createServiceRequest', () => {
+    const backendServiceRequest = {
+      id: 'req-1',
+      client_id: 'u1',
+      trade: { id: 't2', code: 'electricite', label_fr: 'Électricité' },
+      description: 'Une prise ne fonctionne plus.',
+      photo_url: null,
+      location: { lat: 14.7256, lng: -17.4914 },
+      urgency: 'urgent',
+      ai_estimate_min_fcfa: 12000,
+      ai_estimate_max_fcfa: 25000,
+      status: 'ouverte',
+      created_at: '2026-01-01T00:00:00Z',
+    };
+
+    it('posts the snake_case payload and maps the created request back', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, backendServiceRequest));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await httpApiClient.createServiceRequest!({
+        tradeCode: 'electricite',
+        description: 'Une prise ne fonctionne plus.',
+        photoUrl: null,
+        location: { lat: 14.7256, lng: -17.4914 },
+        urgency: 'urgent',
+        aiEstimateMinFcfa: 12000,
+        aiEstimateMaxFcfa: 25000,
+      });
+
+      expect(result).toEqual({
+        id: 'req-1',
+        tradeCode: 'electricite',
+        tradeLabel: 'Électricité',
+        description: 'Une prise ne fonctionne plus.',
+        photoUrl: null,
+        location: { lat: 14.7256, lng: -17.4914 },
+        urgency: 'urgent',
+        aiEstimateMinFcfa: 12000,
+        aiEstimateMaxFcfa: 25000,
+        status: 'ouverte',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/requests');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        trade_code: 'electricite',
+        description: 'Une prise ne fonctionne plus.',
+        photo_url: null,
+        location: { lat: 14.7256, lng: -17.4914 },
+        urgency: 'urgent',
+        ai_estimate_min_fcfa: 12000,
+        ai_estimate_max_fcfa: 25000,
+      });
+    });
+
+    it('propagates a backend validation error (e.g. unknown trade) as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(422, {
+            error: { code: 'METIER_INCONNU', message: 'Le métier demandé est introuvable ou inactif.' },
+          }),
+        ),
+      );
+
+      const promise = httpApiClient.createServiceRequest!({
+        tradeCode: 'inexistant',
+        description: 'Test.',
+        location: { lat: 0, lng: 0 },
+        urgency: 'normal',
+      });
+
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        message: 'Le métier demandé est introuvable ou inactif.',
+      });
+    });
+  });
+
+  describe('listMyServiceRequests', () => {
+    it('unwraps the paginated envelope into a flat ServiceRequest[]', async () => {
+      const backendServiceRequest = {
+        id: 'req-1',
+        client_id: 'u1',
+        trade: { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+        description: 'Fuite sous l’évier.',
+        photo_url: null,
+        location: { lat: 14.6937, lng: -17.4441 },
+        urgency: 'normal',
+        ai_estimate_min_fcfa: null,
+        ai_estimate_max_fcfa: null,
+        status: 'ouverte',
+        created_at: '2026-01-01T00:00:00Z',
+      };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [backendServiceRequest],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const requests = await httpApiClient.listMyServiceRequests!();
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ id: 'req-1', tradeLabel: 'Plomberie', status: 'ouverte' });
     });
   });
 });

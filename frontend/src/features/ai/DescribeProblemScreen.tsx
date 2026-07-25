@@ -1,16 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { api, ApiError } from '../../lib/api';
+import { getCurrentPosition } from '../../lib/geo';
+import { useAuth } from '../auth/hooks/useAuth';
 import { useArtisans } from '../artisans/hooks/useArtisans';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 
 export const DescribeProblemScreen: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const auth = useAuth();
   const { data: artisans, isLoading: isArtisansLoading, error: artisansError } = useArtisans();
   const { data: aiResult, isLoading: isAnalyzing, error: analysisError, analyze } = useAnalyzeProblem();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [description, setDescription] = useState<string>(
     "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin.",
@@ -247,15 +254,54 @@ export const DescribeProblemScreen: React.FC = () => {
 
       {/* Fixed Bottom Action */}
       <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-md border-t border-border z-50 pb-safe">
+        {submitError && (
+          <p className="max-w-xl mx-auto mb-2 text-sm text-destructive text-center">{submitError}</p>
+        )}
         <button
-          onClick={() => {
-            if (!artisans || artisans.length === 0) return;
-            const matched = artisans.find((a) => a.id === 'idrissa-diop') || artisans[0];
-            navigate(`/artisans/${matched.id}`);
+          onClick={async () => {
+            if (!aiResult) return;
+
+            // La création d'une demande exige d'être connecté : renvoie vers
+            // la connexion et revient sur ce parcours ensuite (même
+            // mécanisme que ProtectedRoute -- OtpScreen lit `state.from`).
+            if (!auth.isAuthenticated) {
+              navigate('/connexion', { state: { from: location } });
+              return;
+            }
+
+            setSubmitError(null);
+            setIsSubmitting(true);
+            try {
+              const position = await getCurrentPosition();
+              await api.createServiceRequest({
+                tradeCode: aiResult.tradeCode,
+                description,
+                // Upload photo réel hors périmètre (BUILD_PLAN.md §6 Lot 11) --
+                // photoPreview n'est qu'un blob local, jamais envoyé.
+                photoUrl: null,
+                location: position,
+                urgency: aiResult.urgencyCode,
+                aiEstimateMinFcfa: aiResult.priceMinFcfa,
+                aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
+              });
+              // Liste réellement filtrée côté serveur sur le métier détecté
+              // par l'IA et la position -- pas un artisan choisi au hasard
+              // (AUDIT_PHASE2.md §6).
+              navigate(
+                `/recherche?trade=${encodeURIComponent(aiResult.tradeCode)}&lat=${position.lat}&lng=${position.lng}`,
+              );
+            } catch (err) {
+              setSubmitError(
+                err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+              );
+            } finally {
+              setIsSubmitting(false);
+            }
           }}
-          className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105"
+          disabled={!aiResult || isSubmitting}
+          className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <span>Voir les artisans</span>
+          <span>{isSubmitting ? 'Création de la demande...' : 'Voir les artisans'}</span>
           <ArrowRight className="w-6 h-6" />
         </button>
       </footer>

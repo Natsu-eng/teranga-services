@@ -16,6 +16,9 @@ export interface AuthUser {
   role: Role;
   locale: 'fr' | 'wo';
   phoneVerifiedAt: string | null;
+  // Real artisan_profile.id, null for a client or an artisan without a
+  // profile yet — closes the user <-> artisan_profile link (AUDIT_PHASE2.md §6).
+  artisanProfileId: string | null;
 }
 
 interface BackendUser {
@@ -25,6 +28,7 @@ interface BackendUser {
   role: Role;
   locale: 'fr' | 'wo';
   phone_verified_at: string | null;
+  artisan_profile_id: string | null;
 }
 
 interface BackendAuthResponse extends TokenPair {
@@ -39,6 +43,7 @@ function mapUser(user: BackendUser): AuthUser {
     role: user.role,
     locale: user.locale,
     phoneVerifiedAt: user.phone_verified_at,
+    artisanProfileId: user.artisan_profile_id,
   };
 }
 
