@@ -165,6 +165,39 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
+    # Fournisseur actif pour POST /api/v1/ai/analyze (BUILD_PLAN.md §3.2, §6
+    # Lot 11). "heuristique" (filet par mots-clés, sans appel réseau, sans
+    # coût, sans clé) est le défaut sûr -- même principe fail-closed que
+    # `sms_provider` (défaut "console") : un déploiement sans MISTRAL_API_KEY
+    # renseignée continue de répondre. "mistral" active l'appel réseau réel ;
+    # à la moindre anomalie (timeout, erreur API, JSON non conforme, métier
+    # inconnu), le service retombe automatiquement sur l'heuristique --
+    # jamais d'erreur 500 pour un incident IA (voir app/services/ai_triage.py).
+    ai_triage_provider: Literal["mistral", "heuristic"] = "heuristic"
+    # Jamais de valeur par défaut : une clé en dur dans le code serait un
+    # secret commité. Absente, `MistralTriageProvider` échoue proprement
+    # (fallback heuristique) sans jamais tenter l'appel réseau.
+    mistral_api_key: str | None = None
+    # Modèle économique par défaut (gamme "small") -- configurable sans
+    # toucher au code si un modèle plus ou moins coûteux devient préférable.
+    mistral_model: str = "mistral-small-latest"
+    mistral_api_base_url: str = "https://api.mistral.ai/v1"
+    # Timeout explicite sur l'appel Mistral, en secondes -- un appel IA ne
+    # doit jamais faire attendre indéfiniment une requête client ; au-delà,
+    # bascule sur l'heuristique.
+    mistral_timeout_seconds: float = 10.0
+
+    # Rate limiting sur POST /api/v1/ai/analyze, même mécanisme (fenêtre
+    # glissante en mémoire) que RATE_LIMIT_OTP_* -- voir
+    # app/services/rate_limit.py. Par IP uniquement : l'endpoint est public,
+    # non authentifié (l'écran /demande ne requiert pas de connexion), donc
+    # aucune identité utilisateur fiable à clé dessus. Chaque appel coûte
+    # potentiellement de l'argent réel (fournisseur réseau) : la limite
+    # protège le provider actif même quand le fallback heuristique (gratuit)
+    # finit par répondre.
+    rate_limit_ai_analyze_per_ip_max: int = 20
+    rate_limit_ai_analyze_per_ip_window_seconds: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:

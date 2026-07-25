@@ -42,6 +42,7 @@ class SlidingWindowRateLimiter:
 
 
 otp_rate_limiter = SlidingWindowRateLimiter()
+ai_analyze_rate_limiter = SlidingWindowRateLimiter()
 
 
 def get_otp_rate_limiter() -> SlidingWindowRateLimiter:
@@ -50,3 +51,11 @@ def get_otp_rate_limiter() -> SlidingWindowRateLimiter:
     sans se marcher dessus via le singleton partagé par tout le processus.
     """
     return otp_rate_limiter
+
+
+def get_ai_analyze_rate_limiter() -> SlidingWindowRateLimiter:
+    """Dépendance FastAPI pour `POST /api/v1/ai/analyze` -- instance distincte
+    de `otp_rate_limiter` : une même IP ne doit pas partager son compteur
+    entre deux fonctionnalités sans rapport (mêmes raisons d'indirection que
+    `get_otp_rate_limiter`, voir ci-dessus)."""
+    return ai_analyze_rate_limiter
