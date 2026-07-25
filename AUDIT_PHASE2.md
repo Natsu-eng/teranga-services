@@ -34,6 +34,34 @@ changé depuis) :
   `user <-> artisan_profile`") est traité. Restent : dashboard artisan
   (`/pro`), devis/avis en écriture, messagerie, retrait d'Express, paiements.
 
+## Mise à jour — `feat/quotes-reviews` (seconde moitié du Lot 12)
+
+- **§1, `/pro`** : n'est plus un placeholder "Bientôt disponible". Premier
+  vrai contenu de l'espace Artisan Pro (`InterventionsScreen`) : liste des
+  interventions concernant l'artisan connecté (`GET /interventions/me`),
+  actions réelles (accepter/refuser une mise en relation, poser un devis).
+  Même écran réutilisé côté client sur la nouvelle route `/mes-interventions`
+  (accepter/refuser un devis, confirmer la fin des travaux, déposer un avis).
+- **§2, endpoints backend** : `POST /interventions/{id}/accept|decline`,
+  `.../quote`, `.../quote/accept|refuse`, `.../complete`, `.../review`
+  existent maintenant et sont tous consommés par le front.
+- **§3, cohérence client/artisan** : l'espace artisan affiche désormais de
+  vraies demandes reçues avec de vraies actions (accepter/refuser/deviser) —
+  ce n'est plus une différence de seuls libellés de navigation entre les deux
+  rôles, il y a un contenu et des actions réellement distincts.
+- **§4, écarts modèle de données** : `quote` (création + transition) et
+  `review` (écriture) sont désormais exposés et fonctionnels, avec
+  recalcul réel de `rating_avg`/`review_count`. Seuls `conversation`/
+  `message` (messagerie) restent sans endpoint.
+- **§5, benchmark** : "Avis vérifiés liés à une intervention terminée" et
+  "suivi de statut d'intervention" passent de *absent* à *implémenté* — la
+  règle "intervention terminée" est vérifiée à la fois côté service (erreur
+  normalisée) et par le trigger PostgreSQL (Lot 7).
+- **§7, synthèse priorisée** : l'item 1 ("Lot 12 — Entonnoir métier minimal")
+  est maintenant complet (les deux moitiés). Restent : messagerie, retrait
+  d'Express, paiements — dans cet ordre de priorité décroissante, sauf
+  réévaluation.
+
 ---
 
 ## Résumé exécutif

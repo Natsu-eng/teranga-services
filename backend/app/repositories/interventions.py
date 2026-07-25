@@ -14,6 +14,7 @@ from app.models.artisan import ArtisanProfile
 from app.models.commission import CommissionRate
 from app.models.intervention import Intervention
 from app.models.request import ServiceRequest
+from app.models.review import Review
 
 
 async def request_has_intervention_for_artisan_user(
@@ -38,6 +39,8 @@ def _eager_load(
         joinedload(Intervention.service_request).joinedload(ServiceRequest.trade),
         joinedload(Intervention.artisan).joinedload(ArtisanProfile.user),
         joinedload(Intervention.commission_rate),
+        joinedload(Intervention.quote),
+        joinedload(Intervention.review).joinedload(Review.author),
     )
 
 
@@ -53,12 +56,18 @@ async def create_intervention(
     # peuple les relations en mémoire immédiatement à partir des entités déjà
     # chargées par l'appelant (avec `trade`/`user` eager-loadés) -- la sortie
     # API peut les lire sans requête supplémentaire ni lazy load hors
-    # contexte async.
+    # contexte async. `quote=None`/`review=None` explicites : une intervention
+    # neuve ne peut avoir ni l'un ni l'autre, mais sans cette affectation
+    # explicite ces deux attributs restent "non chargés" et un premier accès
+    # après flush (ex. `to_intervention_out`) déclencherait un lazy load hors
+    # contexte async (MissingGreenlet) au lieu de lire `None` directement.
     intervention = Intervention(
         service_request=service_request,
         client_id=client_id,
         artisan=artisan,
         commission_rate=commission_rate,
+        quote=None,
+        review=None,
     )
     session.add(intervention)
     await session.flush()

@@ -387,4 +387,181 @@ describe('httpApiClient', () => {
       expect(requests[0]).toMatchObject({ id: 'req-1', tradeLabel: 'Plomberie', status: 'ouverte' });
     });
   });
+
+  describe('interventions and quotes (Lot 12b)', () => {
+    const backendServiceRequest = {
+      id: 'req-1',
+      client_id: 'u1',
+      trade: { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+      description: 'Fuite sous l’évier.',
+      photo_url: null,
+      location: { lat: 14.6937, lng: -17.4441 },
+      urgency: 'normal',
+      ai_estimate_min_fcfa: null,
+      ai_estimate_max_fcfa: null,
+      status: 'en_relation',
+      created_at: '2026-01-01T00:00:00Z',
+    };
+
+    const backendIntervention = {
+      id: 'int-1',
+      service_request: backendServiceRequest,
+      client_id: 'u1',
+      artisan_id: 'a1',
+      status: 'acceptee',
+      commission_rate_bps: 1000,
+      agreed_amount_fcfa: null,
+      scheduled_at: null,
+      completed_at: null,
+      decline_reason: null,
+      quote: {
+        id: 'q1',
+        labor_fcfa: 15000,
+        materials_fcfa: 5000,
+        total_fcfa: 20000,
+        status: 'propose',
+        created_at: '2026-01-02T00:00:00Z',
+      },
+      review: null,
+      created_at: '2026-01-01T00:00:00Z',
+    };
+
+    it('listMyInterventions unwraps the paginated envelope and maps nested service_request/quote', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [backendIntervention],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const interventions = await httpApiClient.listMyInterventions!();
+
+      expect(interventions).toHaveLength(1);
+      expect(interventions[0]).toMatchObject({
+        id: 'int-1',
+        status: 'acceptee',
+        commissionRateBps: 1000,
+        serviceRequest: { id: 'req-1', tradeLabel: 'Plomberie' },
+        quote: { id: 'q1', totalFcfa: 20000, status: 'propose' },
+        review: null,
+      });
+    });
+
+    it('getInterventionById maps a single intervention', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse(200, backendIntervention)));
+
+      const intervention = await httpApiClient.getInterventionById!('int-1');
+
+      expect(intervention.id).toBe('int-1');
+      expect(intervention.quote?.totalFcfa).toBe(20000);
+    });
+
+    it('acceptIntervention posts to /accept and maps the response', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendIntervention, status: 'acceptee' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const intervention = await httpApiClient.acceptIntervention!('int-1');
+
+      expect(intervention.status).toBe('acceptee');
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/interventions/int-1/accept');
+      expect(options.method).toBe('POST');
+    });
+
+    it('declineIntervention posts the optional reason', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(200, { ...backendIntervention, status: 'annulee', decline_reason: 'Trop loin.' }),
+        );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const intervention = await httpApiClient.declineIntervention!('int-1', 'Trop loin.');
+
+      expect(intervention.declineReason).toBe('Trop loin.');
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/interventions/int-1/decline');
+      expect(JSON.parse(options.body as string)).toEqual({ reason: 'Trop loin.' });
+    });
+
+    it('createQuote posts labor/materials in snake_case, never a client-computed total', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, backendIntervention));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.createQuote!('int-1', { laborFcfa: 15000, materialsFcfa: 5000 });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/interventions/int-1/quote');
+      const body = JSON.parse(options.body as string);
+      expect(body).toEqual({ labor_fcfa: 15000, materials_fcfa: 5000 });
+      expect(body.total_fcfa).toBeUndefined();
+    });
+
+    it('acceptQuote posts to /quote/accept', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendIntervention, status: 'en_cours' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const intervention = await httpApiClient.acceptQuote!('int-1');
+
+      expect(intervention.status).toBe('en_cours');
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain('/interventions/int-1/quote/accept');
+    });
+
+    it('refuseQuote posts to /quote/refuse', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, backendIntervention));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.refuseQuote!('int-1');
+
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain('/interventions/int-1/quote/refuse');
+    });
+
+    it('completeIntervention posts to /complete', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendIntervention, status: 'terminee' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const intervention = await httpApiClient.completeIntervention!('int-1');
+
+      expect(intervention.status).toBe('terminee');
+      const [url] = fetchMock.mock.calls[0] as [string];
+      expect(url).toContain('/interventions/int-1/complete');
+    });
+
+    it('createReview posts rating/comment and maps the returned Review', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(201, {
+          id: 'rev-1',
+          rating: 5,
+          comment: 'Excellent travail.',
+          author_name: 'Fatou Kane',
+          created_at: '2026-01-03T00:00:00Z',
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const review = await httpApiClient.createReview!('int-1', {
+        rating: 5,
+        comment: 'Excellent travail.',
+      });
+
+      expect(review).toMatchObject({ id: 'rev-1', rating: 5, author: 'Fatou Kane' });
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/interventions/int-1/review');
+      expect(JSON.parse(options.body as string)).toEqual({
+        rating: 5,
+        comment: 'Excellent travail.',
+      });
+    });
+  });
 });

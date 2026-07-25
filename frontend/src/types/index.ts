@@ -120,6 +120,41 @@ export interface ServiceRequest {
   createdAt: string;
 }
 
+export type InterventionStatus =
+  | 'proposee'
+  | 'acceptee'
+  | 'en_cours'
+  | 'terminee'
+  | 'annulee'
+  | 'litige';
+
+export type QuoteStatus = 'propose' | 'accepte' | 'refuse' | 'expire';
+
+export interface Quote {
+  id: string;
+  laborFcfa: number;
+  materialsFcfa: number;
+  totalFcfa: number;
+  status: QuoteStatus;
+  createdAt: string;
+}
+
+export interface Intervention {
+  id: string;
+  serviceRequest: ServiceRequest;
+  clientId: string;
+  artisanId: string;
+  status: InterventionStatus;
+  commissionRateBps: number;
+  agreedAmountFcfa: number | null;
+  scheduledAt: string | null;
+  completedAt: string | null;
+  declineReason: string | null;
+  quote: Quote | null;
+  review: Review | null;
+  createdAt: string;
+}
+
 export interface WeeklyRevenuePoint {
   label: string; // e.g. "Semaine 1", "Cette semaine"
   amount: number; // FCFA

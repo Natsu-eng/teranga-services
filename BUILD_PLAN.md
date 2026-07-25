@@ -484,10 +484,18 @@ POST /api/v1/interventions        (client, issue d'une demande + artisan) → fi
                                    le plus spécifique métier > global, en vigueur à l'instant T)
 GET  /api/v1/interventions/me     (vue adaptée au rôle client/artisan)                         ✅ Lot 12
 GET  /api/v1/interventions/{id}   (client ou artisan concernés)                                ✅ Lot 12
-POST /api/v1/interventions/{id}/quote      (artisan) { labor, materials }
-POST /api/v1/interventions/{id}/quote/accept (client)
-POST /api/v1/interventions/{id}/complete   → completed_at, ouvre l'avis
-POST /api/v1/interventions/{id}/review     (client, si terminée) { rating, comment }
+POST /api/v1/interventions/{id}/accept     (artisan concerné) proposee -> acceptee             ✅ Lot 12
+POST /api/v1/interventions/{id}/decline    (artisan concerné) proposee -> annulee,             ✅ Lot 12
+                                   motif optionnel, la service_request redevient ouverte
+POST /api/v1/interventions/{id}/quote      (artisan, intervention acceptee) { labor_fcfa,      ✅ Lot 12
+                                   materials_fcfa } → total calculé serveur ; un seul devis
+                                   actif, un re-devis remplace le précédent (contrainte 1:1)
+POST /api/v1/interventions/{id}/quote/accept (client) → intervention en_cours,                 ✅ Lot 12
+                                   agreed_amount_fcfa renseigné
+POST /api/v1/interventions/{id}/quote/refuse (client) → l'artisan peut re-deviser              ✅ Lot 12
+POST /api/v1/interventions/{id}/complete   (client uniquement) en_cours -> terminee            ✅ Lot 12
+POST /api/v1/interventions/{id}/review     (client, si terminée) { rating, comment } →         ✅ Lot 12
+                                   recalcule rating_avg/review_count de l'artisan
 ```
 Règles vérifiées à la création d'une intervention (`app.services.interventions.create_intervention`) :
 demande `ouverte` et possédée par le client courant, artisan existant et
@@ -495,8 +503,34 @@ demande `ouverte` et possédée par le client courant, artisan existant et
 zone d'intervention (réutilise la logique rayon/zone géo du Lot 9, §5.1)
 couvre la position de la demande — sinon rejet normalisé
 (`DEMANDE_AUTRUI_INTERDITE`, `DEMANDE_NON_OUVERTE`, `ARTISAN_NON_VERIFIE`,
-`ARTISAN_METIER_NON_EXERCE`, `ARTISAN_HORS_ZONE`). `quote`/`quote/accept`/
-`complete`/`review` restent hors périmètre de cette première moitié.
+`ARTISAN_METIER_NON_EXERCE`, `ARTISAN_HORS_ZONE`).
+
+**Machine à états de l'intervention** (`app.services.interventions.transition_intervention`,
+seule porte d'entrée pour muter `intervention.status`, BUILD_PLAN.md §6 Lot 12b) :
+```
+proposee --(artisan accepte)--> acceptee --(devis accepté)--> en_cours --(complétion)--> terminee
+proposee --(artisan refuse)--> annulee
+```
+Toute autre transition renvoie `TRANSITION_INTERVENTION_INVALIDE` (409).
+`litige` n'a aucune transition entrante/sortante gérée à ce stade.
+
+Le devis est un objet autonome (`quote`, 1:1 avec `intervention`) jamais un
+message de chat — la messagerie (à venir) le référencera sans le contenir.
+Total toujours calculé serveur, jamais reçu du client. Un re-devis après
+refus remplace physiquement la ligne existante (`quote.intervention_id` est
+UNIQUE en base, Lot 7) plutôt que d'en empiler une seconde.
+
+**Qui déclenche la complétion : le client, seul.** Un artisan ne peut jamais
+clôturer unilatéralement une intervention dont il est juge et partie
+(éligibilité à la commission et à l'avis) ; un aller-retour "l'artisan
+signale, le client confirme" exigerait un statut intermédiaire absent du
+modèle de données actuel — le client seul est le compromis retenu pour ce
+lot, sans conflit d'intérêt.
+
+L'avis (`POST /interventions/{id}/review`) est revalidé côté service
+(`AVIS_INTERVENTION_NON_TERMINEE`, erreur normalisée claire) en plus du
+trigger PostgreSQL `review_requires_completed_intervention` (Lot 7, dernier
+rempart) — jamais l'erreur DB brute renvoyée au client.
 
 **Paiements (Phase 2 tardive)**
 ```
@@ -674,7 +708,29 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
     (écriture, conditionnée à `intervention.status = terminee`),
     `conversation`/`message` — aucun endpoint pour ces domaines n'existe
     encore.
-  - **Seconde moitié (à faire) : devis, avis, messagerie.**
+  - **Seconde moitié ✅ (`feat/quotes-reviews`) : cycle de vie complet,
+    devis, avis.** Machine à états centralisée
+    (`app.services.interventions.transition_intervention`, seule porte
+    d'entrée pour muter `intervention.status` : `proposee -> acceptee ->
+    en_cours -> terminee`, `proposee -> annulee`, toute autre transition
+    rejetée `TRANSITION_INTERVENTION_INVALIDE`). `POST
+    /interventions/{id}/accept|decline` (artisan concerné ; refuser rouvre la
+    `service_request`, migration `f35086f6d699` pour `decline_reason`).
+    `POST /interventions/{id}/quote` (artisan, intervention `acceptee`,
+    total calculé serveur, un seul devis actif — un re-devis remplace
+    l'ancien plutôt que de l'empiler, `quote.intervention_id` étant UNIQUE en
+    base). `POST /interventions/{id}/quote/accept|refuse` (client).
+    `POST /interventions/{id}/complete` (client seul — un artisan ne clôture
+    jamais unilatéralement). `POST /interventions/{id}/review` (client
+    propriétaire, `terminee` revalidée côté service en plus du trigger DB
+    Lot 7, recalcule `rating_avg`/`review_count` via
+    `app.services.reviews.recalculate_artisan_rating`, Lot 9). Front : écran
+    d'interventions partagé client/artisan (`InterventionsScreen`/
+    `InterventionCard`, piloté par rôle + statut), monté sur `/pro` (premier
+    vrai contenu de l'espace Artisan Pro, remplace le placeholder "Bientôt
+    disponible") et sur la nouvelle route cliente `/mes-interventions`.
+    *Portée différée* : `conversation`/`message` (messagerie) restent hors
+    périmètre — aucun endpoint pour ce domaine n'existe encore.
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,

@@ -8,15 +8,21 @@ valeur en points de base est l'information utile au client et à l'artisan.
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.enums import InterventionStatus
+from app.schemas.quotes import QuoteOut
 from app.schemas.requests import ServiceRequestOut
+from app.schemas.reviews import ReviewOut
 
 
 class InterventionCreateIn(BaseModel):
     service_request_id: uuid.UUID
     artisan_id: uuid.UUID
+
+
+class InterventionDeclineIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=2000)
 
 
 class InterventionOut(BaseModel):
@@ -29,4 +35,7 @@ class InterventionOut(BaseModel):
     agreed_amount_fcfa: int | None
     scheduled_at: datetime | None
     completed_at: datetime | None
+    decline_reason: str | None
+    quote: QuoteOut | None
+    review: ReviewOut | None
     created_at: datetime
