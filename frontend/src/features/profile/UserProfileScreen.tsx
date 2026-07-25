@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { CheckCircle, CreditCard, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { CheckCircle, ClipboardList, CreditCard, LogOut } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -64,6 +64,19 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }
             : `Espace Artisan Pro${proArtisan ? ` (${proArtisan.name})` : ''}`}
         </p>
       </div>
+
+      {/* Client-only entry point to their service_request history (Lot 12). */}
+      {userRole === 'client' && (
+        <Link
+          to="/mes-demandes"
+          className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
+        >
+          <div className="flex items-center gap-3">
+            <ClipboardList className="text-primary w-6 h-6" />
+            <span className="font-sora text-sm font-semibold text-foreground">Mes demandes</span>
+          </div>
+        </Link>
+      )}
 
       {/* Payment Options (Senegal preferred) */}
       <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle space-y-4">

@@ -12,6 +12,7 @@ import { ClientHomeScreen } from './features/artisans/ClientHomeScreen';
 import { DescribeProblemScreen } from './features/ai/DescribeProblemScreen';
 import { ArtisanProfileScreen } from './features/artisans/ArtisanProfileScreen';
 import { SearchScreen } from './features/artisans/SearchScreen';
+import { MyRequestsScreen } from './features/requests/MyRequestsScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { ComingSoon } from './components/ui/ComingSoon';
@@ -55,6 +56,14 @@ export function AppRoutes() {
                   title="L'espace Artisan Pro arrive bientôt"
                   description="Le tableau de bord artisan (demandes, revenus, devis) sera bientôt disponible."
                 />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="mes-demandes"
+            element={
+              <ProtectedRoute>
+                <MyRequestsScreen />
               </ProtectedRoute>
             }
           />
