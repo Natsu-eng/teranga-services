@@ -13,11 +13,9 @@ implicite de fin de requête les annulerait et viderait de son sens le
 compteur anti-bruteforce ou la révocation de famille en cas de vol détecté.
 """
 
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -25,7 +23,6 @@ from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.phone import normalize_phone
 from app.db.session import get_session
-from app.models.enums import Locale, Role
 from app.models.user import User
 from app.schemas.auth import (
     AuthResponseOut,
@@ -100,23 +97,16 @@ async def verify_otp(
         await session.commit()
         raise
 
-    now = datetime.now(UTC)
-    user = (await session.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
-    if user is None:
-        user = User(
-            phone=phone,
-            # Placeholder en attendant une complétion de profil (hors
-            # périmètre de ce lot) : le téléphone est la seule donnée
-            # garantie à la création d'un compte par OTP.
-            full_name=phone,
-            role=Role.CLIENT,
-            locale=Locale.FR,
-            phone_verified_at=now,
+    try:
+        user = await auth_service.resolve_account_for_intent(
+            session, phone, intent=payload.intent, role=payload.role
         )
-        session.add(user)
-        await session.flush()
-    elif user.phone_verified_at is None:
-        user.phone_verified_at = now
+    except AppError:
+        # Idem : un rejet ici (rôle invalide, compte déjà existant / inexistant)
+        # ne doit pas annuler les effets de bord déjà actés par l'OTP ci-dessus
+        # (code consommé, compteur d'attempts).
+        await session.commit()
+        raise
 
     access, refresh = await auth_service.issue_token_pair(
         session,

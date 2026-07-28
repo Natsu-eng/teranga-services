@@ -96,7 +96,8 @@ async def test_verify_otp_wrong_code_returns_normalized_error(
         await _request_and_capture_code(client, phone, caplog)
 
         response = await client.post(
-            "/api/v1/auth/verify-otp", json={"phone": phone, "code": "000000"}
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": "000000", "intent": "login"},
         )
 
     assert response.status_code == 400
@@ -111,7 +112,8 @@ async def test_full_nominal_cycle_creates_account_and_issues_tokens(
         code = await _request_and_capture_code(client, phone, caplog)
 
         verify_response = await client.post(
-            "/api/v1/auth/verify-otp", json={"phone": phone, "code": code}
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code, "intent": "signup", "role": "client"},
         )
         assert verify_response.status_code == 200
         body = verify_response.json()
@@ -150,11 +152,17 @@ async def test_verify_otp_reuses_existing_account_on_second_login(
     phone = unique_phone()
     async with await _client() as client:
         code_1 = await _request_and_capture_code(client, phone, caplog)
-        first = await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code_1})
+        first = await client.post(
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code_1, "intent": "signup", "role": "client"},
+        )
         user_id_first = first.json()["user"]["id"]
 
         code_2 = await _request_and_capture_code(client, phone, caplog)
-        second = await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code_2})
+        second = await client.post(
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code_2, "intent": "login"},
+        )
         user_id_second = second.json()["user"]["id"]
 
     assert user_id_first == user_id_second
@@ -167,7 +175,8 @@ async def test_logout_revokes_the_refresh_token(
     async with await _client() as client:
         code = await _request_and_capture_code(client, phone, caplog)
         verify_response = await client.post(
-            "/api/v1/auth/verify-otp", json={"phone": phone, "code": code}
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code, "intent": "signup", "role": "client"},
         )
         refresh = verify_response.json()["refresh"]
 
@@ -183,12 +192,18 @@ async def test_logout_all_revokes_every_session(caplog: pytest.LogCaptureFixture
     async with await _client() as client:
         code_1 = await _request_and_capture_code(client, phone, caplog)
         session_1 = (
-            await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code_1})
+            await client.post(
+                "/api/v1/auth/verify-otp",
+                json={"phone": phone, "code": code_1, "intent": "signup", "role": "client"},
+            )
         ).json()
 
         code_2 = await _request_and_capture_code(client, phone, caplog)
         session_2 = (
-            await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code_2})
+            await client.post(
+                "/api/v1/auth/verify-otp",
+                json={"phone": phone, "code": code_2, "intent": "login"},
+            )
         ).json()
 
         logout_all_response = await client.post(
@@ -255,7 +270,10 @@ async def test_verify_otp_persists_hashed_refresh_token(
     phone = unique_phone()
     async with await _client() as client:
         code = await _request_and_capture_code(client, phone, caplog)
-        response = await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code})
+        response = await client.post(
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code, "intent": "signup", "role": "client"},
+        )
     refresh = response.json()["refresh"]
 
     rows = (await db_session.execute(select(RefreshToken))).scalars().all()
@@ -268,6 +286,9 @@ async def test_new_account_created_via_otp_has_client_role(
     phone = unique_phone()
     async with await _client() as client:
         code = await _request_and_capture_code(client, phone, caplog)
-        response = await client.post("/api/v1/auth/verify-otp", json={"phone": phone, "code": code})
+        response = await client.post(
+            "/api/v1/auth/verify-otp",
+            json={"phone": phone, "code": code, "intent": "signup", "role": "client"},
+        )
 
     assert response.json()["user"]["role"] == Role.CLIENT.value

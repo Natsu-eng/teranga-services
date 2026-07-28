@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -15,6 +16,14 @@ class RequestOtpIn(BaseModel):
 class VerifyOtpIn(BaseModel):
     phone: str
     code: str
+    # Rend explicite l'intention (BUILD_PLAN.md §4) : `request-otp` reste
+    # aveugle (toujours 204, non énumérant) précisément parce que la
+    # décision compte/rôle n'a lieu qu'ici, après preuve de possession du
+    # numéro (code OTP vérifié). `role` n'a de sens qu'en signup ; validé
+    # explicitement contre une allow-list côté service (jamais `admin`),
+    # pas seulement via ce type -- défense en profondeur, greppable et testée.
+    intent: Literal["login", "signup"]
+    role: Literal["client", "artisan"] | None = None
 
 
 class RefreshIn(BaseModel):
