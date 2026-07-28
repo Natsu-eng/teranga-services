@@ -32,6 +32,7 @@ function Probe() {
       <span data-testid="name">{auth.user?.fullName ?? ''}</span>
       <button onClick={() => void auth.requestOtp('+221771234501')}>request</button>
       <button onClick={() => void auth.login('+221771234501', '123456')}>login</button>
+      <button onClick={() => void auth.signup('+221771234501', '123456', 'artisan')}>signup</button>
       <button onClick={() => void auth.logout()}>logout</button>
     </div>
   );
@@ -92,6 +93,41 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('name').textContent).toBe('Diandé Diallo');
     expect(authStore.getAccessToken()).toBe('access-1');
     expect(authStore.getRefreshToken()).toBe('refresh-1');
+
+    const verifyCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/auth/verify-otp'));
+    expect(verifyCall?.[1]?.body).toBe(
+      JSON.stringify({ phone: '+221771234501', code: '123456', intent: 'login' }),
+    );
+  });
+
+  it('establishes a session through signup (verify-otp with intent=signup and the chosen role)', async () => {
+    const artisanUser = { ...backendUser, role: 'artisan' };
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/auth/verify-otp')) {
+        return Promise.resolve(
+          jsonResponse(200, { access: 'access-2', refresh: 'refresh-2', user: artisanUser }),
+        );
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+
+    fireEvent.click(screen.getByText('signup'));
+
+    await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('true'));
+    expect(screen.getByTestId('role').textContent).toBe('artisan');
+
+    const verifyCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/auth/verify-otp'));
+    expect(verifyCall?.[1]?.body).toBe(
+      JSON.stringify({ phone: '+221771234501', code: '123456', intent: 'signup', role: 'artisan' }),
+    );
   });
 
   it('restores the session on mount from a persisted refresh token (silent refresh via GET /auth/me)', async () => {

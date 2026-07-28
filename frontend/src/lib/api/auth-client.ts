@@ -8,6 +8,10 @@ import { apiRequest } from './http';
 import type { TokenPair } from './auth-store';
 
 export type Role = 'client' | 'artisan' | 'admin';
+// Rôles réellement choisissables à l'inscription -- `admin` n'est jamais
+// attribuable via l'app (BUILD_PLAN.md §4), aucun endpoint ne l'accepte.
+export type SignupRole = 'client' | 'artisan';
+export type AuthIntent = 'login' | 'signup';
 
 export interface AuthUser {
   id: string;
@@ -52,10 +56,15 @@ export const authClient = {
     await apiRequest<null>('/auth/request-otp', { method: 'POST', body: { phone }, skipAuth: true });
   },
 
-  async verifyOtp(phone: string, code: string): Promise<{ user: AuthUser; tokens: TokenPair }> {
+  async verifyOtp(
+    phone: string,
+    code: string,
+    intent: AuthIntent,
+    role?: SignupRole,
+  ): Promise<{ user: AuthUser; tokens: TokenPair }> {
     const response = await apiRequest<BackendAuthResponse>('/auth/verify-otp', {
       method: 'POST',
-      body: { phone, code },
+      body: { phone, code, intent, role },
       skipAuth: true,
     });
     return { user: mapUser(response.user), tokens: { access: response.access, refresh: response.refresh } };
