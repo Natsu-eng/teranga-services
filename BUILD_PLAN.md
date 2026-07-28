@@ -412,7 +412,8 @@ généré automatiquement à `/docs`).
 **Auth**
 ```
 POST /api/v1/auth/request-otp     { phone }                    → 204 (systématique, non énumérant)
-POST /api/v1/auth/verify-otp      { phone, code }              → { access, refresh, user }
+POST /api/v1/auth/verify-otp      { phone, code, intent,        → { access, refresh, user }
+                                     role? }
 POST /api/v1/auth/refresh         { refresh }                  → { access, refresh } (rotation)
 POST /api/v1/auth/logout          { refresh }                  → 204 (révoque ce token)
 POST /api/v1/auth/logout-all      (authentifié)                → 204 (révoque toutes les sessions)
@@ -424,7 +425,9 @@ le comportement en cas de rejeu d'un token déjà révoqué. Depuis le Lot 12,
 `user` (`verify-otp`, `/me`) porte aussi `artisan_profile_id` (`null` pour un
 client ou un artisan sans profil) : ferme le lien `user <-> artisan_profile`
 qu'un placeholder front (`artisanId = user.id`) comblait jusque-là
-(AUDIT_PHASE2.md §6).
+(AUDIT_PHASE2.md §6). Depuis le lot `feat/auth-signup`, `verify-otp` porte
+`intent` (`login`|`signup`) et `role` (`client`|`artisan`, requis en
+signup) : détail complet en §4.3.
 
 **Artisans** (Lot 9 — lecture publique, sauf mention contraire)
 ```
@@ -591,6 +594,68 @@ Le refresh est **persisté** (table `refresh_token`, §2.2) : à chaque
 vol (rejeu d'un token volé après que le titulaire légitime a déjà tourné) :
 **toute la famille de refresh tokens de l'utilisateur est révoquée**, forçant
 une reconnexion complète sur tous les appareils.
+
+### 4.3 Inscription vs connexion, choix du rôle (lot `feat/auth-signup`)
+
+Jusqu'ici, `verify-otp` créait **toujours** un compte `client` par défaut si
+le numéro était inconnu — aucune notion d'inscription vs connexion, aucun
+choix de rôle. Ce lot rend l'intention explicite et verrouille deux
+invariants de sécurité.
+
+**Contrat** : `verify-otp` accepte `intent: "login" | "signup"` et
+`role: "client" | "artisan"` (requis seulement en `signup`).
+`request-otp` reste **inchangé** (toujours 204, non énumérant, aucun champ
+supplémentaire).
+
+**Pourquoi `request-otp` ne change pas.** Deux options étaient envisagées :
+porter `intent` sur `request-otp`, ou dupliquer `verify-otp` en deux
+endpoints. Aucune n'est nécessaire : `request-otp` ne fait rien de différent
+selon l'intention (il génère et envoie un code, point) — le seul intérêt de
+lui faire connaître l'intention serait de rejeter tôt un "compte déjà
+existant" avant même la vérification du code, ce qui **réintroduirait une
+énumération de comptes** non protégée par une preuve de possession du
+numéro. La décision compte/rôle n'a de sens qu'au moment où l'état est
+réellement muté (créer ou retrouver le `User`) : c'est `verify-otp`, jamais
+avant. Dupliquer `verify-otp` en deux endpoints aurait par ailleurs
+dupliqué toute la logique OTP sensible (hachage, tentatives, TTL,
+consommation) pour une différence de quelques lignes de logique compte —
+plus risqué que de la brancher sur un seul endpoint.
+
+**Arbitrage énumération / clarté des messages.** `request-otp` reste
+aveugle (204 systématique, identique que le compte existe ou non).
+L'erreur qui révèle l'existence d'un compte (`COMPTE_DEJA_EXISTANT` en
+signup, `COMPTE_INEXISTANT` en login) n'apparaît **qu'après** une
+vérification de code OTP réussie, donc après une preuve de possession du
+numéro (code livré uniquement par SMS, usage unique, TTL court, tentatives
+limitées, haché PBKDF2). Un attaquant sans accès au SMS de la victime ne
+peut donc jamais obtenir cette information ; seul le titulaire légitime du
+numéro l'apprend sur son propre compte. Risque résiduel accepté : quelqu'un
+qui contrôle déjà le SMS d'une victime (SIM-swap ciblé) apprend qu'un
+compte existe — mais à ce stade il peut de toute façon prendre le compte
+via l'OTP lui-même, l'information additionnelle n'ouvre donc pas de
+nouvelle surface d'attaque.
+
+**Rôle admin : aucun chemin via l'application.** `role` n'accepte que
+`client`/`artisan` côté schéma (`Literal`), et `app.services.auth._SIGNUP_ROLES`
+revalide explicitement cette allow-list côté service (défense en
+profondeur, greppable et testée — `admin` ne devient jamais atteignable
+même si le typage du schéma venait à être élargi par erreur). Aucun
+endpoint, aucun paramètre de l'API n'attribue jamais `admin` : cette valeur
+ne s'obtient que hors application (script/SQL direct), comme déjà annoncé
+au §4.
+
+**Un compte existant ne change jamais de rôle via ce flux.** En `login`,
+le rôle de l'utilisateur retrouvé n'est jamais touché. En `signup`, un
+numéro déjà existant est purement et simplement rejeté
+(`COMPTE_DEJA_EXISTANT`, 409) — jamais de mise à jour de rôle sur un compte
+existant, même via une nouvelle tentative d'inscription.
+
+**Artisan_profile créé vide à l'inscription.** Un signup `role=artisan`
+crée aussi la ligne `artisan_profile` associée : `is_available=false`
+(explicite à la création, contrairement au défaut du modèle utilisé par le
+seed/les tests) et `verified_status=none` (défaut du modèle, aucun document
+soumis). L'onboarding (bio, métiers, zone d'intervention, documents de
+vérification) reste un chantier distinct, hors périmètre de ce lot.
 
 ---
 
@@ -760,6 +825,19 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
     groupé ici). `BottomNav` artisan : "Demandes"/"Revenus" (deux liens vers
     le même `/pro`, AUDIT_PHASE2.md §6) fusionnés en une seule entrée
     "Tableau de bord".
+- **Lot `feat/auth-signup` — Inscription vs connexion, choix du rôle.**
+  `verify-otp` porte désormais `intent`/`role` explicites (§4.3) : fin de
+  l'auto-signup implicite en `client`, `admin` verrouillé serveur (allow-list
+  explicite en plus du typage), un compte existant ne change jamais de rôle.
+  Un signup `role=artisan` crée aussi son `artisan_profile` vide
+  (`is_available=false`, `verified_status=none`). Front : nouveau point
+  d'entrée `/connexion` (choix Se connecter/Créer un compte,
+  `AuthEntryScreen`), `/connexion/role` (choix client/artisan,
+  `RoleSelectScreen`, la carte artisan reprend déjà l'identité `bg-primary`
+  de l'Espace Pro), `PhoneScreen`/`OtpScreen` déplacés/adaptés pour relayer
+  `intent`/`role`, écran de bienvenue dédié `/bienvenue-artisan` après une
+  inscription artisan. *But : un vrai parcours d'inscription, sans ouvrir
+  de chemin vers le rôle admin.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
