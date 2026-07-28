@@ -101,12 +101,12 @@ describe('routing', () => {
 
   it('redirects to /connexion when visiting the (protected) artisan dashboard at /pro without a session', async () => {
     renderAt('/pro');
-    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
   });
 
   it('redirects to /connexion when visiting the (protected) user profile at /profil without a session', async () => {
     renderAt('/profil');
-    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
   });
 
   it('renders the artisan profile for a known id at /artisans/:artisanId', async () => {
@@ -117,19 +117,30 @@ describe('routing', () => {
 
   it('redirects to /connexion when visiting the (protected) chat at /messages/:conversationId without a session', async () => {
     renderAt('/messages/idrissa-diop');
-    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
   });
 
-  it('renders the phone screen at /connexion', () => {
+  it('renders the auth entry screen (Se connecter / Créer un compte) at /connexion', () => {
     renderAt('/connexion');
-    expect(screen.getByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('+221771234567')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Se connecter' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Créer un compte' })).toBeInTheDocument();
   });
 
-  it('sends /connexion/code back to /connexion when reached directly (no phone in navigation state)', async () => {
+  it('renders the role selection screen at /connexion/role', () => {
+    renderAt('/connexion/role');
+    expect(screen.getByRole('button', { name: /Je cherche un artisan/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Je suis un artisan/ })).toBeInTheDocument();
+  });
+
+  it('sends /connexion/telephone back to /connexion when reached directly (no intent in navigation state)', async () => {
+    renderAt('/connexion/telephone');
+    expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
+  });
+
+  it('sends /connexion/code back to /connexion when reached directly (no phone/intent in navigation state)', async () => {
     renderAt('/connexion/code');
-    expect(await screen.findByRole('heading', { name: 'Connexion' })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('+221771234567')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
   });
 
   it('grants access to the (protected) profile once a session is restored from a persisted refresh token', async () => {

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { ApiError } from '../../lib/api';
+import type { AuthIntent, SignupRole } from '../../lib/api/auth-client';
 import { useAuth } from './hooks/useAuth';
 
 const RESEND_DELAY_SECONDS = 30;
@@ -8,6 +9,8 @@ const CODE_LENGTH = 6;
 
 interface OtpLocationState {
   phone?: string;
+  intent?: AuthIntent;
+  role?: SignupRole;
   from?: Location;
 }
 
@@ -17,7 +20,7 @@ export const OtpScreen: React.FC = () => {
   const auth = useAuth();
 
   const state = (location.state as OtpLocationState | null) ?? {};
-  const phone = state.phone;
+  const { phone, intent, role } = state;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +28,13 @@ export const OtpScreen: React.FC = () => {
   const [isResending, setIsResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_DELAY_SECONDS);
 
-  // No phone in state means this screen was reached directly (deep link,
-  // reload) rather than through the phone step — send the user back there
-  // rather than showing a broken "code sent to undefined" screen.
+  // Absence de `phone`/`intent` dans l'état = écran atteint directement
+  // (lien profond, rechargement) plutôt que via l'étape numéro -- on
+  // recommence le parcours plutôt que d'afficher un écran cassé ("code
+  // envoyé à undefined") ou de deviner connexion vs inscription.
   useEffect(() => {
-    if (!phone) navigate('/connexion', { replace: true });
-  }, [phone, navigate]);
+    if (!phone || !intent) navigate('/connexion', { replace: true });
+  }, [phone, intent, navigate]);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -38,7 +42,7 @@ export const OtpScreen: React.FC = () => {
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 
-  if (!phone) return null;
+  if (!phone || !intent) return null;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -51,8 +55,16 @@ export const OtpScreen: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await auth.login(phone, code);
-      navigate(state.from?.pathname ?? '/profil', { replace: true });
+      if (intent === 'signup') {
+        await auth.signup(phone, code, role ?? 'client');
+      } else {
+        await auth.login(phone, code);
+      }
+      if (intent === 'signup' && role === 'artisan') {
+        navigate('/bienvenue-artisan', { replace: true });
+      } else {
+        navigate(state.from?.pathname ?? '/profil', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
     } finally {
