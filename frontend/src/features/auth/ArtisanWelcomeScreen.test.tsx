@@ -8,7 +8,7 @@ function renderArtisanWelcomeScreen() {
     <MemoryRouter initialEntries={['/bienvenue-artisan']}>
       <Routes>
         <Route path="/bienvenue-artisan" element={<ArtisanWelcomeScreen />} />
-        <Route path="/pro" element={<div>Artisan dashboard screen</div>} />
+        <Route path="/pro/onboarding" element={<div>Artisan onboarding screen</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -17,13 +17,13 @@ function renderArtisanWelcomeScreen() {
 describe('ArtisanWelcomeScreen', () => {
   afterEach(cleanup);
 
-  it('renders the welcome message and links to the artisan dashboard', async () => {
+  it('renders the welcome message and links to the onboarding screen', async () => {
     renderArtisanWelcomeScreen();
 
     expect(screen.getByText('Bienvenue chez Téranga Pro !')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Accéder à mon tableau de bord' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Compléter mon profil' }));
 
-    expect(await screen.findByText('Artisan dashboard screen')).toBeInTheDocument();
+    expect(await screen.findByText('Artisan onboarding screen')).toBeInTheDocument();
   });
 });

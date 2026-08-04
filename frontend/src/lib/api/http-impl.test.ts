@@ -242,6 +242,259 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('getMyArtisanProfile', () => {
+    it('maps every declared trade with its own id (unlike mapArtisan, which flattens to a single trade label)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            ...backendArtisan,
+            cover_url: null,
+            trades: [
+              {
+                id: 'at-1',
+                trade: { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+                hourly_rate_fcfa: 15000,
+                service_radius_m: 5000,
+                has_custom_service_area: false,
+              },
+              {
+                id: 'at-2',
+                trade: { id: 't2', code: 'electricite', label_fr: 'Électricité' },
+                hourly_rate_fcfa: 20000,
+                service_radius_m: 8000,
+                has_custom_service_area: true,
+              },
+            ],
+          }),
+        ),
+      );
+
+      const profile = await httpApiClient.getMyArtisanProfile!('a1');
+
+      expect(profile.fullName).toBe('Idrissa Diop');
+      expect(profile.verifiedStatus).toBe('verified');
+      expect(profile.trades).toEqual([
+        {
+          id: 'at-1',
+          tradeCode: 'plomberie',
+          tradeLabel: 'Plomberie',
+          hourlyRateFcfa: 15000,
+          serviceRadiusM: 5000,
+          hasCustomServiceArea: false,
+        },
+        {
+          id: 'at-2',
+          tradeCode: 'electricite',
+          tradeLabel: 'Électricité',
+          hourlyRateFcfa: 20000,
+          serviceRadiusM: 8000,
+          hasCustomServiceArea: true,
+        },
+      ]);
+    });
+  });
+
+  describe('updateMyArtisanProfile', () => {
+    it('only sends the fields actually provided (partial update)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.updateMyArtisanProfile!({ bio: 'Nouvelle bio.' });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body as string)).toEqual({ bio: 'Nouvelle bio.' });
+    });
+
+    it('forwards baseLocation and null-clearing fields verbatim', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.updateMyArtisanProfile!({
+        bio: null,
+        yearsExperience: 5,
+        baseLocation: { lat: 14.7, lng: -17.4 },
+      });
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(options.body as string)).toEqual({
+        bio: null,
+        years_experience: 5,
+        base_location: { lat: 14.7, lng: -17.4 },
+      });
+    });
+  });
+
+  describe('addArtisanTrade', () => {
+    it('sends a POST to /artisans/me/trades and maps the updated profile', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { ...backendArtisan, cover_url: null }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.addArtisanTrade!({
+        tradeCode: 'plomberie',
+        hourlyRateFcfa: 12000,
+        serviceRadiusM: 8000,
+      });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me/trades');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        trade_code: 'plomberie',
+        hourly_rate_fcfa: 12000,
+        service_radius_m: 8000,
+      });
+    });
+
+    it('propagates a backend rejection (e.g. already declared) as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(409, {
+            error: { code: 'ARTISAN_METIER_DEJA_DECLARE', message: 'Vous exercez déjà ce métier.' },
+          }),
+        ),
+      );
+
+      const promise = httpApiClient.addArtisanTrade!({
+        tradeCode: 'plomberie',
+        hourlyRateFcfa: 12000,
+        serviceRadiusM: 8000,
+      });
+      await expect(promise).rejects.toMatchObject({ message: 'Vous exercez déjà ce métier.' });
+    });
+  });
+
+  describe('removeArtisanTrade', () => {
+    it('sends a DELETE to /artisans/me/trades/{id}', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, trades: [], cover_url: null }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const profile = await httpApiClient.removeArtisanTrade!('at-1');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me/trades/at-1');
+      expect(options.method).toBe('DELETE');
+      expect(profile.trades).toEqual([]);
+    });
+  });
+
+  describe('listMyVerificationDocuments', () => {
+    it('maps the verified status and document metadata (never a binary)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            verified_status: 'pending',
+            documents: [
+              {
+                id: 'doc-1',
+                doc_type: 'cni',
+                status: 'pending',
+                note: null,
+                created_at: '2026-01-01T00:00:00Z',
+                reviewed_at: null,
+              },
+              {
+                id: 'doc-2',
+                doc_type: 'selfie',
+                status: 'rejected',
+                note: 'Photo floue.',
+                created_at: '2026-01-02T00:00:00Z',
+                reviewed_at: '2026-01-03T00:00:00Z',
+              },
+            ],
+          }),
+        ),
+      );
+
+      const verification = await httpApiClient.listMyVerificationDocuments!();
+
+      expect(verification.verifiedStatus).toBe('pending');
+      expect(verification.documents).toEqual([
+        {
+          id: 'doc-1',
+          docType: 'cni',
+          status: 'pending',
+          note: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          reviewedAt: null,
+        },
+        {
+          id: 'doc-2',
+          docType: 'selfie',
+          status: 'rejected',
+          note: 'Photo floue.',
+          createdAt: '2026-01-02T00:00:00Z',
+          reviewedAt: '2026-01-03T00:00:00Z',
+        },
+      ]);
+    });
+  });
+
+  describe('uploadVerificationDocument', () => {
+    it('sends a multipart POST with doc_type and file, never JSON-serialized', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(201, {
+          id: 'doc-1',
+          doc_type: 'cni',
+          status: 'pending',
+          note: null,
+          created_at: '2026-01-01T00:00:00Z',
+          reviewed_at: null,
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const file = new File(['fake-image-bytes'], 'cni.jpg', { type: 'image/jpeg' });
+
+      const document = await httpApiClient.uploadVerificationDocument!('cni', file);
+
+      expect(document).toEqual({
+        id: 'doc-1',
+        docType: 'cni',
+        status: 'pending',
+        note: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        reviewedAt: null,
+      });
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me/documents');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBeInstanceOf(FormData);
+      // Pas de header Content-Type fixé explicitement : c'est le navigateur
+      // qui doit poser sa propre frontière multipart, qu'apiRequest
+      // écraserait s'il forçait application/json ici (voir http.ts buildHeaders).
+      const headers = options.headers as Record<string, string> | undefined;
+      expect(headers?.['Content-Type']).toBeUndefined();
+      const body = options.body as FormData;
+      expect(body.get('doc_type')).toBe('cni');
+      expect(body.get('file')).toBe(file);
+    });
+
+    it('propagates a magic-bytes rejection as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(422, {
+            error: {
+              code: 'FICHIER_TYPE_INVALIDE',
+              message: "Le fichier fourni n'est pas d'un type accepté pour ce document.",
+            },
+          }),
+        ),
+      );
+      const file = new File(['not-an-image'], 'fake.jpg', { type: 'image/jpeg' });
+
+      const promise = httpApiClient.uploadVerificationDocument!('cni', file);
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        message: "Le fichier fourni n'est pas d'un type accepté pour ce document.",
+      });
+    });
+  });
+
   describe('listTrades', () => {
     it('maps the backend trade reference list', async () => {
       vi.stubGlobal(

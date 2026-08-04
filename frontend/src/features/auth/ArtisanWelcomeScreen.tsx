@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router';
 
 /**
  * Accroche affichée une fois, juste après une inscription artisan
- * (BUILD_PLAN.md §4) : annonce la suite (onboarding + vérification, Lot B)
- * sans la construire ici. Même langage visuel `bg-primary` que
- * `ArtisanDashboardScreen` pour prolonger l'identité "Espace Pro" déjà
- * amorcée sur `RoleSelectScreen`.
+ * (BUILD_PLAN.md §4) : mène directement à l'onboarding (profil, métiers,
+ * documents — BUILD_PLAN.md, onboarding artisan). Même langage visuel
+ * `bg-primary` que `ArtisanDashboardScreen` pour prolonger l'identité
+ * "Espace Pro" déjà amorcée sur `RoleSelectScreen`.
  */
 export const ArtisanWelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -30,10 +30,10 @@ export const ArtisanWelcomeScreen: React.FC = () => {
       <div className="max-w-md mx-auto px-4 pt-8">
         <button
           type="button"
-          onClick={() => navigate('/pro', { replace: true })}
+          onClick={() => navigate('/pro/onboarding', { replace: true })}
           className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
         >
-          Accéder à mon tableau de bord
+          Compléter mon profil
         </button>
       </div>
     </main>

@@ -15,6 +15,7 @@ import { ClientHomeScreen } from './features/artisans/ClientHomeScreen';
 import { DescribeProblemScreen } from './features/ai/DescribeProblemScreen';
 import { ArtisanProfileScreen } from './features/artisans/ArtisanProfileScreen';
 import { ArtisanDashboardScreen } from './features/artisans/ArtisanDashboardScreen';
+import { ArtisanOnboardingScreen } from './features/artisans/ArtisanOnboardingScreen';
 import { SearchScreen } from './features/artisans/SearchScreen';
 import { MyRequestsScreen } from './features/requests/MyRequestsScreen';
 import { InterventionsScreen } from './features/interventions/InterventionsScreen';
@@ -60,6 +61,14 @@ export function AppRoutes() {
             element={
               <ProtectedRoute>
                 <ArtisanDashboardScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="pro/onboarding"
+            element={
+              <ProtectedRoute>
+                <ArtisanOnboardingScreen />
               </ProtectedRoute>
             }
           />

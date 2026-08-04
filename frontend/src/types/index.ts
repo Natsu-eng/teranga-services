@@ -175,6 +175,57 @@ export interface ArtisanStats {
   revenueFcfa: number | null;
 }
 
+export type ArtisanVerifiedStatus = 'none' | 'pending' | 'verified' | 'rejected';
+
+/**
+ * Un métier déclaré par l'artisan lui-même (`POST/DELETE
+ * /artisans/me/trades`) — porte l'`id` nécessaire pour le retirer,
+ * contrairement aux champs `tags`/`trade` en lecture seule de `Artisan`
+ * (vue publique recherche/détail).
+ */
+export interface ArtisanTradeDetail {
+  id: string;
+  tradeCode: string;
+  tradeLabel: string;
+  hourlyRateFcfa: number;
+  serviceRadiusM: number;
+  hasCustomServiceArea: boolean;
+}
+
+/**
+ * Le propre profil de l'artisan, tel qu'édité pendant l'onboarding
+ * (`PATCH /artisans/me`, `GET /artisans/{id}` en vue de soi-même) — plus
+ * riche que `Artisan` (vue publique) : expose chaque métier déclaré avec
+ * son propre id/tarif/rayon plutôt qu'un seul libellé `trade` aplati.
+ */
+export interface MyArtisanProfile {
+  id: string;
+  fullName: string;
+  bio: string | null;
+  yearsExperience: number | null;
+  avatarUrl: string | null;
+  isAvailable: boolean;
+  verifiedStatus: ArtisanVerifiedStatus;
+  trades: ArtisanTradeDetail[];
+}
+
+export type VerificationDocType = 'cni' | 'selfie' | 'accreditation' | 'address_proof';
+export type VerificationDocStatus = 'pending' | 'approved' | 'rejected';
+
+export interface VerificationDocument {
+  id: string;
+  docType: VerificationDocType;
+  status: VerificationDocStatus;
+  note: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+export interface MyVerification {
+  verifiedStatus: ArtisanVerifiedStatus;
+  documents: VerificationDocument[];
+}
+
 export interface CurrentUser {
   id: string;
   name: string;

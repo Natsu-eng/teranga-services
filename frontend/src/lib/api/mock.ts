@@ -10,9 +10,12 @@ import type {
   Artisan,
   ChatMessage,
   Intervention,
+  MyArtisanProfile,
+  MyVerification,
   Review,
   ServiceRequest,
   Trade,
+  VerificationDocument,
 } from '../../types';
 import {
   ApiError,
@@ -301,5 +304,39 @@ export const mockApiClient: ApiClient = {
   async updateArtisanAvailability(_isAvailable: boolean): Promise<Artisan> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  // Mort en production (index.ts route toujours ces méthodes vers
+  // httpApiClient, même raisonnement que updateArtisanAvailability
+  // ci-dessus) — conservé uniquement pour que mock.ts reste un ApiClient
+  // complet pour mock.test.ts.
+  async getMyArtisanProfile(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  async updateMyArtisanProfile(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  async addArtisanTrade(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  async removeArtisanTrade(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  async listMyVerificationDocuments(): Promise<MyVerification> {
+    await simulateNetworkLatency();
+    return { verifiedStatus: 'none', documents: [] };
+  },
+
+  async uploadVerificationDocument(): Promise<VerificationDocument> {
+    await simulateNetworkLatency();
+    throw new ApiError('validation', "L'envoi du document a échoué.");
   },
 };

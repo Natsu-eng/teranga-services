@@ -42,13 +42,15 @@ async function parseJsonBody(response: Response): Promise<unknown> {
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Upload multipart (ex. documents de vérification) — mutuellement exclusif avec `body`. Jamais sérialisé en JSON ; le navigateur pose lui-même la frontière multipart, donc aucun Content-Type n'est fixé explicitement ici. */
+  formData?: FormData;
   /** Auth endpoints (request-otp, verify-otp, refresh) don't carry a token and must never trigger the 401 refresh dance on themselves. */
   skipAuth?: boolean;
 }
 
-function buildHeaders(skipAuth: boolean | undefined, hasBody: boolean): HeadersInit {
+function buildHeaders(skipAuth: boolean | undefined, hasJsonBody: boolean): HeadersInit {
   const headers: Record<string, string> = {};
-  if (hasBody) headers['Content-Type'] = 'application/json';
+  if (hasJsonBody) headers['Content-Type'] = 'application/json';
   if (!skipAuth) {
     const token = authStore.getAccessToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -62,8 +64,8 @@ async function rawFetch(path: string, options: RequestOptions): Promise<Response
   try {
     return await fetch(`${API_BASE}${path}`, {
       method: options.method ?? 'GET',
-      headers: buildHeaders(options.skipAuth, options.body !== undefined),
-      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      headers: buildHeaders(options.skipAuth, !options.formData && options.body !== undefined),
+      body: options.formData ?? (options.body !== undefined ? JSON.stringify(options.body) : undefined),
       signal: controller.signal,
     });
   } catch {
