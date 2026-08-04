@@ -442,12 +442,50 @@ GET  /api/v1/artisans/{id}/stats                               → indicateurs d
                                    sans auth) ; + revenus si authentifié en tant que propriétaire ou
                                    admin (403 STATISTIQUES_PRIVEES_INTERDITES pour un tiers authentifié)
 GET  /api/v1/trades                                            → référentiel des métiers actifs
-PATCH /api/v1/artisans/me         (artisan) { is_available }                                  ✅ Lot 12c
-                                   -- bascule sa propre disponibilité, scopée à son
-                                   artisan_profile (résolu depuis le token). Volontairement
-                                   limité à ce seul champ ; l'édition complète (bio, métiers,
-                                   zone) reste hors périmètre, reportée à l'onboarding artisan.
+PATCH /api/v1/artisans/me         (artisan) { is_available?, bio?, years_experience?,           ✅ Lot 12c
+                                   base_location?, avatar_url? }                          ✅ onboarding artisan
+                                   -- édite son propre artisan_profile (résolu depuis le
+                                   token), mise à jour PARTIELLE (seuls les champs fournis
+                                   sont appliqués). Ne touche jamais verified_status (dérivé)
+                                   ni le rôle -- absents du schéma d'entrée.
+POST /api/v1/artisans/me/trades   (artisan) { trade_code, hourly_rate_fcfa,           ✅ onboarding artisan
+                                   service_radius_m, service_area? } -- déclare un métier
+                                   exercé. Rejette un trade_code inconnu/inactif
+                                   (METIER_INTROUVABLE) ou déjà déclaré
+                                   (ARTISAN_METIER_DEJA_DECLARE).
+DELETE /api/v1/artisans/me/trades/{id}                                                ✅ onboarding artisan
+                                   -- retire un métier déclaré, scopé au propriétaire
+                                   (ARTISAN_TRADE_NOT_FOUND sinon, jamais 403 distinctif).
+POST /api/v1/artisans/me/documents (artisan) multipart/form-data { doc_type, file }    ✅ onboarding artisan
+                                   -- upload d'un document de vérification (cni|selfie|
+                                   accreditation|address_proof). Type réel validé par magic
+                                   bytes (jamais extension/Content-Type déclarés), taille
+                                   plafonnée (STORAGE_MAX_UPLOAD_BYTES), clé de stockage
+                                   aléatoire (jamais le nom de fichier d'origine), rate limité
+                                   par utilisateur. Crée/actualise la verification en
+                                   `pending` et recalcule immédiatement
+                                   artisan_profile.verified_status. Détail sécurité et
+                                   couche de stockage : §3.3.
+GET  /api/v1/artisans/me/documents (artisan)                                          ✅ onboarding artisan
+                                   → { verified_status, documents: [...] } -- métadonnées
+                                   seules (doc_type, status, note, dates), jamais le binaire
+                                   ni doc_url.
+GET  /api/v1/artisans/me/documents/{id}/content (artisan, propriétaire uniquement)     ✅ onboarding artisan
+                                   → le binaire du document, servi via la couche de stockage
+                                   (jamais un lien statique public). DOCUMENT_NOT_FOUND pour
+                                   un document d'un autre artisan (jamais de distinction
+                                   observable entre "absent" et "pas à vous").
 ```
+**Visibilité en recherche publique (`GET /artisans`)** : un artisan dont
+`verified_status != VERIFIED` est **invisible** de cette liste (filtré en
+SQL sur la colonne stockée, tenue à jour à chaque écriture de
+`verification`) -- décision actée, justifiée en détail dans
+`app.services.artisans.list_artisans` (en résumé : un profil non vérifié
+n'apporte aucune valeur à un client qui ne pourra de toute façon pas le
+contacter, et un catalogue 100 % vérifié est un signal de confiance plus
+fort au lancement). `GET /artisans/{id}` **n'applique pas** ce filtre :
+l'artisan doit pouvoir voir son propre profil pendant l'onboarding quel que
+soit son statut.
 Erreurs normalisées spécifiques : `POSITION_INVALIDE` (near malformé/hors
 bornes), `RAYON_RECHERCHE_INVALIDE` (radius_m ≤0 ou > plafond),
 `TRI_DISTANCE_SANS_POSITION` (sort=distance sans near), `PAGE_HORS_BORNES`
@@ -550,6 +588,75 @@ POST /api/v1/webhooks/wave        (HMAC-SHA256 vérifié, idempotent via wave_ev
 GET  /api/v1/conversations/{id}/messages
 POST /api/v1/conversations/{id}/messages   { body }
 ```
+
+---
+
+## 3.3 Stockage de fichiers privés (onboarding artisan)
+
+Les documents de vérification (CNI, selfie) sont des **données sensibles** :
+jamais servis publiquement, jamais commités en git, accès strictement
+réservé à l'artisan propriétaire (et, plus tard, à l'admin qui statue,
+Lot C). Même principe d'abstraction que `SmsProvider`
+(`app/services/sms.py`) et `AiTriageProvider`
+(`app/services/ai_triage_providers.py`) : un `Protocol StorageBackend`
+(`app/services/storage.py`) que le code métier (`app.services.documents`)
+manipule sans jamais connaître son implémentation concrète.
+
+```python
+class StorageBackend(Protocol):
+    async def store(self, content: bytes, key: str) -> str: ...    # -> référence opaque
+    async def retrieve(self, reference: str) -> bytes: ...
+    async def delete(self, reference: str) -> None: ...
+```
+
+**`LocalStorageBackend`** (seul fournisseur implémenté, dev) écrit sur
+disque local sous `STORAGE_LOCAL_DIR` (défaut `backend/var/artisan-documents`,
+relatif au dossier `backend/`) : hors du code source applicatif, ignoré par
+`backend/.gitignore`, jamais monté en `StaticFiles` (`app/main.py` ne sert
+aucun fichier statique — tout accès passe par `GET
+/artisans/me/documents/{id}/content`, authentifié et scopé au propriétaire).
+Le contenu est manipulé en `bytes` (pas un vrai flux asynchrone) : choix
+délibéré, les documents concernés sont petits et plafonnés en taille
+(`STORAGE_MAX_UPLOAD_BYTES`) — bufferiser en mémoire garde le backend
+trivial sans complexité de streaming pour un cas d'usage borné ; le client
+HTTP reçoit malgré tout une réponse en flux (`StreamingResponse` côté
+endpoint).
+
+**Bascule vers un cloud privé en prod** (S3-compatible à accès privé, GCS…) :
+n'implique qu'une nouvelle classe respectant ce même `Protocol`, branchée
+via `STORAGE_BACKEND=<nom>` (`Settings`, jamais en dur) — aucune réécriture
+du code appelant. Aucun fournisseur cloud n'est implémenté à ce stade
+(`STORAGE_BACKEND=local` est la seule valeur acceptée aujourd'hui ; toute
+autre valeur lève `NotImplementedError` au démarrage de l'accès, même
+principe fail-fast documenté que `SMS_PROVIDER=unconfigured`) — ce choix
+reste à trancher avant la mise en production, le disque local de
+`LocalStorageBackend` ne survivant de toute façon pas à un redéploiement
+Railway (pas de disque persistant).
+
+**Upload sécurisé** (`POST /artisans/me/documents`,
+`app.services.documents.upload_document`) :
+1. **Type réel validé par magic bytes** (`app/services/file_validation.py`,
+   signatures JPEG/PNG/PDF sur les octets de tête) — jamais l'extension du
+   nom de fichier ni le `Content-Type` déclaré par le client, les deux se
+   falsifiant trivialement (renommer un fichier quelconque en `.jpg`,
+   mentir dans le header HTTP). Un selfie n'accepte que JPEG/PNG (jamais un
+   PDF) ; les autres types de document tolèrent aussi un PDF (scan).
+2. **Taille plafonnée** (`STORAGE_MAX_UPLOAD_BYTES`, défaut 8 Mo) — lu
+   jusqu'à `max+1` octets côté endpoint pour détecter un dépassement sans
+   bufferiser en mémoire un fichier arbitrairement gros.
+3. **Clé de stockage aléatoire** (`uuid4().hex`), jamais le nom de fichier
+   d'origine — non devinable, ne fuite aucune information. `verification.doc_url`
+   stocke cette référence interne, jamais une URL publique.
+4. **Rate limité par utilisateur authentifié** (fenêtre glissante en
+   mémoire, même mécanisme que `RATE_LIMIT_OTP_*`,
+   `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_*`).
+5. Crée/actualise la ligne `verification` (`status=pending`) et **recalcule
+   immédiatement** `artisan_profile.verified_status`
+   (`compute_verified_status`, §2.2) — c'est le seul endroit, avec le futur
+   lot admin (Lot C), qui écrit cette colonne après le seed ; elle reste la
+   source utilisée comme **filtre SQL** de visibilité par la recherche
+   publique (§3.2), jamais comme valeur de sortie API (toujours recalculée
+   à la volée par la couche de lecture).
 
 ---
 
@@ -838,6 +945,28 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   `intent`/`role`, écran de bienvenue dédié `/bienvenue-artisan` après une
   inscription artisan. *But : un vrai parcours d'inscription, sans ouvrir
   de chemin vers le rôle admin.*
+- **Lot `feat/artisan-onboarding` — Profil, métiers, documents de
+  vérification.** Un artisan créé vide (Lot `feat/auth-signup`) complète son
+  profil et dépose ses documents, sans être éligible à une mise en relation
+  tant qu'il n'est pas vérifié. Couche de stockage privée abstraite
+  (`StorageBackend`, §3.3), `PATCH /artisans/me` étendu (bio, expérience,
+  localisation, avatar — mise à jour partielle), `POST`/`DELETE
+  /artisans/me/trades` (métiers exercés), `POST`/`GET
+  /artisans/me/documents` + `GET .../content` (upload sécurisé : magic
+  bytes, taille plafonnée, référence non devinable, rate limité — détail
+  §3.3). Chaque document déposé recalcule immédiatement `verified_status`
+  (`NONE -> PENDING` dès le premier document). Deux garde-fous
+  d'éligibilité : `POST /interventions` rejette déjà un artisan non vérifié
+  (`ARTISAN_NON_VERIFIE`, en place depuis le Lot 12) et `GET /artisans`
+  (recherche publique) l'exclut désormais entièrement — décision actée
+  (invisible plutôt que visible avec mention, §3.2) — tandis que `GET
+  /artisans/{id}` reste accessible à l'artisan pour son propre onboarding.
+  Front : parcours `/bienvenue-artisan` → onboarding (profil, métiers,
+  documents, checklist de progression), bandeau de statut "en cours de
+  vérification" tant que non vérifié, `/pro` affiche l'état d'onboarding au
+  lieu d'un dashboard vide pour un artisan non encore vérifié. *But : un
+  artisan peut se préparer à être vérifié, sans jamais pouvoir contourner la
+  vérification pour être contacté.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,

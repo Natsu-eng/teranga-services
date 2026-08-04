@@ -10,22 +10,70 @@ booléen dérivé -- même principe de protection que pour `base_location`
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ArtisanVerifiedStatus, SubscriptionTier
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    SubscriptionTier,
+    VerificationDocType,
+    VerificationStatus,
+)
+from app.schemas.requests import LocationIn
 from app.schemas.trades import TradeOut
 
 
-class ArtisanAvailabilityUpdateIn(BaseModel):
-    """`PATCH /artisans/me` (BUILD_PLAN.md §3.2) -- volontairement limité à
-    `is_available` pour ce lot. L'édition complète du profil artisan (bio,
-    métiers, zone) est un chantier ultérieur (onboarding artisan), pas
-    anticipé ici."""
+class ArtisanProfileUpdateIn(BaseModel):
+    """`PATCH /artisans/me` (BUILD_PLAN.md §3.2, onboarding artisan).
 
-    is_available: bool
+    Tous les champs sont optionnels : seuls ceux réellement fournis dans le
+    JSON sont appliqués (`model_dump(exclude_unset=True)` côté service), ce
+    qui permet à un même endpoint de servir aussi bien le toggle historique
+    (`{is_available}` seul, Lot 12c) que l'édition complète de l'onboarding.
+    Ne porte jamais `verified_status` (toujours dérivé, jamais saisi) ni le
+    rôle -- aucun des deux n'apparaît dans ce schéma."""
+
+    is_available: bool | None = None
+    bio: str | None = Field(default=None, max_length=2000)
+    years_experience: int | None = Field(default=None, ge=0, le=80)
+    base_location: LocationIn | None = None
+    avatar_url: str | None = Field(default=None, max_length=2000)
+
+
+class ArtisanTradeCreateIn(BaseModel):
+    trade_code: str
+    hourly_rate_fcfa: int = Field(ge=0)
+    service_radius_m: int = Field(gt=0, le=200_000)
+    # Zone d'intervention précise, optionnelle -- polygone fermé (premier et
+    # dernier point identiques), au moins 4 points (3 sommets + fermeture).
+    # Si absente, la zone d'intervention retombe sur `service_radius_m`
+    # autour de `base_location` (même règle que la recherche, BUILD_PLAN.md
+    # §5.1).
+    service_area: list[LocationIn] | None = Field(default=None, min_length=4)
+
+
+class VerificationDocumentOut(BaseModel):
+    """Métadonnées d'un document de vérification -- jamais son contenu
+    binaire (BUILD_PLAN.md, onboarding artisan : `GET /artisans/me/documents`
+    ne renvoie jamais le fichier lui-même, voir
+    `GET /artisans/me/documents/{id}/content` pour ça)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    doc_type: VerificationDocType
+    status: VerificationStatus
+    note: str | None
+    created_at: datetime
+    reviewed_at: datetime | None
+
+
+class MyVerificationOut(BaseModel):
+    verified_status: ArtisanVerifiedStatus
+    documents: list[VerificationDocumentOut]
 
 
 class ArtisanTradeOut(BaseModel):
+    id: uuid.UUID
     trade: TradeOut
     hourly_rate_fcfa: int
     service_radius_m: int

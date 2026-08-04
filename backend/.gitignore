@@ -6,3 +6,9 @@ __pycache__/
 .ruff_cache/
 htmlcov/
 .coverage
+
+# Stockage local des documents de vérification artisan (données sensibles,
+# jamais commitées -- voir app/services/storage.py). Chemin par défaut de
+# STORAGE_LOCAL_DIR ; si le déploiement pointe ailleurs, ignorer ce dossier
+# n'a plus d'effet mais var/ reste un nom réservé côté backend.
+var/

@@ -1,36 +1,57 @@
-"""Endpoints /api/v1/artisans (BUILD_PLAN.md §3.2, §5, §6 Lot 9).
+"""Endpoints /api/v1/artisans (BUILD_PLAN.md §3.2, §5, §6 Lot 9, onboarding
+artisan).
 
-Routes seules : extraction/validation superficielle des query params (types,
+Routes seules : extraction/validation superficielle des paramètres (types,
 bornes triviales déléguées à FastAPI/Pydantic), toute la logique métier
-(parsing de `near`, résolution du tri/rayon, plafond dur de pagination) vit
-dans `app.services.artisans`.
+(parsing de `near`, résolution du tri/rayon, plafond dur de pagination,
+upload/stockage des documents) vit dans `app.services.artisans` et
+`app.services.documents`.
 """
 
+import io
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_optional, require_role
 from app.core.config import Settings, get_settings
+from app.core.errors import AppError
 from app.db.session import get_session
-from app.models.enums import Role
+from app.models.enums import Role, VerificationDocType
 from app.models.user import User
 from app.repositories.artisans import ArtisanSort
 from app.schemas.artisans import (
-    ArtisanAvailabilityUpdateIn,
     ArtisanDetailOut,
     ArtisanListItemOut,
+    ArtisanProfileUpdateIn,
     ArtisanStatsPrivateOut,
     ArtisanStatsPublicOut,
+    ArtisanTradeCreateIn,
+    MyVerificationOut,
+    VerificationDocumentOut,
 )
 from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
+from app.services import documents as documents_service
 from app.services import reviews as reviews_service
+from app.services.file_validation import MIME_BY_TYPE
+from app.services.rate_limit import SlidingWindowRateLimiter, get_document_upload_rate_limiter
+from app.services.storage import get_storage_backend
 
 router = APIRouter(prefix="/artisans", tags=["artisans"])
+
+
+class TropDeDemandesDocumentsError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="TROP_DE_DEMANDES",
+            message="Trop d'envois de documents, merci de réessayer plus tard.",
+            status_code=429,
+        )
 
 
 @router.get("", response_model=Page[ArtisanListItemOut])
@@ -65,17 +86,104 @@ async def list_artisans(
 
 
 @router.patch("/me", response_model=ArtisanDetailOut)
-async def update_my_availability(
-    payload: ArtisanAvailabilityUpdateIn,
+async def update_my_profile(
+    payload: ArtisanProfileUpdateIn,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> ArtisanDetailOut:
-    result = await artisans_service.update_availability(
+    result = await artisans_service.update_profile(
         session, user=artisan, payload=payload, settings=settings
     )
     await session.commit()
     return result
+
+
+@router.post("/me/trades", response_model=ArtisanDetailOut, status_code=201)
+async def add_my_trade(
+    payload: ArtisanTradeCreateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanDetailOut:
+    result = await artisans_service.add_trade(
+        session, user=artisan, payload=payload, settings=settings
+    )
+    await session.commit()
+    return result
+
+
+@router.delete("/me/trades/{artisan_trade_id}", response_model=ArtisanDetailOut)
+async def remove_my_trade(
+    artisan_trade_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanDetailOut:
+    result = await artisans_service.remove_trade(
+        session, user=artisan, artisan_trade_id=artisan_trade_id, settings=settings
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/me/documents", response_model=VerificationDocumentOut, status_code=201)
+async def upload_my_document(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+    rate_limiter: Annotated[SlidingWindowRateLimiter, Depends(get_document_upload_rate_limiter)],
+    doc_type: Annotated[VerificationDocType, Form()],
+    file: Annotated[UploadFile, File()],
+) -> VerificationDocumentOut:
+    allowed = await rate_limiter.check(
+        f"user:{artisan.id}",
+        max_hits=settings.rate_limit_document_upload_per_user_max,
+        window_seconds=settings.rate_limit_document_upload_per_user_window_seconds,
+    )
+    if not allowed:
+        raise TropDeDemandesDocumentsError()
+
+    # Lu jusqu'à max+1 octets : suffit à détecter un dépassement de taille
+    # sans buffériser en mémoire un fichier arbitrairement gros envoyé par
+    # un client malveillant (app.services.documents rejette si > max).
+    content = await file.read(settings.storage_max_upload_bytes + 1)
+
+    result = await documents_service.upload_document(
+        session,
+        user=artisan,
+        doc_type=doc_type,
+        content=content,
+        settings=settings,
+        storage=get_storage_backend(settings),
+    )
+    await session.commit()
+    return result
+
+
+@router.get("/me/documents", response_model=MyVerificationOut)
+async def list_my_documents(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> MyVerificationOut:
+    return await documents_service.list_my_documents(session, user=artisan, settings=settings)
+
+
+@router.get("/me/documents/{document_id}/content")
+async def get_my_document_content(
+    document_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> StreamingResponse:
+    content, detected = await documents_service.get_document_content(
+        session,
+        user=artisan,
+        document_id=document_id,
+        storage=get_storage_backend(settings),
+    )
+    return StreamingResponse(io.BytesIO(content), media_type=MIME_BY_TYPE[detected])
 
 
 @router.get("/{artisan_id}", response_model=ArtisanDetailOut)

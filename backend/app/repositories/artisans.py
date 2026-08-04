@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, joinedload, selectinload
 
 from app.models.artisan import ArtisanProfile, ArtisanTrade
-from app.models.enums import InterventionStatus, PaymentStatus
+from app.models.enums import ArtisanVerifiedStatus, InterventionStatus, PaymentStatus
 from app.models.intervention import Intervention
 from app.models.payment import Payment
 from app.models.trade import Trade
@@ -94,6 +94,16 @@ def _build_filtered_query(
     stmt: Select[tuple[ArtisanProfile]] = select(ArtisanProfile).where(
         ArtisanProfile.deleted_at.is_(None),
         _user_active(ArtisanProfile.user_id),
+        # Un artisan non vérifié n'apparaît jamais dans la recherche
+        # publique (BUILD_PLAN.md, onboarding artisan -- décision actée :
+        # ne montrer que du vérifié au lancement, cf. commentaire détaillé
+        # dans app.services.artisans.list_artisans). Repose sur la colonne
+        # stockée (pas un recalcul par ligne) : tenue à jour à chaque
+        # écriture de `verification` (app.services.documents) et par le
+        # futur lot de vérification admin -- jamais lue ainsi pour la
+        # *sortie* API (`verified_status` reste recalculé à la volée),
+        # seulement comme filtre de visibilité.
+        ArtisanProfile.verified_status == ArtisanVerifiedStatus.VERIFIED,
         _artisan_trade_reachable(filters, point),
     )
     if point is not None:
@@ -224,6 +234,55 @@ async def artisan_exercises_trade(
         .limit(1)
     )
     return (await session.execute(stmt)).first() is not None
+
+
+async def create_artisan_trade(
+    session: AsyncSession,
+    *,
+    artisan: ArtisanProfile,
+    trade_id: uuid.UUID,
+    hourly_rate_fcfa: int,
+    service_radius_m: int,
+    service_area: WKTElement | None,
+) -> ArtisanTrade:
+    # `artisan=artisan` (pas `artisan_id=artisan.id`) : peuple
+    # `ArtisanProfile.artisan_trades` en mémoire immédiatement, sans requête
+    # -- même pattern que `app.repositories.verification.create_verification`.
+    artisan_trade = ArtisanTrade(
+        artisan=artisan,
+        trade_id=trade_id,
+        hourly_rate_fcfa=hourly_rate_fcfa,
+        service_radius_m=service_radius_m,
+        service_area=service_area,
+    )
+    session.add(artisan_trade)
+    await session.flush()
+    return artisan_trade
+
+
+async def get_owned_artisan_trade(
+    session: AsyncSession, *, artisan_trade_id: uuid.UUID, artisan_id: uuid.UUID
+) -> ArtisanTrade | None:
+    """Un `artisan_trade`, scopé à l'artisan propriétaire -- `None` si absent
+    OU s'il appartient à un autre artisan (jamais de distinction observable
+    depuis l'extérieur, cf. `app.services.artisans`)."""
+    stmt = select(ArtisanTrade).where(
+        ArtisanTrade.id == artisan_trade_id, ArtisanTrade.artisan_id == artisan_id
+    )
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def delete_artisan_trade(
+    session: AsyncSession, *, artisan: ArtisanProfile, artisan_trade: ArtisanTrade
+) -> None:
+    # Retrait via la collection (pas `session.delete(artisan_trade)`
+    # directement) : déclenche le cascade `delete-orphan` déjà configuré sur
+    # `ArtisanProfile.artisan_trades`, et laisse la collection en mémoire
+    # cohérente avec l'état persistant sans requête supplémentaire --
+    # important ici puisque `artisan.artisan_trades` est resérialisé juste
+    # après par `app.services.artisans.remove_trade`.
+    artisan.artisan_trades.remove(artisan_trade)
+    await session.flush()
 
 
 async def is_artisan_reachable_for_trade(

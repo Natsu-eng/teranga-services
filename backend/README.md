@@ -119,6 +119,11 @@ uv run uvicorn app.main:app --reload --port 8000
 | `MISTRAL_TIMEOUT_SECONDS` | Non (`10`) | Timeout explicite sur l'appel Mistral (secondes) -- au-delà, fallback heuristique. |
 | `RATE_LIMIT_AI_ANALYZE_PER_IP_MAX` | Non (`20`) | Nombre max de `POST /ai/analyze` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_AI_ANALYZE_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
+| `STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Fournisseur de stockage des documents de vérification -- voir [Onboarding artisan](#onboarding-artisan-profil-métiers-documents). |
+| `STORAGE_LOCAL_DIR` | Non (`var/artisan-documents`) | Répertoire de stockage local, relatif à `backend/` ou chemin absolu. |
+| `STORAGE_MAX_UPLOAD_BYTES` | Non (`8388608`) | Taille maximale d'un document uploadé (octets, 8 Mo par défaut). |
+| `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_MAX` | Non (`10`) | Nombre max d'uploads de documents par utilisateur sur la fenêtre glissante. |
+| `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
 
@@ -165,6 +170,44 @@ et [§2.2](../BUILD_PLAN.md#22-tables).
 `trades` et `artisans` -- gabarit pour le reste du projet. `app/api/v1/auth.py`
 n'a volontairement pas été réaligné dessus (flux déjà propre et testé,
 réalignement recommandé dans un lot dédié séparé si souhaité).
+
+## Onboarding artisan (profil, métiers, documents)
+
+`PATCH /api/v1/artisans/me` (artisan authentifié, mise à jour partielle --
+seuls les champs fournis sont appliqués) édite `bio`, `years_experience`,
+`base_location`, `avatar_url`, `is_available`. `verified_status` et le rôle
+n'y apparaissent jamais : le premier reste toujours dérivé, le second n'est
+modifiable par aucun endpoint. `POST /api/v1/artisans/me/trades` /
+`DELETE /api/v1/artisans/me/trades/{id}` déclarent/retirent un métier
+exercé (tarif indicatif, rayon ou polygone de zone d'intervention).
+
+**Documents de vérification** (CNI, selfie) : `POST /api/v1/artisans/me/documents`
+(`multipart/form-data`, `doc_type` + `file`), `GET .../documents` (métadonnées
+seules -- jamais le binaire), `GET .../documents/{id}/content` (le binaire,
+propriétaire uniquement, jamais un lien public). Le **type réel du fichier
+est vérifié par ses magic bytes** (`app/services/file_validation.py`),
+jamais par l'extension ni le `Content-Type` déclaré -- les deux se
+falsifient trivialement. Le fichier est stocké sous un identifiant aléatoire
+via une **couche d'abstraction** (`Protocol StorageBackend`,
+`app/services/storage.py`, même principe que `SmsProvider`/
+`AiTriageProvider`) : `LocalStorageBackend` (dev) écrit hors du dépôt git et
+hors de tout répertoire servi statiquement ; un fournisseur cloud privé
+reste à brancher avant la prod, sans réécrire le code appelant.
+
+Chaque document déposé recrée/actualise la ligne `verification`
+correspondante et **recalcule immédiatement `artisan_profile.verified_status`**
+(`app/services/verification.compute_verified_status`) : `NONE -> PENDING`
+dès le premier document soumis, `VERIFIED` seulement quand tous les types
+requis (`VERIFICATION_REQUIRED_DOC_TYPES`) sont à `approved` -- ce qui
+n'arrive qu'après revue humaine (admin, hors périmètre de ce lot).
+
+**Éligibilité à la mise en relation.** Un artisan `verified_status !=
+VERIFIED` (1) est rejeté par `POST /api/v1/interventions`
+(`ARTISAN_NON_VERIFIE`, déjà en place depuis le Lot 12) et (2) **n'apparaît
+pas** dans `GET /api/v1/artisans` (recherche publique) -- décision actée,
+justifiée dans `app.services.artisans.list_artisans`. `GET
+/api/v1/artisans/{id}` reste accessible quel que soit le statut : c'est ce
+qui permet à l'artisan de voir son propre profil pendant son onboarding.
 
 ## Triage IA (Lot 11)
 
