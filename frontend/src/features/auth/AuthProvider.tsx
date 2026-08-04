@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { authClient, type AuthUser } from '../../lib/api/auth-client';
-import { authStore } from '../../lib/api/auth-store';
+import { authClient, type AuthUser, type SignupRole } from '../../lib/api/auth-client';
+import { authStore, type TokenPair } from '../../lib/api/auth-store';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -46,11 +46,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const requestOtp = useCallback((phone: string) => authClient.requestOtp(phone), []);
 
-  const login = useCallback(async (phone: string, code: string) => {
-    const { user: loggedInUser, tokens } = await authClient.verifyOtp(phone, code);
+  const applySession = useCallback((sessionUser: AuthUser, tokens: TokenPair) => {
     authStore.setTokens(tokens);
-    setUser(loggedInUser);
+    setUser(sessionUser);
   }, []);
+
+  const login = useCallback(
+    async (phone: string, code: string) => {
+      const { user: loggedInUser, tokens } = await authClient.verifyOtp(phone, code, 'login');
+      applySession(loggedInUser, tokens);
+    },
+    [applySession],
+  );
+
+  const signup = useCallback(
+    async (phone: string, code: string, role: SignupRole) => {
+      const { user: newUser, tokens } = await authClient.verifyOtp(phone, code, 'signup', role);
+      applySession(newUser, tokens);
+    },
+    [applySession],
+  );
 
   const logout = useCallback(async () => {
     const refresh = authStore.getRefreshToken();
@@ -71,9 +86,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLoading,
       requestOtp,
       login,
+      signup,
       logout,
     }),
-    [user, isLoading, requestOtp, login, logout],
+    [user, isLoading, requestOtp, login, signup, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

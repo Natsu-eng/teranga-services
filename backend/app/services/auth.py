@@ -12,6 +12,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,10 +25,19 @@ from app.core.security import (
     encode_access_token,
     encode_refresh_token,
 )
+from app.models.artisan import ArtisanProfile
+from app.models.enums import Locale, Role
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.schemas.auth import UserOut
+
+# Seules valeurs acceptables au rôle choisi à l'inscription (BUILD_PLAN.md
+# §4) : `admin` n'est **jamais** attribuable via l'application, aucun
+# endpoint, aucun paramètre. Allow-list explicite plutôt que de compter
+# uniquement sur le typage `Literal` du schéma -- ce test-ci est le
+# chokepoint greppable et testé de cet invariant de sécurité.
+_SIGNUP_ROLES = {Role.CLIENT, Role.ARTISAN}
 
 
 class RefreshInvalideError(AppError):
@@ -48,6 +58,96 @@ class RefreshReutiliseError(AppError):
             ),
             status_code=401,
         )
+
+
+class RoleInscriptionInvalideError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ROLE_INSCRIPTION_INVALIDE",
+            message="Rôle invalide. Choisissez « client » ou « artisan ».",
+            status_code=422,
+        )
+
+
+class CompteDejaExistantError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="COMPTE_DEJA_EXISTANT",
+            message="Un compte existe déjà avec ce numéro. Connectez-vous.",
+            status_code=409,
+        )
+
+
+class CompteInexistantError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="COMPTE_INEXISTANT",
+            message="Aucun compte pour ce numéro. Inscrivez-vous.",
+            status_code=404,
+        )
+
+
+async def resolve_account_for_intent(
+    session: AsyncSession,
+    phone: str,
+    *,
+    intent: Literal["login", "signup"],
+    role: Literal["client", "artisan"] | None,
+) -> User:
+    """Traduit `(phone, intent, role)` en `User`, après vérification OTP réussie
+    (BUILD_PLAN.md §4). En signup, crée le compte (et son `artisan_profile`
+    vide si `role == artisan`) -- jamais si le numéro existe déjà. En login,
+    retrouve le compte existant -- n'en crée jamais. Un compte existant ne
+    change jamais de rôle via ce flux (le login ne le touche pas, le signup
+    rejette purement et simplement un numéro déjà pris).
+    """
+    now = datetime.now(UTC)
+    existing = (await session.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
+
+    if intent == "signup":
+        if role not in ("client", "artisan"):
+            raise RoleInscriptionInvalideError()
+        if existing is not None:
+            raise CompteDejaExistantError()
+
+        signup_role = Role.ARTISAN if role == "artisan" else Role.CLIENT
+        assert signup_role in _SIGNUP_ROLES  # invariant : jamais Role.ADMIN ici
+        user = User(
+            phone=phone,
+            # Placeholder en attendant une complétion de profil (onboarding,
+            # hors périmètre de ce lot) : le téléphone est la seule donnée
+            # garantie à la création d'un compte par OTP.
+            full_name=phone,
+            role=signup_role,
+            locale=Locale.FR,
+            phone_verified_at=now,
+        )
+        session.add(user)
+        await session.flush()
+
+        if signup_role == Role.ARTISAN:
+            session.add(
+                ArtisanProfile(
+                    user_id=user.id,
+                    # Vide/minimal : aucun document soumis, aucune zone
+                    # définie -- l'onboarding (bio, métiers, zone, documents
+                    # de vérification) est un chantier distinct (Lot B).
+                    # `is_available=False` explicite : contrairement au
+                    # défaut du modèle (`True`, utilisé par le seed et les
+                    # tests), un artisan fraîchement inscrit ne doit pas
+                    # apparaître disponible avant d'avoir complété son profil.
+                    is_available=False,
+                )
+            )
+            await session.flush()
+        return user
+
+    # intent == "login"
+    if existing is None:
+        raise CompteInexistantError()
+    if existing.phone_verified_at is None:
+        existing.phone_verified_at = now
+    return existing
 
 
 async def to_user_out(session: AsyncSession, user: User) -> UserOut:

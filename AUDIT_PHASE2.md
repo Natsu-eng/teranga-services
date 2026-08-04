@@ -104,6 +104,37 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   construction. `response_rate` reste `null` (déjà le cas avant ce lot,
   aucun champ `responded_at` n'existe dans le modèle pour le calculer).
 
+---
+
+## Mise à jour — `feat/auth-signup`
+
+- **§1, écrans `/connexion`, `/connexion/code`** : le point d'audit implicite
+  "`verify-otp` crée toujours un compte `client` sans notion d'inscription"
+  est corrigé. Nouveau point d'entrée `/connexion` (`AuthEntryScreen` : Se
+  connecter / Créer un compte) et `/connexion/role` (`RoleSelectScreen` :
+  choix client/artisan, la carte artisan reprend déjà l'identité `bg-primary`
+  de l'Espace Pro). `PhoneScreen` déplacé sur `/connexion/telephone`,
+  `OtpScreen` inchangé côté route mais relaie désormais `intent`/`role`
+  jusqu'à `verify-otp`. Nouvel écran `/bienvenue-artisan` (protégé) affiché
+  une fois après une inscription artisan, avant `/pro`.
+- **§2, `POST /auth/verify-otp`** : contrat étendu (`intent`, `role`),
+  détail complet et arbitrage sécurité/UX (énumération) en
+  BUILD_PLAN.md §4.3. `POST /auth/request-otp` explicitement inchangé.
+- **§3, cohérence client/artisan** : un compte artisan a désormais un
+  `artisan_profile` réel dès sa création (`is_available=false`,
+  `verified_status=none`) au lieu de n'exister qu'après un premier login
+  implicite non différencié — l'atterrissage sur `/bienvenue-artisan` puis
+  `/pro` (Lot 12c) est cohérent immédiatement après l'inscription, sans état
+  intermédiaire bricolé.
+- **Sécurité** : `admin` n'a jamais été, et n'est toujours pas, attribuable
+  via l'application — ce lot rend l'invariant explicite et testé
+  (`app.services.auth._SIGNUP_ROLES`, tests `test_auth_signup.py`) plutôt que
+  de compter implicitement sur l'absence d'UI admin (AUDIT_PHASE2.md §1,
+  `role.ts:4-9`).
+- **Reste hors périmètre** (inchangé par ce lot) : onboarding artisan (bio,
+  métiers, zone, documents de vérification), messagerie, retrait d'Express,
+  paiements.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.
