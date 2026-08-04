@@ -13,6 +13,8 @@
  * number or address.
  */
 import type {
+  AdminVerificationListItem,
+  AdminVerificationReview,
   AIAnalysisResult,
   Artisan,
   ArtisanStats,
@@ -27,9 +29,10 @@ import type {
   VerificationDocType,
   VerificationDocument,
 } from '../../types';
-import { apiRequest } from './http';
+import { apiRequest, apiRequestBlob } from './http';
 import type {
   AddArtisanTradeInput,
+  AdminVerificationFilters,
   ApiClient,
   ArtisanFilters,
   CreateQuoteInput,
@@ -84,6 +87,28 @@ interface BackendVerificationDocument {
 interface BackendMyVerification {
   verified_status: VerifiedStatus;
   documents: BackendVerificationDocument[];
+}
+
+interface BackendAdminVerificationListItem {
+  id: string;
+  artisan_id: string;
+  artisan_full_name: string;
+  doc_type: VerificationDocType;
+  status: 'pending' | 'approved' | 'rejected';
+  note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+interface BackendAdminVerificationReview {
+  id: string;
+  doc_type: VerificationDocType;
+  status: 'pending' | 'approved' | 'rejected';
+  note: string | null;
+  reviewed_by: string;
+  reviewed_at: string;
+  artisan_id: string;
+  artisan_verified_status: VerifiedStatus;
 }
 
 interface BackendArtisanStatsPublic {
@@ -359,6 +384,34 @@ function mapMyVerification(item: BackendMyVerification): MyVerification {
   };
 }
 
+function mapAdminVerificationListItem(
+  item: BackendAdminVerificationListItem,
+): AdminVerificationListItem {
+  return {
+    id: item.id,
+    artisanId: item.artisan_id,
+    artisanFullName: item.artisan_full_name,
+    docType: item.doc_type,
+    status: item.status,
+    note: item.note,
+    createdAt: item.created_at,
+    reviewedAt: item.reviewed_at,
+  };
+}
+
+function mapAdminVerificationReview(item: BackendAdminVerificationReview): AdminVerificationReview {
+  return {
+    id: item.id,
+    docType: item.doc_type,
+    status: item.status,
+    note: item.note,
+    reviewedBy: item.reviewed_by,
+    reviewedAt: item.reviewed_at,
+    artisanId: item.artisan_id,
+    artisanVerifiedStatus: item.artisan_verified_status,
+  };
+}
+
 function mapArtisanStats(stats: BackendArtisanStats): ArtisanStats {
   return {
     ratingAvg: stats.rating_avg,
@@ -421,6 +474,10 @@ export const httpApiClient: Pick<
   | 'removeArtisanTrade'
   | 'listMyVerificationDocuments'
   | 'uploadVerificationDocument'
+  | 'listAdminVerifications'
+  | 'getAdminVerificationDocumentBlob'
+  | 'approveVerification'
+  | 'rejectVerification'
 > = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
@@ -523,6 +580,42 @@ export const httpApiClient: Pick<
       formData,
     });
     return mapVerificationDocument(document);
+  },
+
+  async listAdminVerifications(
+    filters?: AdminVerificationFilters,
+  ): Promise<AdminVerificationListItem[]> {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    // Grande page unique plutôt qu'une pagination -- une file d'attente de
+    // revue admin (BUILD_PLAN.md) n'est pas censée accumuler des centaines
+    // d'éléments en attente ; si ça arrivait un jour, ce serait un signal
+    // opérationnel à traiter avant d'ajouter une UI de pagination.
+    params.set('page_size', '100');
+    const page = await apiRequest<BackendPage<BackendAdminVerificationListItem>>(
+      `/admin/verifications?${params.toString()}`,
+    );
+    return page.items.map(mapAdminVerificationListItem);
+  },
+
+  async getAdminVerificationDocumentBlob(verificationId: string): Promise<Blob> {
+    return apiRequestBlob(`/admin/verifications/${verificationId}/content`);
+  },
+
+  async approveVerification(verificationId: string): Promise<AdminVerificationReview> {
+    const review = await apiRequest<BackendAdminVerificationReview>(
+      `/admin/verifications/${verificationId}/approve`,
+      { method: 'POST' },
+    );
+    return mapAdminVerificationReview(review);
+  },
+
+  async rejectVerification(verificationId: string, note: string): Promise<AdminVerificationReview> {
+    const review = await apiRequest<BackendAdminVerificationReview>(
+      `/admin/verifications/${verificationId}/reject`,
+      { method: 'POST', body: { note } },
+    );
+    return mapAdminVerificationReview(review);
   },
 
   async listTrades(): Promise<Trade[]> {

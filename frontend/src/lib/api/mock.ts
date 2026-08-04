@@ -6,6 +6,8 @@ import {
   CURRENT_USER,
 } from '../../data/mockData';
 import type {
+  AdminVerificationListItem,
+  AdminVerificationReview,
   AIAnalysisResult,
   Artisan,
   ChatMessage,
@@ -343,5 +345,29 @@ export const mockApiClient: ApiClient = {
   async uploadVerificationDocument(): Promise<VerificationDocument> {
     await simulateNetworkLatency();
     throw new ApiError('validation', "L'envoi du document a échoué.");
+  },
+
+  // Mort en production (index.ts route toujours ces méthodes vers
+  // httpApiClient, même raisonnement que updateArtisanAvailability
+  // ci-dessus) — conservé uniquement pour que mock.ts reste un ApiClient
+  // complet pour mock.test.ts.
+  async listAdminVerifications(): Promise<AdminVerificationListItem[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async getAdminVerificationDocumentBlob(): Promise<Blob> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Document introuvable.');
+  },
+
+  async approveVerification(): Promise<AdminVerificationReview> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Document introuvable.');
+  },
+
+  async rejectVerification(): Promise<AdminVerificationReview> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Document introuvable.');
   },
 };

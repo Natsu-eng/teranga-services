@@ -137,3 +137,39 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   return toResult<T>(response);
 }
+
+async function toBlobResult(response: Response): Promise<Blob> {
+  if (!response.ok) {
+    const body = await parseJsonBody(response);
+    const message = extractBackendMessage(body) ?? NETWORK_ERROR_MESSAGE;
+    throw new ApiError(errorCodeForStatus(response.status), message);
+  }
+  return response.blob();
+}
+
+/**
+ * Variante binaire d'`apiRequest` (même injection d'auth, même dance de
+ * refresh sur 401) -- pour les endpoints qui servent un fichier plutôt que
+ * du JSON (ex. `GET /admin/verifications/{id}/content`, le contenu d'un
+ * document de vérification). Un `<img src="...">` classique ne peut pas
+ * porter l'en-tête `Authorization` : l'appelant doit récupérer le `Blob` et
+ * construire lui-même une URL (`URL.createObjectURL`), puis la révoquer
+ * après usage.
+ */
+export async function apiRequestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await rawFetch(path, options);
+
+  if (response.status === 401 && !options.skipAuth) {
+    try {
+      await refreshOnce();
+    } catch {
+      authStore.clear();
+      authStore.notifyForcedLogout();
+      throw new ApiError('validation', SESSION_EXPIRED_MESSAGE);
+    }
+    const retryResponse = await rawFetch(path, options);
+    return toBlobResult(retryResponse);
+  }
+
+  return toBlobResult(response);
+}
