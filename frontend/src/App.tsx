@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './features/auth/AuthProvider';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { RequireAdminRoute } from './components/auth/RequireAdminRoute';
 import { MainLayout } from './components/layout/MainLayout';
 import { NoBottomNavLayout } from './components/layout/NoBottomNavLayout';
 import { MinimalLayout } from './components/layout/MinimalLayout';
@@ -22,6 +23,7 @@ import { InterventionsScreen } from './features/interventions/InterventionsScree
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { ComingSoon } from './components/ui/ComingSoon';
+import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 
 export function AppRoutes() {
   const [location, setLocation] = useState<string>('Dakar Plateau');
@@ -35,6 +37,14 @@ export function AppRoutes() {
           <Route path="connexion/role" element={<RoleSelectScreen />} />
           <Route path="connexion/telephone" element={<PhoneScreen />} />
           <Route path="connexion/code" element={<OtpScreen />} />
+          <Route
+            path="admin/verifications"
+            element={
+              <RequireAdminRoute>
+                <AdminVerificationQueueScreen />
+              </RequireAdminRoute>
+            }
+          />
         </Route>
 
         <Route element={<NoBottomNavLayout location={location} setLocation={setLocation} />}>

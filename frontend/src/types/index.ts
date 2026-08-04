@@ -226,6 +226,31 @@ export interface MyVerification {
   documents: VerificationDocument[];
 }
 
+/** Une ligne de la file d'attente admin (`GET /admin/verifications`). */
+export interface AdminVerificationListItem {
+  id: string;
+  artisanId: string;
+  artisanFullName: string;
+  docType: VerificationDocType;
+  status: VerificationDocStatus;
+  note: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+/** Résultat d'une décision admin (`approve`/`reject`) — porte le
+ * `verifiedStatus` résultant de l'artisan, recalculé côté serveur. */
+export interface AdminVerificationReview {
+  id: string;
+  docType: VerificationDocType;
+  status: VerificationDocStatus;
+  note: string | null;
+  reviewedBy: string;
+  reviewedAt: string;
+  artisanId: string;
+  artisanVerifiedStatus: ArtisanVerifiedStatus;
+}
+
 export interface CurrentUser {
   id: string;
   name: string;

@@ -73,6 +73,23 @@ uv run python scripts/seed.py
 Détail du contenu semé et des choix de conception : voir l'en-tête de
 [scripts/seed.py](scripts/seed.py).
 
+## Bootstrap du premier admin
+
+Le rôle `admin` ne s'obtient **jamais** via l'application (aucun endpoint,
+aucun paramètre d'API) -- c'est une décision de sécurité actée
+(BUILD_PLAN.md §4.4). Le **seul** moyen de créer un admin est ce script,
+qui promeut un utilisateur **déjà inscrit** (par téléphone + OTP, comme
+n'importe quel compte) :
+
+```bash
+uv run python scripts/create_admin.py +221771234567
+```
+
+Demande une confirmation interactive avant d'agir ; `--yes` pour l'ignorer
+(scripts/CI). Refuse explicitement un numéro qui ne correspond à aucun
+compte -- ce script ne crée jamais de compte lui-même. Idempotent :
+relancer sur un numéro déjà admin est un succès silencieux, pas une erreur.
+
 ## Lancer le serveur
 
 ```bash
@@ -199,7 +216,8 @@ correspondante et **recalcule immédiatement `artisan_profile.verified_status`**
 (`app/services/verification.compute_verified_status`) : `NONE -> PENDING`
 dès le premier document soumis, `VERIFIED` seulement quand tous les types
 requis (`VERIFICATION_REQUIRED_DOC_TYPES`) sont à `approved` -- ce qui
-n'arrive qu'après revue humaine (admin, hors périmètre de ce lot).
+n'arrive qu'après revue humaine (espace admin, voir section dédiée
+ci-dessous).
 
 **Éligibilité à la mise en relation.** Un artisan `verified_status !=
 VERIFIED` (1) est rejeté par `POST /api/v1/interventions`
@@ -208,6 +226,41 @@ pas** dans `GET /api/v1/artisans` (recherche publique) -- décision actée,
 justifiée dans `app.services.artisans.list_artisans`. `GET
 /api/v1/artisans/{id}` reste accessible quel que soit le statut : c'est ce
 qui permet à l'artisan de voir son propre profil pendant son onboarding.
+
+## Espace admin (revue des artisans)
+
+Toutes les routes `/api/v1/admin/*` exigent le rôle `admin`
+(`require_role(Role.ADMIN)`) -- voir [Bootstrap du premier
+admin](#bootstrap-du-premier-admin) ci-dessus pour la seule façon d'obtenir
+ce rôle. Un client/artisan reçoit `403 ROLE_INSUFFISANT`, un anonyme `401`
+-- les mêmes erreurs génériques que n'importe quelle autre route protégée
+par rôle, sans détail qui distinguerait une route admin pour un tiers non
+autorisé.
+
+`GET /api/v1/admin/verifications?status=pending` : file d'attente de revue,
+triée du plus ancien document déposé au plus récent (FIFO), filtrable par
+statut (défaut `pending`). `GET .../verifications/{id}/content` : le
+binaire du document, via la même couche de stockage privée que l'onboarding
+artisan (jamais un lien public) -- réservé admin, pas seulement au
+propriétaire du document. `POST .../verifications/{id}/approve` et
+`.../reject` (`{ note }`, obligatoire, ≥ 3 caractères) tranchent un
+document `pending` : `reviewed_by`/`reviewed_at` sont posés côté serveur
+depuis l'admin authentifié (JWT), jamais un champ d'entrée. Chaque décision
+recalcule immédiatement `artisan_profile.verified_status`
+(`compute_verified_status`) -- une approbation complète (tous les types
+requis à `approved`) rend l'artisan visible en recherche publique et
+contactable ; un document déjà tranché ne se re-tranche pas
+(`VERIFICATION_DEJA_TRAITEE`, 409). `GET /admin/artisans/{id}` : vue admin
+d'un artisan (profil + historique complet de ses documents, contrairement
+au profil public qui n'en expose aucun) pour décider en contexte.
+
+Frontend : `/admin/verifications`, hors `MainLayout` (outil interne, pas
+d'identité "client"/"Espace Pro"). `RequireAdminRoute`
+(`src/components/auth/`) affiche l'écran 404 standard pour tout compte
+non-admin -- jamais un message "accès refusé" ni une redirection vers
+`/connexion`, l'un comme l'autre confirmeraient l'existence de la section.
+Aucun lien vers `/admin/*` n'apparaît dans la navigation pour un compte
+non-admin.
 
 ## Triage IA (Lot 11)
 

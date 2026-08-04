@@ -1,4 +1,6 @@
 import type {
+  AdminVerificationListItem,
+  AdminVerificationReview,
   Artisan,
   ArtisanStats,
   ChatMessage,
@@ -11,6 +13,7 @@ import type {
   Review,
   ServiceRequest,
   Trade,
+  VerificationDocStatus,
   VerificationDocType,
   VerificationDocument,
 } from '../../types';
@@ -80,6 +83,11 @@ export interface AddArtisanTradeInput {
   serviceRadiusM: number;
 }
 
+export interface AdminVerificationFilters {
+  /** Défaut serveur `pending` si omis (la file d'attente à traiter). */
+  status?: VerificationDocStatus;
+}
+
 /**
  * Contract for all data access, independent of implementation. `src/lib/api/index.ts`
  * is the only place that picks which implementation (mock today, HTTP later) satisfies it.
@@ -116,4 +124,8 @@ export interface ApiClient {
   refuseQuote(interventionId: string): Promise<Intervention>;
   completeIntervention(id: string): Promise<Intervention>;
   createReview(interventionId: string, input: CreateReviewInput): Promise<Review>;
+  listAdminVerifications(filters?: AdminVerificationFilters): Promise<AdminVerificationListItem[]>;
+  getAdminVerificationDocumentBlob(verificationId: string): Promise<Blob>;
+  approveVerification(verificationId: string): Promise<AdminVerificationReview>;
+  rejectVerification(verificationId: string, note: string): Promise<AdminVerificationReview>;
 }

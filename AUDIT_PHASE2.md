@@ -180,9 +180,63 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   quel que soit le statut, pour que l'artisan voie son propre profil.
 - **Reste hors périmètre** (inchangé par ce lot) : revue admin des documents
   (approve/reject, Lot C -- `verification.status` reste à `pending` tant
-  qu'aucun endpoint ne le fait évoluer), upload d'avatar en tant que fichier
-  (implémenté comme simple champ URL texte pour ce lot, cf. BUILD_PLAN.md),
-  messagerie, retrait d'Express, paiements.
+  qu'aucun endpoint ne le fait évoluer), messagerie, retrait d'Express,
+  paiements.
+- **Mise à jour ultérieure (même branche, avant merge)** : l'avatar a
+  finalement été implémenté en upload de fichier réel (`POST
+  /artisans/me/avatar`, stockage public dédié distinct du stockage privé
+  des documents, servi via `/static/avatars`) suite à un retour direct de
+  l'utilisateur après la première livraison de ce lot -- le champ URL texte
+  reste disponible en complément (coller un lien externe), les deux
+  chemins écrivent le même champ `avatar_url`. Détail complet :
+  BUILD_PLAN.md §3.3.
+
+## Mise à jour — `feat/admin-verification`
+
+- **§1, écran `/admin/verifications`** : ferme le trou identifié dans la
+  mise à jour `feat/artisan-onboarding` ci-dessus ("revue admin ... hors
+  périmètre, verification.status reste à pending indéfiniment"). Nouvel
+  écran, volontairement en dehors de `MainLayout` (outil interne, pas
+  d'identité "client"/"artisan Pro") : file d'attente FIFO, aperçu du
+  document à la demande (`Blob` + `URL.createObjectURL`, jamais un `<img
+  src>` direct qui ne pourrait pas porter l'en-tête `Authorization`),
+  approbation en un clic, rejet avec motif obligatoire. `RequireAdminRoute`
+  (nouveau, `src/components/auth/`) affiche l'écran 404 standard pour tout
+  compte non-admin -- ni redirection vers `/connexion`, ni message "accès
+  refusé", les deux auraient confirmé l'existence de la section.
+- **§2, nouveaux endpoints backend** : `GET /admin/verifications`, `GET
+  .../{id}/content`, `POST .../{id}/approve`, `POST .../{id}/reject`, `GET
+  /admin/artisans/{id}` -- tous `require_role(Role.ADMIN)`. Détail complet :
+  BUILD_PLAN.md §3.2, §4.4.
+- **§3, cohérence client/artisan** : le cycle complet (upload artisan Lot B
+  → décision admin Lot C → conséquence visible côté client) est maintenant
+  bouclé et testé de bout en bout dans les deux sens : approbation complète
+  → l'artisan apparaît en recherche publique ET devient contactable (`POST
+  /interventions` accepte enfin) ; rejet → reste invisible et non
+  contactable, avec motif consultable par l'artisan qui peut renvoyer un
+  document (`pending -> rejected -> pending` après renvoi, testé).
+- **Sécurité (lot sensible)** : le rôle admin reste, comme documenté au lot
+  `feat/auth-signup` pour le rôle en général, **totalement inatteignable
+  via l'application** -- ce lot l'illustre concrètement avec
+  `scripts/create_admin.py`, seul chemin, exigeant un accès direct à la
+  base. Toutes les routes `/admin/*` renvoient exactement les mêmes erreurs
+  génériques (`403 ROLE_INSUFFISANT`, `401`) que n'importe quelle autre
+  route protégée par rôle ailleurs dans l'API -- aucune fuite d'information
+  distinctive pour un tiers non autorisé qui tenterait de deviner
+  l'existence de l'espace admin. `reviewed_by`/`reviewed_at` sont posés
+  côté serveur depuis l'admin authentifié (JWT), jamais un champ d'entrée
+  accepté du client (testé en tentant de l'injecter explicitement dans le
+  corps de la requête).
+- **Reco documentée, non construite** : une table d'audit dédiée
+  (journal append-only, au-delà de `reviewed_by`/`reviewed_at` qui ne
+  portent qu'une seule décision par ligne `verification`) serait utile si
+  l'espace admin grandit (plusieurs admins, besoin d'historique complet).
+  Hors périmètre pour l'instant -- voir BUILD_PLAN.md §4.4 pour le
+  raisonnement complet.
+- **Reste hors périmètre** (inchangé par ce lot) : messagerie, retrait
+  d'Express, paiements, écran admin listant l'historique
+  approuvé/rejeté (l'API le permet déjà via `?status=`, pas encore
+  d'onglet côté UI).
 
 ## Résumé exécutif
 

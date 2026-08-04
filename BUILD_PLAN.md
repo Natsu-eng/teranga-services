@@ -600,6 +600,43 @@ GET  /api/v1/conversations/{id}/messages
 POST /api/v1/conversations/{id}/messages   { body }
 ```
 
+**Admin** (espace admin -- toutes les routes exigent `require_role(Role.ADMIN)`,
+BUILD_PLAN.md §4.4 ; un client/artisan reçoit 403 ROLE_INSUFFISANT, un
+anonyme 401, exactement les mêmes erreurs génériques que n'importe quelle
+autre route protégée par rôle)
+```
+GET  /api/v1/admin/verifications   ?status=pending|approved|rejected      ✅ espace admin
+                                    (défaut pending)&page=&page_size=
+                                    → file d'attente de revue, triée du plus
+                                      ancien document déposé au plus récent (FIFO)
+GET  /api/v1/admin/verifications/{id}/content                            ✅ espace admin
+                                    → le binaire du document, via la même couche
+                                      de stockage privée que Lot B (jamais d'URL
+                                      publique) -- réservé admin, pas seulement
+                                      au propriétaire du document
+POST /api/v1/admin/verifications/{id}/approve                            ✅ espace admin
+                                    → passe la ligne verification à `approved`,
+                                      reviewed_by = l'admin authentifié (JWT,
+                                      jamais un champ d'entrée), reviewed_at
+                                      horodaté serveur ; recalcule
+                                      immédiatement artisan_profile.verified_status
+POST /api/v1/admin/verifications/{id}/reject     { note }                ✅ espace admin
+                                    → idem, à `rejected` ; `note` obligatoire
+                                      (min 3 caractères) -- jamais de rejet muet,
+                                      l'artisan la voit dans son espace (Lot B)
+GET  /api/v1/admin/artisans/{id}                                         ✅ espace admin
+                                    → vue admin d'un artisan : profil + TOUS ses
+                                      documents (historique complet, contrairement
+                                      à ArtisanDetailOut public qui n'en expose
+                                      aucun) -- pour décider en contexte
+```
+Un document déjà tranché (`approved`/`rejected`) ne se re-tranche pas :
+`VERIFICATION_DEJA_TRAITEE` (409) si un admin tente d'approuver/rejeter une
+ligne qui n'est plus `pending` -- protège contre une double décision sur une
+ligne devenue obsolète (l'artisan a pu déjà renvoyer un nouveau document du
+même type après un rejet, seule la ligne la plus récente par type comptant
+pour `compute_verified_status`, §2.2).
+
 ---
 
 ## 3.3 Stockage de fichiers privés (onboarding artisan)
@@ -793,6 +830,56 @@ crée aussi la ligne `artisan_profile` associée : `is_available=false`
 seed/les tests) et `verified_status=none` (défaut du modèle, aucun document
 soumis). L'onboarding (bio, métiers, zone d'intervention, documents de
 vérification) reste un chantier distinct, hors périmètre de ce lot.
+
+### 4.4 Rôle admin : bootstrap hors application (lot `feat/admin-verification`)
+
+**Décision de sécurité actée, non négociable : le rôle `admin` ne s'obtient
+JAMAIS via l'application.** Aucun endpoint, aucun paramètre d'API (schéma
+d'entrée, query param, header) ne peut créer ni promouvoir un admin — ni au
+signup (§4.3, `_SIGNUP_ROLES` verrouille explicitement `{client, artisan}`),
+ni via aucune route de l'espace admin lui-même (`PATCH`/`POST
+/admin/*` ne touchent jamais `role`, seulement `verification.status` et
+`artisan_profile.verified_status` dérivé).
+
+**Seul chemin : `scripts/create_admin.py`, en ligne de commande, côté
+serveur.** Exige un accès direct à `DATABASE_URL` — jamais exposé sur le
+réseau, jamais appelable depuis le frontend. Promeut un utilisateur
+**déjà inscrit** via le parcours OTP normal (par son numéro E.164) ; ne
+crée jamais de compte lui-même, refuse explicitement un numéro inconnu.
+Idempotent : relancer sur un numéro déjà admin est un succès silencieux
+(`already_admin=True`), pas une erreur — un opérateur qui rejoue la
+commande par prudence ne casse rien. Usage exact et exemple dans
+`backend/README.md`.
+
+**Toutes les routes `/api/v1/admin/*` exigent `require_role(Role.ADMIN)`**
+(même dépendance FastAPI que le reste de l'API, Lot 8) — un client ou un
+artisan reçoit `403 ROLE_INSUFFISANT`, un anonyme `401`, exactement les
+mêmes erreurs génériques que n'importe quelle autre route protégée par
+rôle ailleurs dans l'API : aucun message, aucun code, aucun comportement
+distinct ne permet à un tiers non autorisé de déduire qu'une route admin
+existe spécifiquement. Côté frontend, `RequireAdminRoute` pousse le même
+principe plus loin : un compte non-admin (y compris non authentifié) qui
+atteint `/admin/*` voit l'écran "Page introuvable" — **exactement le même
+composant qu'une route qui n'existe pas du tout**, jamais un message
+"accès refusé" ni une redirection vers `/connexion`, l'un comme l'autre
+confirmeraient l'existence de la section. Aucun lien vers `/admin/*`
+n'apparaît nulle part dans la navigation (`BottomNav`, `Header`) pour un
+compte non-admin — accès uniquement par URL directe, connue de l'admin.
+
+**Traçabilité.** `reviewed_by`/`reviewed_at` (table `verification`, §2.2)
+sont renseignés côté serveur à chaque décision (`app.services.admin_verification`)
+depuis l'admin authentifié (JWT) — jamais un champ d'entrée accepté du
+client, même en tentant de l'injecter dans le corps de la requête (testé).
+Un document déjà tranché ne se re-tranche pas (`VERIFICATION_DEJA_TRAITEE`,
+409) : chaque ligne `verification` ne porte donc jamais plus d'une
+décision, `reviewed_by`/`reviewed_at` restent un audit trail fiable et
+non réécrit pour ce lot. **Recommandation, non construite ici** : une table
+d'audit dédiée (journal append-only de toutes les actions admin, au-delà
+de la seule dernière décision par document) serait utile si l'espace admin
+grandit (plusieurs admins, besoin d'historique complet même après un
+éventuel changement de décision) — hors périmètre pour l'instant, `reviewed_by`/
+`reviewed_at` suffisent au besoin actuel (une décision définitive par
+document).
 
 ---
 
@@ -997,6 +1084,29 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   lieu d'un dashboard vide pour un artisan non encore vérifié. *But : un
   artisan peut se préparer à être vérifié, sans jamais pouvoir contourner la
   vérification pour être contacté.*
+- **Lot `feat/admin-verification` — Espace admin de revue.** Ferme la boucle
+  ouverte par l'onboarding artisan : les documents déposés (Lot B) restaient
+  `pending` indéfiniment, personne ne pouvait les approuver/rejeter. Rôle
+  admin bootstrapé exclusivement par script (`scripts/create_admin.py`,
+  jamais un endpoint — §4.4). `GET /admin/verifications` (file d'attente
+  FIFO, filtrable par statut), `GET .../{id}/content` (binaire via la même
+  couche de stockage privée que Lot B), `POST .../{id}/approve` et
+  `.../reject` (`note` obligatoire, `reviewed_by`/`reviewed_at` serveur,
+  jamais falsifiables), `GET /admin/artisans/{id}` (vue admin, tous les
+  documents). Chaque décision recalcule immédiatement
+  `artisan_profile.verified_status` (`compute_verified_status`, §2.2) : une
+  approbation complète rend l'artisan visible en recherche (§3.2) et
+  contactable (`POST /interventions` ne rejette plus `ARTISAN_NON_VERIFIE`),
+  un rejet le laisse invisible et non contactable, avec motif visible côté
+  artisan (Lot B) qui peut renvoyer un document (testé de bout en bout,
+  `pending -> rejected -> pending` après renvoi). Toutes les routes
+  `/admin/*` verrouillées par `require_role(Role.ADMIN)`, indiscernables
+  d'une route protégée par rôle ordinaire pour un tiers non autorisé.
+  Front : `/admin/verifications` (hors `MainLayout`, outil interne),
+  `RequireAdminRoute` affiche l'écran 404 standard pour tout compte non-admin
+  (jamais un message "accès refusé", jamais de lien visible dans la
+  navigation). *But : le cycle de vérification artisan est enfin complet,
+  de l'upload à la décision humaine.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
