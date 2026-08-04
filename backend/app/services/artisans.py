@@ -212,7 +212,7 @@ def _to_list_item(
     )
 
 
-def _to_detail(
+def to_detail(
     profile: ArtisanProfile, *, required_doc_types: Sequence[VerificationDocType]
 ) -> ArtisanDetailOut:
     return ArtisanDetailOut(
@@ -304,7 +304,7 @@ async def get_artisan_detail(
 ) -> ArtisanDetailOut:
     profile = await get_artisan_or_404(session, artisan_id)
     required_doc_types = list(settings.verification_required_doc_types)
-    return _to_detail(profile, required_doc_types=required_doc_types)
+    return to_detail(profile, required_doc_types=required_doc_types)
 
 
 def _is_owner_or_admin(profile: ArtisanProfile, requester: User) -> bool:
@@ -383,7 +383,7 @@ async def update_profile(
 
     await session.flush()
     required_doc_types = list(settings.verification_required_doc_types)
-    return _to_detail(profile, required_doc_types=required_doc_types)
+    return to_detail(profile, required_doc_types=required_doc_types)
 
 
 def _to_polygon(points: Sequence[Any]) -> WKTElement:
@@ -425,7 +425,7 @@ async def add_trade(
     )
 
     required_doc_types = list(settings.verification_required_doc_types)
-    return _to_detail(profile, required_doc_types=required_doc_types)
+    return to_detail(profile, required_doc_types=required_doc_types)
 
 
 async def remove_trade(
@@ -446,4 +446,4 @@ async def remove_trade(
     )
 
     required_doc_types = list(settings.verification_required_doc_types)
-    return _to_detail(profile, required_doc_types=required_doc_types)
+    return to_detail(profile, required_doc_types=required_doc_types)

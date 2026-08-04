@@ -448,6 +448,17 @@ PATCH /api/v1/artisans/me         (artisan) { is_available?, bio?, years_experie
                                    token), mise à jour PARTIELLE (seuls les champs fournis
                                    sont appliqués). Ne touche jamais verified_status (dérivé)
                                    ni le rôle -- absents du schéma d'entrée.
+POST /api/v1/artisans/me/avatar   (artisan) multipart/form-data { file }              ✅ onboarding artisan
+                                   -- upload de la photo de profil (JPEG/PNG, magic
+                                   bytes). Donnée PUBLIQUE (contrairement aux
+                                   documents ci-dessous) : stockage dédié, servi via
+                                   /static/avatars. avatar_url renvoyé est une URL
+                                   ABSOLUE (BACKEND_PUBLIC_BASE_URL) -- front et back
+                                   sont deux services séparés en prod (§1). L'ancien
+                                   fichier est supprimé au remplacement (best-effort).
+                                   PATCH /artisans/me (ci-dessus) accepte toujours
+                                   avatar_url en texte libre en complément (coller un
+                                   lien externe), les deux chemins écrivent le même champ.
 POST /api/v1/artisans/me/trades   (artisan) { trade_code, hourly_rate_fcfa,           ✅ onboarding artisan
                                    service_radius_m, service_area? } -- déclare un métier
                                    exercé. Rejette un trade_code inconnu/inactif
@@ -657,6 +668,25 @@ Railway (pas de disque persistant).
    source utilisée comme **filtre SQL** de visibilité par la recherche
    publique (§3.2), jamais comme valeur de sortie API (toujours recalculée
    à la volée par la couche de lecture).
+
+**Stockage PUBLIC (photo de profil, `POST /artisans/me/avatar`)** — à ne
+jamais confondre avec le stockage privé ci-dessus. Une photo de profil est
+censée être visible (recherche, profil détaillé), contrairement à une CNI :
+`get_avatar_storage_backend` (même `Protocol StorageBackend`, répertoire
+dédié `AVATAR_STORAGE_LOCAL_DIR`, jamais `STORAGE_LOCAL_DIR`) écrit sous un
+répertoire monté en **lecture publique** par `app.main`
+(`StaticFiles`, `/static/avatars`). Mêmes garde-fous d'upload que les
+documents (magic bytes JPEG/PNG uniquement, taille plafonnée
+`AVATAR_MAX_UPLOAD_BYTES`), sans rate limiting dédié (risque bien moindre
+qu'un KYC : authentifié, ne peut affecter que son propre stockage).
+`avatar_url` renvoyé est une **URL absolue**
+(`{BACKEND_PUBLIC_BASE_URL}/static/avatars/...}`) et non relative : front
+(Vercel) et back (Railway) sont deux services sur des origines différentes
+en prod (§1), le front ne peut pas deviner l'origine du back. L'ancien
+fichier est supprimé au remplacement (best-effort, jamais bloquant).
+`PATCH /artisans/me` continue par ailleurs d'accepter `avatar_url` en texte
+libre (coller une URL externe) : les deux chemins écrivent le même champ,
+sans que l'un n'exclue l'autre.
 
 ---
 

@@ -327,6 +327,51 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('uploadAvatar', () => {
+    it('sends a multipart POST with the file, never JSON-serialized', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          ...backendArtisan,
+          cover_url: null,
+          avatar_url: 'http://localhost:8000/static/avatars/a1/abc.jpg',
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const file = new File(['fake-image-bytes'], 'avatar.jpg', { type: 'image/jpeg' });
+
+      const profile = await httpApiClient.uploadAvatar!(file);
+
+      expect(profile.avatarUrl).toBe('http://localhost:8000/static/avatars/a1/abc.jpg');
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me/avatar');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBeInstanceOf(FormData);
+      const body = options.body as FormData;
+      expect(body.get('file')).toBe(file);
+    });
+
+    it('propagates a magic-bytes rejection as an ApiError', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(422, {
+            error: {
+              code: 'AVATAR_TYPE_INVALIDE',
+              message: 'La photo de profil doit être une image JPEG ou PNG.',
+            },
+          }),
+        ),
+      );
+      const file = new File(['not-an-image'], 'fake.jpg', { type: 'image/jpeg' });
+
+      const promise = httpApiClient.uploadAvatar!(file);
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        message: 'La photo de profil doit être une image JPEG ou PNG.',
+      });
+    });
+  });
+
   describe('addArtisanTrade', () => {
     it('sends a POST to /artisans/me/trades and maps the updated profile', async () => {
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { ...backendArtisan, cover_url: null }));

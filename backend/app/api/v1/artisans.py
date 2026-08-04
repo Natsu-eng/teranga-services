@@ -36,11 +36,12 @@ from app.schemas.artisans import (
 from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
+from app.services import avatars as avatars_service
 from app.services import documents as documents_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
 from app.services.rate_limit import SlidingWindowRateLimiter, get_document_upload_rate_limiter
-from app.services.storage import get_storage_backend
+from app.services.storage import get_avatar_storage_backend, get_storage_backend
 
 router = APIRouter(prefix="/artisans", tags=["artisans"])
 
@@ -94,6 +95,29 @@ async def update_my_profile(
 ) -> ArtisanDetailOut:
     result = await artisans_service.update_profile(
         session, user=artisan, payload=payload, settings=settings
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/me/avatar", response_model=ArtisanDetailOut)
+async def upload_my_avatar(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+    file: Annotated[UploadFile, File()],
+) -> ArtisanDetailOut:
+    # Photo de profil : donnée PUBLIQUE, contrairement aux documents de
+    # vérification -- stockage dédié (get_avatar_storage_backend), jamais
+    # le stockage privé (get_storage_backend).
+    content = await file.read(settings.avatar_max_upload_bytes + 1)
+
+    result = await avatars_service.upload_avatar(
+        session,
+        user=artisan,
+        content=content,
+        settings=settings,
+        storage=get_avatar_storage_backend(settings),
     )
     await session.commit()
     return result

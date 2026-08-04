@@ -18,6 +18,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       ...actual.api,
       getMyArtisanProfile: vi.fn(),
       updateMyArtisanProfile: vi.fn(),
+      uploadAvatar: vi.fn(),
       addArtisanTrade: vi.fn(),
       removeArtisanTrade: vi.fn(),
       listMyVerificationDocuments: vi.fn(),
@@ -93,6 +94,7 @@ describe('ArtisanOnboardingScreen', () => {
     mockedApi.listMyVerificationDocuments.mockReset().mockResolvedValue(verificationFixture);
     mockedApi.listTrades.mockReset().mockResolvedValue(tradesFixture);
     mockedApi.updateMyArtisanProfile.mockReset();
+    mockedApi.uploadAvatar.mockReset();
     mockedApi.addArtisanTrade.mockReset();
     mockedApi.removeArtisanTrade.mockReset();
     mockedApi.uploadVerificationDocument.mockReset();
@@ -144,6 +146,46 @@ describe('ArtisanOnboardingScreen', () => {
       ),
     );
     expect(await screen.findByDisplayValue('Nouvelle bio soignée.')).toBeInTheDocument();
+  });
+
+  it('uploads a new avatar and reflects the returned URL', async () => {
+    mockedApi.uploadAvatar.mockResolvedValue({
+      ...profileFixture,
+      avatarUrl: 'http://localhost:8000/static/avatars/artisan-1/abc123.jpg',
+    });
+
+    const { container } = renderScreen();
+
+    await screen.findByText('Changer la photo');
+    const avatarInput = container.querySelector(
+      'input[type="file"][accept="image/png,image/jpeg"]',
+    ) as HTMLInputElement;
+    const file = new File(['fake-bytes'], 'avatar.jpg', { type: 'image/jpeg' });
+    fireEvent.change(avatarInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockedApi.uploadAvatar).toHaveBeenCalledWith(file));
+    expect(
+      await screen.findByDisplayValue('http://localhost:8000/static/avatars/artisan-1/abc123.jpg'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows an inline error when the avatar upload is rejected', async () => {
+    mockedApi.uploadAvatar.mockRejectedValue(
+      new ApiError('validation', 'La photo de profil doit être une image JPEG ou PNG.'),
+    );
+
+    const { container } = renderScreen();
+
+    await screen.findByText('Changer la photo');
+    const avatarInput = container.querySelector(
+      'input[type="file"][accept="image/png,image/jpeg"]',
+    ) as HTMLInputElement;
+    const file = new File(['fake-bytes'], 'avatar.jpg', { type: 'image/jpeg' });
+    fireEvent.change(avatarInput, { target: { files: [file] } });
+
+    expect(
+      await screen.findByText('La photo de profil doit être une image JPEG ou PNG.'),
+    ).toBeInTheDocument();
   });
 
   it('adds a declared trade and shows it in the list', async () => {
@@ -243,7 +285,7 @@ describe('ArtisanOnboardingScreen', () => {
     await screen.findByText("Carte d'identité (CNI)");
     // REQUIRED_DOCS affiche la CNI avant le selfie -- le premier input
     // fichier caché de la page est toujours celui de la CNI.
-    const [cniInput] = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    const [cniInput] = container.querySelectorAll<HTMLInputElement>('input[type="file"][accept="image/png,image/jpeg,application/pdf"]');
     const file = new File(['fake-bytes'], 'cni.jpg', { type: 'image/jpeg' });
     fireEvent.change(cniInput, { target: { files: [file] } });
 
@@ -262,7 +304,7 @@ describe('ArtisanOnboardingScreen', () => {
     const { container } = renderScreen();
 
     await screen.findByText("Carte d'identité (CNI)");
-    const [cniInput] = container.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    const [cniInput] = container.querySelectorAll<HTMLInputElement>('input[type="file"][accept="image/png,image/jpeg,application/pdf"]');
     const file = new File(['fake-bytes'], 'cni.jpg', { type: 'image/jpeg' });
     fireEvent.change(cniInput, { target: { files: [file] } });
 

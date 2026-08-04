@@ -95,6 +95,7 @@ export interface ApiClient {
   updateArtisanAvailability(isAvailable: boolean): Promise<Artisan>;
   getMyArtisanProfile(artisanId: string): Promise<MyArtisanProfile>;
   updateMyArtisanProfile(input: UpdateArtisanProfileInput): Promise<MyArtisanProfile>;
+  uploadAvatar(file: File): Promise<MyArtisanProfile>;
   addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile>;
   removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile>;
   listMyVerificationDocuments(): Promise<MyVerification>;

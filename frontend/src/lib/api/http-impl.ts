@@ -416,6 +416,7 @@ export const httpApiClient: Pick<
   | 'updateArtisanAvailability'
   | 'getMyArtisanProfile'
   | 'updateMyArtisanProfile'
+  | 'uploadAvatar'
   | 'addArtisanTrade'
   | 'removeArtisanTrade'
   | 'listMyVerificationDocuments'
@@ -471,6 +472,16 @@ export const httpApiClient: Pick<
     const detail = await apiRequest<BackendArtisanDetail>('/artisans/me', {
       method: 'PATCH',
       body,
+    });
+    return mapMyArtisanProfile(detail);
+  },
+
+  async uploadAvatar(file: File): Promise<MyArtisanProfile> {
+    const formData = new FormData();
+    formData.set('file', file);
+    const detail = await apiRequest<BackendArtisanDetail>('/artisans/me/avatar', {
+      method: 'POST',
+      formData,
     });
     return mapMyArtisanProfile(detail);
   },

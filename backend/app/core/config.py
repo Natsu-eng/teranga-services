@@ -226,6 +226,30 @@ class Settings(BaseSettings):
     rate_limit_document_upload_per_user_max: int = 10
     rate_limit_document_upload_per_user_window_seconds: int = 600
 
+    # Stockage PUBLIC (photo de profil artisan) -- volontairement distinct du
+    # stockage privé ci-dessus (verification.doc_url) : une photo de profil
+    # est censée être visible publiquement (recherche, profil détaillé),
+    # contrairement à une CNI. Même principe fail-fast que STORAGE_BACKEND :
+    # "local" est le seul fournisseur implémenté aujourd'hui.
+    avatar_storage_backend: Literal["local"] = "local"
+    # Répertoire local, monté en lecture publique par app/main.py sous
+    # /static/avatars (StaticFiles) -- jamais le même répertoire que
+    # STORAGE_LOCAL_DIR (documents privés), pour ne jamais risquer de servir
+    # publiquement un document de vérification par erreur de configuration.
+    avatar_storage_local_dir: str = "var/public/avatars"
+    # Taille maximale d'une photo de profil, en octets. Défaut 4 Mo : large
+    # pour une photo prise au téléphone, plus bas que STORAGE_MAX_UPLOAD_BYTES
+    # (8 Mo) car un avatar n'a pas besoin de la même résolution qu'un
+    # document d'identité lisible.
+    avatar_max_upload_bytes: int = 4 * 1024 * 1024
+
+    # Origine publique du backend, utilisée pour construire l'URL absolue
+    # d'un avatar (`{backend_public_base_url}/static/avatars/...`). Une URL
+    # relative ne suffit pas : front (Vercel) et back (Railway) sont deux
+    # services séparés en prod (BUILD_PLAN.md §1), sur des origines
+    # différentes -- le front ne peut pas deviner l'origine du back.
+    backend_public_base_url: str = "http://localhost:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:

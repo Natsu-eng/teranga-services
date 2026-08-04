@@ -108,15 +108,40 @@ class LocalStorageBackend:
         await asyncio.to_thread(path.unlink, True)
 
 
+def resolve_local_dir(raw: str) -> Path:
+    """Résout un chemin de `Settings` relatif au dossier `backend/` (pas au
+    répertoire courant du process, qui varie selon comment il est lancé) --
+    partagé par le stockage privé (documents de vérification) et le stockage
+    public (avatars)."""
+    path = Path(raw)
+    if not path.is_absolute():
+        path = _BACKEND_ROOT / path
+    return path
+
+
 def get_storage_backend(settings: Settings | None = None) -> StorageBackend:
     settings = settings or get_settings()
     if settings.storage_backend == "local":
-        base_dir = Path(settings.storage_local_dir)
-        if not base_dir.is_absolute():
-            base_dir = _BACKEND_ROOT / base_dir
-        return LocalStorageBackend(base_dir)
+        return LocalStorageBackend(resolve_local_dir(settings.storage_local_dir))
     raise NotImplementedError(
         f"Backend de stockage {settings.storage_backend!r} non implémenté. "
         "Choisissez et implémentez un fournisseur cloud privé (voir "
         "app/services/storage.py) avant de l'activer via STORAGE_BACKEND."
+    )
+
+
+def get_avatar_storage_backend(settings: Settings | None = None) -> StorageBackend:
+    """Stockage PUBLIC (avatars) -- à ne jamais confondre avec
+    `get_storage_backend` (documents de vérification, strictement privé).
+    `LocalStorageBackend` y écrit sous `Settings.avatar_storage_local_dir`,
+    monté en lecture publique par `app.main` (`StaticFiles`) : contrairement
+    aux documents de vérification, une photo de profil est censée être
+    visible publiquement (résultats de recherche, profil détaillé)."""
+    settings = settings or get_settings()
+    if settings.avatar_storage_backend == "local":
+        return LocalStorageBackend(resolve_local_dir(settings.avatar_storage_local_dir))
+    raise NotImplementedError(
+        f"Backend de stockage avatar {settings.avatar_storage_backend!r} non implémenté. "
+        "Choisissez et implémentez un fournisseur cloud (bucket public, CDN) avant de "
+        "l'activer via AVATAR_STORAGE_BACKEND."
     )

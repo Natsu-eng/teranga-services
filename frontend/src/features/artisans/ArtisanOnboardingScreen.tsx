@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { SafeImage } from '../../components/ui/SafeImage';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { formatFcfa } from '../../lib/format';
 import { getCurrentPosition, type Coordinates } from '../../lib/geo';
@@ -199,6 +200,16 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     void documentUpload.upload(docType, file);
   }
 
+  async function handleAvatarFileSelected(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const updated = await actions.uploadAvatar(file);
+    if (updated) setAvatarUrl(updated.avatarUrl ?? '');
+  }
+
   const declaredTradeCodes = new Set((profile?.trades ?? []).map((t) => t.tradeCode));
   const availableTrades = (trades ?? []).filter((t) => !declaredTradeCodes.has(t.code));
 
@@ -247,6 +258,44 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                 <User className="w-5 h-5" /> Mon profil
               </h2>
 
+              <div className="flex flex-col items-center gap-3 pt-1 pb-2">
+                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border-subtle shrink-0 bg-surface-muted">
+                  <SafeImage
+                    src={avatarUrl || null}
+                    fallback="/images/placeholder-avatar.svg"
+                    alt="Photo de profil"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <label className="inline-flex items-center gap-2 py-2 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold cursor-pointer hover:bg-primary/5 active:scale-95 transition-all">
+                  <UploadCloud className="w-4 h-4" />
+                  <span>{actions.isUploadingAvatar ? 'Envoi...' : 'Changer la photo'}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    className="hidden"
+                    disabled={actions.isUploadingAvatar}
+                    onChange={handleAvatarFileSelected}
+                  />
+                </label>
+                {actions.avatarError && (
+                  <p className="text-xs text-destructive text-center">{actions.avatarError}</p>
+                )}
+                <details className="w-full text-center">
+                  <summary className="text-[11px] font-sora text-muted-foreground-soft cursor-pointer">
+                    Ou collez une URL d’image existante
+                  </summary>
+                  <input
+                    id="onboarding-avatar-url"
+                    type="url"
+                    value={avatarUrl}
+                    onChange={(e) => setAvatarUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="mt-2 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                  />
+                </details>
+              </div>
+
               <div>
                 <label htmlFor="onboarding-bio" className="text-xs font-sora font-bold text-muted-foreground-soft uppercase">
                   Bio
@@ -273,20 +322,6 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                   max={80}
                   value={yearsExperience}
                   onChange={(e) => setYearsExperience(e.target.value)}
-                  className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="onboarding-avatar" className="text-xs font-sora font-bold text-muted-foreground-soft uppercase">
-                  Photo de profil (URL)
-                </label>
-                <input
-                  id="onboarding-avatar"
-                  type="url"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://..."
                   className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
                 />
               </div>
