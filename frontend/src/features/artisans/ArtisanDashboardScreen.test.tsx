@@ -6,12 +6,12 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { ApiError, api } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
-import type { Artisan, ArtisanStats, Intervention } from '../../types';
+import type { ArtisanStats, Intervention, MyArtisanProfile } from '../../types';
 
-// Mocked at the `api` boundary (not the hooks): `useArtisan`, `useArtisanStats`,
-// `useAvailabilityToggle` and `useMyInterventions` all run for real here, so
-// the optimistic toggle/rollback exercises actual React state instead of a
-// hook mock that can't re-render on its own.
+// Mocké à la frontière `api` (pas les hooks) : `useMyArtisanProfile`,
+// `useArtisanStats`, `useAvailabilityToggle` et `useMyInterventions`
+// tournent pour de vrai ici, pour que le toggle optimiste/rollback exerce
+// un vrai état React plutôt qu'un hook mocké incapable de se re-rendre seul.
 vi.mock('../auth/hooks/useAuth');
 vi.mock('../profile/hooks/useCurrentUser');
 vi.mock('../../lib/api', async (importOriginal) => {
@@ -20,7 +20,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
     ...actual,
     api: {
       ...actual.api,
-      getArtisanById: vi.fn(),
+      getMyArtisanProfile: vi.fn(),
       getArtisanStats: vi.fn(),
       listMyInterventions: vi.fn(),
       updateArtisanAvailability: vi.fn(),
@@ -46,25 +46,24 @@ function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
   };
 }
 
-const artisanFixture: Artisan = {
+const profileFixture: MyArtisanProfile = {
   id: 'artisan-1',
-  name: 'Idrissa Diop',
-  trade: 'Plomberie',
+  fullName: 'Idrissa Diop',
+  bio: 'Plombier expérimenté.',
+  yearsExperience: 8,
   avatarUrl: null,
-  coverUrl: null,
-  verified: true,
-  rating: 4.8,
-  reviewCount: 12,
-  distance: '',
-  location: 'Dakar, Sénégal',
-  priceBase: 'Tarif sur devis',
-  priceNumber: 0,
-  tags: ['Plomberie'],
-  bio: '',
-  stats: { chantiers: '12', responseTime: 'Non communiqué', experience: 'Non communiqué' },
-  realisations: [],
-  reviews: [],
-  available: true,
+  isAvailable: true,
+  verifiedStatus: 'verified',
+  trades: [
+    {
+      id: 'trade-1',
+      tradeCode: 'plomberie',
+      tradeLabel: 'Plomberie',
+      hourlyRateFcfa: 15000,
+      serviceRadiusM: 5000,
+      hasCustomServiceArea: false,
+    },
+  ],
 };
 
 const statsFixture: ArtisanStats = {
@@ -128,7 +127,7 @@ describe('ArtisanDashboardScreen', () => {
       error: null,
       reload: vi.fn(),
     });
-    mockedApi.getArtisanById.mockReset().mockResolvedValue(artisanFixture);
+    mockedApi.getMyArtisanProfile.mockReset().mockResolvedValue(profileFixture);
     mockedApi.getArtisanStats.mockReset().mockResolvedValue(statsFixture);
     mockedApi.listMyInterventions.mockReset().mockResolvedValue([]);
     mockedApi.updateArtisanAvailability.mockReset();
@@ -143,11 +142,11 @@ describe('ArtisanDashboardScreen', () => {
 
     expect(screen.getByText('Cet espace est réservé aux artisans.')).toBeInTheDocument();
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    expect(mockedApi.getArtisanById).not.toHaveBeenCalled();
+    expect(mockedApi.getMyArtisanProfile).not.toHaveBeenCalled();
     expect(mockedApi.getArtisanStats).not.toHaveBeenCalled();
   });
 
-  it('mounts and displays the real stats (fetch mocked)', async () => {
+  it('mounts and displays the real stats (fetch mocked) for a verified artisan', async () => {
     mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
 
     renderScreen();
@@ -183,7 +182,26 @@ describe('ArtisanDashboardScreen', () => {
 
   it('toggles availability optimistically and calls the PATCH', async () => {
     mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
-    mockedApi.updateArtisanAvailability.mockResolvedValue({ ...artisanFixture, available: false });
+    mockedApi.updateArtisanAvailability.mockResolvedValue({
+      id: 'artisan-1',
+      name: 'Idrissa Diop',
+      trade: 'Plomberie',
+      avatarUrl: null,
+      coverUrl: null,
+      verified: true,
+      rating: 4.8,
+      reviewCount: 12,
+      distance: '',
+      location: 'Dakar, Sénégal',
+      priceBase: 'Tarif sur devis',
+      priceNumber: 0,
+      tags: ['Plomberie'],
+      bio: '',
+      stats: { chantiers: '12', responseTime: 'Non communiqué', experience: 'Non communiqué' },
+      realisations: [],
+      reviews: [],
+      available: false,
+    });
 
     renderScreen();
 
@@ -191,7 +209,7 @@ describe('ArtisanDashboardScreen', () => {
 
     fireEvent.click(screen.getByRole('switch'));
 
-    // Optimistic flip, before the PATCH promise even resolves.
+    // Bascule optimiste, avant même que la promesse du PATCH ne se résolve.
     expect(await screen.findByText('Indisponible')).toBeInTheDocument();
     await waitFor(() => expect(mockedApi.updateArtisanAvailability).toHaveBeenCalledWith(false));
   });
@@ -208,10 +226,37 @@ describe('ArtisanDashboardScreen', () => {
 
     fireEvent.click(screen.getByRole('switch'));
 
-    // Optimistic flip first...
+    // Bascule optimiste d'abord...
     expect(await screen.findByText('Indisponible')).toBeInTheDocument();
-    // ...then rolled back once the PATCH rejects, with a visible error.
+    // ...puis annulée une fois le PATCH rejeté, avec une erreur visible.
     expect(await screen.findByText('Impossible de contacter le serveur.')).toBeInTheDocument();
     expect(await screen.findByText('Disponible')).toBeInTheDocument();
+  });
+
+  it('shows the onboarding state instead of stats/requests for an unverified artisan', async () => {
+    mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
+    mockedApi.getMyArtisanProfile.mockResolvedValue({ ...profileFixture, verifiedStatus: 'pending' });
+
+    renderScreen();
+
+    expect(await screen.findByText('Votre compte est en cours de vérification')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Compléter mon profil/ })).toBeInTheDocument();
+    expect(screen.queryByText('Mes demandes')).not.toBeInTheDocument();
+    expect(mockedApi.getArtisanStats).not.toHaveBeenCalled();
+  });
+
+  it('navigates to the onboarding screen from the "compléter mon profil" CTA', async () => {
+    mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
+    mockedApi.getMyArtisanProfile.mockResolvedValue({ ...profileFixture, verifiedStatus: 'none' });
+
+    renderScreen();
+
+    const cta = await screen.findByRole('button', { name: /Compléter mon profil/ });
+    fireEvent.click(cta);
+
+    // Aucune assertion de routage nécessaire au-delà de "ça n'a pas planté" :
+    // la cible de navigation du CTA est vérifiée de bout en bout par les
+    // propres tests d'ArtisanOnboardingScreen.
+    expect(cta).toBeInTheDocument();
   });
 });

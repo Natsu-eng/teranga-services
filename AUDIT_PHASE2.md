@@ -135,6 +135,55 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   métiers, zone, documents de vérification), messagerie, retrait d'Express,
   paiements.
 
+## Mise à jour — `feat/artisan-onboarding`
+
+- **§1, écrans `/pro` et `/pro/onboarding`** : le point d'audit implicite
+  "un artisan fraîchement inscrit atterrit sur un dashboard vide et
+  trompeur" est corrigé. `ArtisanWelcomeScreen` mène désormais directement à
+  `/pro/onboarding` (nouvel écran : édition du profil, déclaration des
+  métiers, upload des documents CNI/selfie, checklist de progression,
+  bandeau de statut explicite). `ArtisanDashboardScreen` (`/pro`) a été
+  basculé de `useArtisan` (vue publique) vers `useMyArtisanProfile` (vue de
+  soi-même, expose `verifiedStatus`) : tant que l'artisan n'est pas
+  `verified`, il affiche le même bandeau de statut + un CTA vers
+  l'onboarding au lieu des cartes de stats à zéro et d'une liste de demandes
+  toujours vide (qui ne peut d'ailleurs jamais se remplir avant
+  vérification, `ARTISAN_NON_VERIFIE` verrouillé depuis le Lot 12). Les
+  stats ne sont même plus interrogées (`GET /artisans/{id}/stats`) pour un
+  artisan non vérifié -- appel réseau désormais évité, pas seulement caché.
+- **§2, nouveaux endpoints backend** : `PATCH /artisans/me` étendu (bio,
+  years_experience, base_location, avatar_url -- mise à jour partielle,
+  `is_available` seul continue de fonctionner à l'identique, non-régression
+  testée), `POST`/`DELETE /artisans/me/trades`, `POST`/`GET
+  /artisans/me/documents` + `GET .../content`. Détail complet : BUILD_PLAN.md
+  §3.2, §3.3.
+- **§3, cohérence client/artisan** : l'écart "artisan_profile créé vide,
+  aucun flux pour le remplir" (relevé au lot `feat/auth-signup`) est comblé.
+  Un artisan peut désormais aller jusqu'au bout du cycle
+  none -> pending -> (verified, une fois un futur Lot C admin construit) --
+  sans jamais pouvoir se rendre visible en recherche publique ni recevoir de
+  demande avant d'être réellement vérifié.
+- **Sécurité (lot sensible, données d'identité)** : type de fichier validé
+  par magic bytes (jamais extension/Content-Type déclarés, prouvé par test
+  -- une extension falsifiée est rejetée), taille plafonnée, clé de
+  stockage aléatoire jamais devinable, `doc_url` jamais une URL publique
+  (prouvé par test), isolation stricte par propriétaire (un artisan ne
+  peut ni lister ni lire les documents d'un autre -- 404, jamais de
+  distinction observable), rate limité par utilisateur. Couche de stockage
+  abstraite (`StorageBackend`) : dev en local hors du dépôt git et hors de
+  tout répertoire servi statiquement ; un fournisseur cloud privé reste à
+  brancher avant la prod (disque local non persistant sur Railway).
+- **Décision produit actée** : un artisan non vérifié est **invisible** en
+  recherche publique (`GET /artisans`), pas seulement non contactable --
+  justification complète dans `app.services.artisans.list_artisans` et
+  BUILD_PLAN.md §3.2. `GET /artisans/{id}` reste volontairement accessible
+  quel que soit le statut, pour que l'artisan voie son propre profil.
+- **Reste hors périmètre** (inchangé par ce lot) : revue admin des documents
+  (approve/reject, Lot C -- `verification.status` reste à `pending` tant
+  qu'aucun endpoint ne le fait évoluer), upload d'avatar en tant que fichier
+  (implémenté comme simple champ URL texte pour ce lot, cf. BUILD_PLAN.md),
+  messagerie, retrait d'Express, paiements.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

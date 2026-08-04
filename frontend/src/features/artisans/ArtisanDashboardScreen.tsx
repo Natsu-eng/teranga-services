@@ -1,5 +1,6 @@
 import React from 'react';
-import { Briefcase, Clock, Star, Wallet } from 'lucide-react';
+import { Briefcase, Clock, ClipboardCheck, Star, Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
@@ -8,9 +9,10 @@ import { InterventionsList } from '../interventions/InterventionsList';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
-import { useArtisan } from './hooks/useArtisan';
+import { VerificationStatusBanner } from './VerificationStatusBanner';
 import { useArtisanStats } from './hooks/useArtisanStats';
 import { useAvailabilityToggle } from './hooks/useAvailabilityToggle';
+import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
 
 interface StatCardProps {
   icon: React.ReactNode;
@@ -34,6 +36,7 @@ const StatCard: React.FC<StatCardProps> = ({ icon, label, value }) => (
 // echoing the "Téranga Pro" identity already established in Header/BottomNav
 // rather than inventing a new one.
 export const ArtisanDashboardScreen: React.FC = () => {
+  const navigate = useNavigate();
   const auth = useAuth();
   const role = toDisplayRole(auth.role);
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
@@ -45,13 +48,17 @@ export const ArtisanDashboardScreen: React.FC = () => {
     error: profileError,
     reload: reloadProfile,
     setData: setProArtisan,
-  } = useArtisan(role === 'artisan' ? artisanId : null);
+  } = useMyArtisanProfile(role === 'artisan' ? artisanId : null);
+  const isVerified = proArtisan?.verifiedStatus === 'verified';
+  // Les stats ne sont affichées que pour un artisan vérifié (voir plus bas)
+  // -- inutile de récupérer revenus/note pour un profil qui affiche l'état
+  // d'onboarding à la place.
   const {
     data: stats,
     isLoading: isStatsLoading,
     error: statsError,
     reload: reloadStats,
-  } = useArtisanStats(role === 'artisan' ? artisanId : null);
+  } = useArtisanStats(role === 'artisan' && isVerified ? artisanId : null);
   const { isSaving, error: toggleError, toggle } = useAvailabilityToggle();
 
   // A client landing on /pro (no route-level role guard exists today,
@@ -74,12 +81,12 @@ export const ArtisanDashboardScreen: React.FC = () => {
     );
   }
 
-  const isAvailable = proArtisan?.available ?? false;
+  const isAvailable = proArtisan?.isAvailable ?? false;
 
   const handleToggle = () => {
     if (!proArtisan) return;
-    toggle(proArtisan.available, (next) =>
-      setProArtisan((prev) => (prev ? { ...prev, available: next } : prev)),
+    toggle(proArtisan.isAvailable, (next) =>
+      setProArtisan((prev) => (prev ? { ...prev, isAvailable: next } : prev)),
     );
   };
 
@@ -95,7 +102,7 @@ export const ArtisanDashboardScreen: React.FC = () => {
               <div className="h-7 w-48 mt-1 rounded-xl bg-white/15 animate-pulse" />
             ) : (
               <h1 className="font-headline-md text-2xl font-bold">
-                {proArtisan?.name ?? 'Mon activité'}
+                {proArtisan?.fullName ?? 'Mon activité'}
               </h1>
             )}
           </div>
@@ -153,47 +160,68 @@ export const ArtisanDashboardScreen: React.FC = () => {
           <ErrorState message={profileError.message} onRetry={reloadProfile} />
         )}
 
-        {isStatsLoading && !stats ? (
-          <div className="grid grid-cols-2 gap-3">
-            {[0, 1, 2, 3].map((key) => (
-              <Skeleton key={key} className="h-24 rounded-2xl" />
-            ))}
-          </div>
-        ) : statsError && !stats ? (
-          <ErrorState message={statsError.message} onRetry={reloadStats} />
-        ) : stats ? (
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard
-              icon={<Wallet className="w-6 h-6" />}
-              label="Revenus"
-              value={stats.revenueFcfa != null ? formatFcfa(stats.revenueFcfa) : 'Non disponible'}
-            />
-            <StatCard
-              icon={<Briefcase className="w-6 h-6" />}
-              label="Interventions terminées"
-              value={String(stats.interventionsCount)}
-            />
-            <StatCard
-              icon={<Star className="w-6 h-6" />}
-              label="Note moyenne"
-              value={
-                stats.ratingAvg != null
-                  ? `${stats.ratingAvg.toFixed(1)} (${stats.reviewCount})`
-                  : 'Pas encore noté'
-              }
-            />
-            <StatCard
-              icon={<Clock className="w-6 h-6" />}
-              label="Taux de réponse"
-              value={stats.responseRate != null ? `${Math.round(stats.responseRate * 100)}%` : 'Non communiqué'}
-            />
-          </div>
-        ) : null}
+        {proArtisan && !isVerified ? (
+          // Tant que l'artisan n'est pas vérifié, un dashboard de stats/
+          // demandes vides serait trompeur (toujours à zéro, aucune mise en
+          // relation possible avant vérification -- ARTISAN_NON_VERIFIE,
+          // BUILD_PLAN.md, onboarding artisan) : on affiche l'état
+          // d'onboarding à la place, jamais les deux mélangés.
+          <section className="bg-white rounded-2xl p-5 border border-border-subtle space-y-4">
+            <VerificationStatusBanner status={proArtisan.verifiedStatus} />
+            <button
+              type="button"
+              onClick={() => navigate('/pro/onboarding')}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+            >
+              <ClipboardCheck className="w-5 h-5" />
+              Compléter mon profil
+            </button>
+          </section>
+        ) : (
+          <>
+            {isStatsLoading && !stats ? (
+              <div className="grid grid-cols-2 gap-3">
+                {[0, 1, 2, 3].map((key) => (
+                  <Skeleton key={key} className="h-24 rounded-2xl" />
+                ))}
+              </div>
+            ) : statsError && !stats ? (
+              <ErrorState message={statsError.message} onRetry={reloadStats} />
+            ) : stats ? (
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard
+                  icon={<Wallet className="w-6 h-6" />}
+                  label="Revenus"
+                  value={stats.revenueFcfa != null ? formatFcfa(stats.revenueFcfa) : 'Non disponible'}
+                />
+                <StatCard
+                  icon={<Briefcase className="w-6 h-6" />}
+                  label="Interventions terminées"
+                  value={String(stats.interventionsCount)}
+                />
+                <StatCard
+                  icon={<Star className="w-6 h-6" />}
+                  label="Note moyenne"
+                  value={
+                    stats.ratingAvg != null
+                      ? `${stats.ratingAvg.toFixed(1)} (${stats.reviewCount})`
+                      : 'Pas encore noté'
+                  }
+                />
+                <StatCard
+                  icon={<Clock className="w-6 h-6" />}
+                  label="Taux de réponse"
+                  value={stats.responseRate != null ? `${Math.round(stats.responseRate * 100)}%` : 'Non communiqué'}
+                />
+              </div>
+            ) : null}
 
-        <section className="space-y-3">
-          <h2 className="font-bold text-xl text-primary">Mes demandes</h2>
-          <InterventionsList groupByStatus emptyTitle="Aucune demande pour le moment." />
-        </section>
+            <section className="space-y-3">
+              <h2 className="font-bold text-xl text-primary">Mes demandes</h2>
+              <InterventionsList groupByStatus emptyTitle="Aucune demande pour le moment." />
+            </section>
+          </>
+        )}
       </div>
     </main>
   );

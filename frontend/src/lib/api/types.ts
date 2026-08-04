@@ -6,9 +6,13 @@ import type {
   JobRequest,
   AIAnalysisResult,
   CurrentUser,
+  MyArtisanProfile,
+  MyVerification,
   Review,
   ServiceRequest,
   Trade,
+  VerificationDocType,
+  VerificationDocument,
 } from '../../types';
 
 export type ApiErrorCode = 'not_found' | 'validation' | 'network' | 'unknown';
@@ -60,6 +64,22 @@ export interface CreateReviewInput {
   comment: string;
 }
 
+/** `PATCH /artisans/me` (onboarding) — tous les champs sont optionnels, seuls
+ * ceux réellement fournis sont appliqués côté serveur (mise à jour partielle). */
+export interface UpdateArtisanProfileInput {
+  bio?: string | null;
+  yearsExperience?: number | null;
+  baseLocation?: { lat: number; lng: number };
+  avatarUrl?: string | null;
+  isAvailable?: boolean;
+}
+
+export interface AddArtisanTradeInput {
+  tradeCode: string;
+  hourlyRateFcfa: number;
+  serviceRadiusM: number;
+}
+
 /**
  * Contract for all data access, independent of implementation. `src/lib/api/index.ts`
  * is the only place that picks which implementation (mock today, HTTP later) satisfies it.
@@ -73,6 +93,15 @@ export interface ApiClient {
   analyzeProblem(description: string): Promise<AIAnalysisResult>;
   getArtisanStats(artisanId: string): Promise<ArtisanStats>;
   updateArtisanAvailability(isAvailable: boolean): Promise<Artisan>;
+  getMyArtisanProfile(artisanId: string): Promise<MyArtisanProfile>;
+  updateMyArtisanProfile(input: UpdateArtisanProfileInput): Promise<MyArtisanProfile>;
+  addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile>;
+  removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile>;
+  listMyVerificationDocuments(): Promise<MyVerification>;
+  uploadVerificationDocument(
+    docType: VerificationDocType,
+    file: File,
+  ): Promise<VerificationDocument>;
   getCurrentUser(): Promise<CurrentUser>;
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;

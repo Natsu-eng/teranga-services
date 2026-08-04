@@ -16,19 +16,26 @@ import type {
   AIAnalysisResult,
   Artisan,
   ArtisanStats,
+  ArtisanTradeDetail,
   Intervention,
+  MyArtisanProfile,
+  MyVerification,
   Quote,
   Review,
   ServiceRequest,
   Trade,
+  VerificationDocType,
+  VerificationDocument,
 } from '../../types';
 import { apiRequest } from './http';
 import type {
+  AddArtisanTradeInput,
   ApiClient,
   ArtisanFilters,
   CreateQuoteInput,
   CreateReviewInput,
   CreateServiceRequestInput,
+  UpdateArtisanProfileInput,
 } from './types';
 
 interface BackendTrade {
@@ -38,6 +45,7 @@ interface BackendTrade {
 }
 
 interface BackendArtisanTrade {
+  id: string;
   trade: BackendTrade;
   hourly_rate_fcfa: number;
   service_radius_m: number;
@@ -62,6 +70,20 @@ interface BackendArtisanListItem {
 
 interface BackendArtisanDetail extends BackendArtisanListItem {
   cover_url: string | null;
+}
+
+interface BackendVerificationDocument {
+  id: string;
+  doc_type: VerificationDocType;
+  status: 'pending' | 'approved' | 'rejected';
+  note: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+interface BackendMyVerification {
+  verified_status: VerifiedStatus;
+  documents: BackendVerificationDocument[];
 }
 
 interface BackendArtisanStatsPublic {
@@ -295,6 +317,48 @@ function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }
   };
 }
 
+function mapArtisanTradeDetail(item: BackendArtisanTrade): ArtisanTradeDetail {
+  return {
+    id: item.id,
+    tradeCode: item.trade.code,
+    tradeLabel: item.trade.label_fr,
+    hourlyRateFcfa: item.hourly_rate_fcfa,
+    serviceRadiusM: item.service_radius_m,
+    hasCustomServiceArea: item.has_custom_service_area,
+  };
+}
+
+function mapMyArtisanProfile(item: BackendArtisanDetail): MyArtisanProfile {
+  return {
+    id: item.id,
+    fullName: item.full_name,
+    bio: item.bio,
+    yearsExperience: item.years_experience,
+    avatarUrl: item.avatar_url,
+    isAvailable: item.is_available,
+    verifiedStatus: item.verified_status,
+    trades: item.trades.map(mapArtisanTradeDetail),
+  };
+}
+
+function mapVerificationDocument(item: BackendVerificationDocument): VerificationDocument {
+  return {
+    id: item.id,
+    docType: item.doc_type,
+    status: item.status,
+    note: item.note,
+    createdAt: item.created_at,
+    reviewedAt: item.reviewed_at,
+  };
+}
+
+function mapMyVerification(item: BackendMyVerification): MyVerification {
+  return {
+    verifiedStatus: item.verified_status,
+    documents: item.documents.map(mapVerificationDocument),
+  };
+}
+
 function mapArtisanStats(stats: BackendArtisanStats): ArtisanStats {
   return {
     ratingAvg: stats.rating_avg,
@@ -350,6 +414,12 @@ export const httpApiClient: Pick<
   | 'createReview'
   | 'getArtisanStats'
   | 'updateArtisanAvailability'
+  | 'getMyArtisanProfile'
+  | 'updateMyArtisanProfile'
+  | 'addArtisanTrade'
+  | 'removeArtisanTrade'
+  | 'listMyVerificationDocuments'
+  | 'uploadVerificationDocument'
 > = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
@@ -378,6 +448,70 @@ export const httpApiClient: Pick<
       body: { is_available: isAvailable },
     });
     return mapArtisan(detail, []);
+  },
+
+  async getMyArtisanProfile(artisanId: string): Promise<MyArtisanProfile> {
+    const detail = await apiRequest<BackendArtisanDetail>(`/artisans/${artisanId}`);
+    return mapMyArtisanProfile(detail);
+  },
+
+  async updateMyArtisanProfile(input: UpdateArtisanProfileInput): Promise<MyArtisanProfile> {
+    // Seuls les champs réellement fournis par l'appelant sont envoyés --
+    // reflète la sémantique de mise à jour partielle du backend
+    // (`exclude_unset`, app/schemas/artisans.py ArtisanProfileUpdateIn) :
+    // omettre un champ ici ne doit jamais être interprété comme "l'effacer"
+    // côté serveur.
+    const body: Record<string, unknown> = {};
+    if (input.bio !== undefined) body.bio = input.bio;
+    if (input.yearsExperience !== undefined) body.years_experience = input.yearsExperience;
+    if (input.baseLocation !== undefined) body.base_location = input.baseLocation;
+    if (input.avatarUrl !== undefined) body.avatar_url = input.avatarUrl;
+    if (input.isAvailable !== undefined) body.is_available = input.isAvailable;
+
+    const detail = await apiRequest<BackendArtisanDetail>('/artisans/me', {
+      method: 'PATCH',
+      body,
+    });
+    return mapMyArtisanProfile(detail);
+  },
+
+  async addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile> {
+    const detail = await apiRequest<BackendArtisanDetail>('/artisans/me/trades', {
+      method: 'POST',
+      body: {
+        trade_code: input.tradeCode,
+        hourly_rate_fcfa: input.hourlyRateFcfa,
+        service_radius_m: input.serviceRadiusM,
+      },
+    });
+    return mapMyArtisanProfile(detail);
+  },
+
+  async removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile> {
+    const detail = await apiRequest<BackendArtisanDetail>(
+      `/artisans/me/trades/${artisanTradeId}`,
+      { method: 'DELETE' },
+    );
+    return mapMyArtisanProfile(detail);
+  },
+
+  async listMyVerificationDocuments(): Promise<MyVerification> {
+    const body = await apiRequest<BackendMyVerification>('/artisans/me/documents');
+    return mapMyVerification(body);
+  },
+
+  async uploadVerificationDocument(
+    docType: VerificationDocType,
+    file: File,
+  ): Promise<VerificationDocument> {
+    const formData = new FormData();
+    formData.set('doc_type', docType);
+    formData.set('file', file);
+    const document = await apiRequest<BackendVerificationDocument>('/artisans/me/documents', {
+      method: 'POST',
+      formData,
+    });
+    return mapVerificationDocument(document);
   },
 
   async listTrades(): Promise<Trade[]> {

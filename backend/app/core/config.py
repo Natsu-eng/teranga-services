@@ -198,6 +198,34 @@ class Settings(BaseSettings):
     rate_limit_ai_analyze_per_ip_max: int = 20
     rate_limit_ai_analyze_per_ip_window_seconds: int = 600
 
+    # Stockage des fichiers privés (documents de vérification artisan --
+    # onboarding). "local" (dev) écrit sur disque hors du dépôt git et hors
+    # de tout répertoire servi statiquement -- voir app/services/storage.py.
+    # Un fournisseur cloud privé reste à choisir avant la prod (même
+    # principe fail-fast documenté que sms_provider/ai_triage_provider) :
+    # aucune valeur autre que "local" n'est implémentée aujourd'hui.
+    storage_backend: Literal["local"] = "local"
+    # Chemin (relatif au dossier backend/, ou absolu) du répertoire de
+    # stockage local. Défaut "var/artisan-documents" : hors du code source
+    # applicatif, ignoré par backend/.gitignore, jamais monté en StaticFiles
+    # (app/main.py ne sert aucun fichier statique). Pour une isolation plus
+    # stricte encore (répertoire littéralement hors du dépôt), fournir un
+    # chemin absolu via cette variable.
+    storage_local_dir: str = "var/artisan-documents"
+    # Taille maximale d'un document uploadé, en octets. Défaut 8 Mo : large
+    # pour une photo de CNI/selfie prise au téléphone, sans autoriser des
+    # fichiers déraisonnables qui gonfleraient le stockage local et le temps
+    # de traitement (magic bytes, écriture disque).
+    storage_max_upload_bytes: int = 8 * 1024 * 1024
+
+    # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
+    # (fenêtre glissante en mémoire) que RATE_LIMIT_OTP_*. Par utilisateur
+    # authentifié (pas par IP : l'endpoint exige déjà un compte artisan) --
+    # une écriture disque + un hachage de magic bytes par appel ne doivent
+    # pas pouvoir être déclenchés en boucle.
+    rate_limit_document_upload_per_user_max: int = 10
+    rate_limit_document_upload_per_user_window_seconds: int = 600
+
 
 @lru_cache
 def get_settings() -> Settings:

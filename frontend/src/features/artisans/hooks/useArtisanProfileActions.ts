@@ -1,0 +1,45 @@
+import { useState } from 'react';
+import { ApiError, api } from '../../../lib/api';
+import type { AddArtisanTradeInput, UpdateArtisanProfileInput } from '../../../lib/api/types';
+import type { MyArtisanProfile } from '../../../types';
+
+function toMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.';
+}
+
+/**
+ * Regroupe les trois mutations de l'onboarding qui renvoient toutes la même
+ * forme `MyArtisanProfile` (édition du profil, ajout/retrait d'un métier)
+ * derrière un seul état saving/error — `onUpdated` est censé alimenter le
+ * `useMyArtisanProfile().setData` de l'appelant, pour que les trois restent
+ * synchronisées sur une seule source de vérité plutôt que trois copies
+ * indépendantes du profil.
+ */
+export function useArtisanProfileActions(onUpdated: (profile: MyArtisanProfile) => void) {
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<MyArtisanProfile>): Promise<boolean> {
+    setError(null);
+    setIsSaving(true);
+    try {
+      const profile = await action();
+      onUpdated(profile);
+      return true;
+    } catch (err) {
+      setError(toMessage(err));
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return {
+    isSaving,
+    error,
+    updateProfile: (input: UpdateArtisanProfileInput) =>
+      run(() => api.updateMyArtisanProfile(input)),
+    addTrade: (input: AddArtisanTradeInput) => run(() => api.addArtisanTrade(input)),
+    removeTrade: (artisanTradeId: string) => run(() => api.removeArtisanTrade(artisanTradeId)),
+  };
+}
