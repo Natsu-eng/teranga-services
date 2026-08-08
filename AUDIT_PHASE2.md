@@ -238,6 +238,57 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   approuvé/rejeté (l'API le permet déjà via `?status=`, pas encore
   d'onglet côté UI).
 
+## Mise à jour — `fix/user-name-and-contact-privacy`
+
+- **Diagnostic (corrige §5, ligne « il n'y a même pas de fuite à corriger »
+  ci-dessus)** : cette conclusion était incomplète. Les schémas artisan
+  publics n'exposent en effet aucun champ `phone`/`email` dédié, mais
+  `user.full_name` était rempli avec le numéro de téléphone en guise de
+  placeholder à l'inscription (`resolve_account_for_intent`,
+  `app/services/auth.py`, Lot `feat/auth-signup` -- aucune saisie de nom
+  n'existait avant ce lot). Le téléphone fuyait donc bien en public, via un
+  champ qui n'avait pas l'air d'un champ de contact. La fiche artisan
+  affichait littéralement le numéro à la place du nom.
+- **Correction à la racine** : `full_name` est désormais requis au signup
+  (`app/core/full_name.py`, 2-150 caractères) pour les deux rôles ; le
+  placeholder `full_name=phone` est supprimé du code, pas seulement masqué.
+  Édition après coup ajoutée -- absente jusqu'ici, y compris pour le rôle
+  client qui n'avait aucun moyen d'éditer son propre nom : `PATCH /users/me`
+  (nouveau, rôle-agnostique) et `full_name` accepté dans `PATCH /artisans/me`.
+- **Défense en profondeur pour les comptes hérités** : les comptes créés
+  avant ce lot portent encore potentiellement leur téléphone en `full_name`
+  en base (aucune migration de données n'a été faite -- décision volontaire,
+  voir plus bas). `app/services/identity.py::public_display_name` détecte à
+  la volée (`looks_like_phone_number`) et masque ces cas derrière un repli
+  neutre partagé ("Membre Téranga"), appliqué à chaque point de
+  sérialisation publique identifié par grep systématique : `GET /artisans`,
+  `/artisans/{id}`, `/artisans/{id}/reviews`, l'avis embarqué dans
+  `InterventionOut` (ces deux derniers n'étaient pas explicitement cités
+  dans la demande initiale mais partagent la même classe de vulnérabilité).
+  Jamais appliqué en vue de soi (`/auth/me`, `UserOut`) ni côté admin, qui
+  doivent voir la valeur réelle pour pouvoir la corriger/juger.
+- **Verrou de non-régression** : `backend/tests/test_public_contact_privacy.py`
+  simule un compte hérité (`full_name = phone`) et vérifie explicitement
+  l'absence du numéro dans le texte de chaque réponse publique sérialisée
+  (recherche, fiche détail, avis), plus un test de garde inverse confirmant
+  qu'un vrai nom n'est jamais masqué par erreur.
+- **Pas de migration de données pour les comptes existants** : décision
+  volontaire -- le masquage applicatif couvre déjà tous les cas
+  d'affichage public, et une migration de données one-shot n'aurait
+  bénéficié qu'aux quelques comptes de test/dev créés avant ce lot (le seed
+  `scripts/seed.py` construit ses `User` directement, hors
+  `resolve_account_for_intent`, et avait donc déjà de vrais noms -- vérifié,
+  aucun changement nécessaire). Un compte hérité concerné voit son propre
+  placeholder en vue de soi (non masqué) et peut le corriger via `PATCH
+  /users/me`/`PATCH /artisans/me`, désormais disponibles.
+- Front : nouvel écran `/connexion/nom` (`NameScreen`) entre le choix du
+  rôle et le téléphone, uniquement en signup (le login ne passe jamais par
+  cet écran). Édition du nom ajoutée à l'onboarding artisan (section "Mon
+  profil", juste après la photo) et au profil client (icône crayon inline
+  à côté du nom affiché).
+- **Reste hors périmètre** (exclu explicitement de ce lot) : avatar, photo
+  de couverture -- lot séparé.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.
