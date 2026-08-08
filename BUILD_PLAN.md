@@ -1107,6 +1107,34 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   (jamais un message "accès refusé", jamais de lien visible dans la
   navigation). *But : le cycle de vérification artisan est enfin complet,
   de l'upload à la décision humaine.*
+- **Lot `fix/user-name-and-contact-privacy` — Nom réel à l'inscription,
+  confidentialité du contact.** Corrige la racine d'un défaut constaté sur la
+  fiche artisan : le numéro de téléphone s'affichait à la place du nom, car
+  `full_name` était rempli avec le téléphone en guise de placeholder à
+  l'inscription (aucun nom collecté avant ce lot — `resolve_account_for_intent`,
+  `app/services/auth.py`). `full_name` est désormais **requis** au signup pour
+  les deux rôles (`app/core/full_name.py`, bornes 2–150 caractères, seule
+  source de vérité partagée signup/édition), le placeholder est supprimé.
+  Édition après coup : `PATCH /users/me` (nouveau, rôle-agnostique — client
+  et artisan) et `full_name` accepté dans `PATCH /artisans/me` (pour que
+  l'artisan n'ait qu'un seul endpoint à connaître). Défense en profondeur :
+  `app/services/identity.py::public_display_name` masque tout `full_name`
+  qui ressemble encore à un numéro de téléphone (`looks_like_phone_number`,
+  `app/core/phone.py`) derrière un repli neutre partagé ("Membre Téranga"),
+  appliqué à chaque point de sérialisation publique (`GET /artisans`,
+  `/artisans/{id}`, `/artisans/{id}/reviews`, l'avis embarqué dans
+  `InterventionOut`) — jamais en vue de soi (`/auth/me`) ni côté admin, qui
+  doivent voir la valeur réelle. Verrouillé par un test dédié
+  (`test_public_contact_privacy.py`) : aucun numéro de téléphone n'apparaît
+  jamais dans une réponse publique sérialisée, même via un compte hérité
+  simulé avec `full_name = phone`. `scripts/seed.py` construisait déjà ses
+  `User` directement (hors `resolve_account_for_intent`) donc avait déjà de
+  vrais noms — vérifié, aucun changement nécessaire. Front : nouvel écran
+  `/connexion/nom` (`NameScreen`) entre le choix du rôle et le téléphone,
+  seulement en signup ; édition du nom ajoutée à l'onboarding artisan (Mon
+  profil) et au profil client (icône crayon inline). *But : plus aucun
+  compte ne peut se créer sans nom, et le nom affiché publiquement n'est
+  jamais un numéro de téléphone.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,

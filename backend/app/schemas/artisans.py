@@ -33,6 +33,11 @@ class ArtisanProfileUpdateIn(BaseModel):
     rôle -- aucun des deux n'apparaît dans ce schéma."""
 
     is_available: bool | None = None
+    # Vit sur `user.full_name`, pas sur `artisan_profile` -- appliqué à la
+    # relation `profile.user` côté service (fix confidentialité du contact,
+    # BUILD_PLAN.md). Bornes validées par `app.core.full_name.validate_full_name`,
+    # pas ici : mêmes bornes que le signup, une seule source de vérité.
+    full_name: str | None = None
     bio: str | None = Field(default=None, max_length=2000)
     years_experience: int | None = Field(default=None, ge=0, le=80)
     base_location: LocationIn | None = None

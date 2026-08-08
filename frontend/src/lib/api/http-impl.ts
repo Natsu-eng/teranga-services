@@ -520,6 +520,7 @@ export const httpApiClient: Pick<
     // omettre un champ ici ne doit jamais être interprété comme "l'effacer"
     // côté serveur.
     const body: Record<string, unknown> = {};
+    if (input.fullName !== undefined) body.full_name = input.fullName;
     if (input.bio !== undefined) body.bio = input.bio;
     if (input.yearsExperience !== undefined) body.years_experience = input.yearsExperience;
     if (input.baseLocation !== undefined) body.base_location = input.baseLocation;

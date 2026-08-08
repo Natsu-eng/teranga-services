@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.full_name import validate_full_name
 from app.models.artisan import ArtisanProfile
 from app.models.enums import Role, VerificationDocType
 from app.models.user import User
@@ -33,6 +34,7 @@ from app.schemas.artisans import (
 )
 from app.schemas.pagination import Page
 from app.schemas.trades import TradeOut
+from app.services.identity import public_display_name
 from app.services.verification import compute_verified_status
 
 
@@ -178,7 +180,7 @@ def _common_fields(
     """
     return {
         "id": profile.id,
-        "full_name": profile.user.full_name,
+        "full_name": public_display_name(profile.user.full_name),
         "avatar_url": profile.avatar_url,
         "bio": profile.bio,
         "years_experience": profile.years_experience,
@@ -371,6 +373,12 @@ async def update_profile(
 
     if "is_available" in fields:
         profile.is_available = fields["is_available"]
+    if fields.get("full_name") is not None:
+        # Vit sur `user`, pas sur `artisan_profile` -- `profile.user` est
+        # déjà eager-loadé par `get_own_profile` (pas de requête N+1). Un
+        # `full_name: null` explicite est ignoré plutôt que rejeté : la
+        # colonne est NOT NULL, il n'existe pas de "nom effacé" valide.
+        profile.user.full_name = validate_full_name(fields["full_name"])
     if "bio" in fields:
         profile.bio = fields["bio"]
     if "years_experience" in fields:

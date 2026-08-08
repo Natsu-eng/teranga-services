@@ -61,10 +61,13 @@ async def _verify(
     *,
     intent: str,
     role: str | None = None,
+    full_name: str | None = "Fatou Sarr",
 ) -> Response:
     payload: dict[str, str] = {"phone": phone, "code": code, "intent": intent}
     if role is not None:
         payload["role"] = role
+    if full_name is not None:
+        payload["full_name"] = full_name
     return await client.post("/api/v1/auth/verify-otp", json=payload)
 
 
@@ -74,12 +77,18 @@ async def test_signup_client_creates_account_with_no_artisan_profile(
     phone = unique_phone()
     async with await _client() as client:
         code = await _request_and_capture_code(client, phone, caplog)
-        response = await _verify(client, phone, code, intent="signup", role="client")
+        response = await _verify(
+            client, phone, code, intent="signup", role="client", full_name="Fatou Sarr"
+        )
 
     assert response.status_code == 200
     body = response.json()
     assert body["user"]["role"] == "client"
     assert body["user"]["artisan_profile_id"] is None
+    # Fix confidentialité du contact (BUILD_PLAN.md) : le nom est celui
+    # fourni, jamais le placeholder historique = le numéro de téléphone.
+    assert body["user"]["full_name"] == "Fatou Sarr"
+    assert body["user"]["full_name"] != phone
 
 
 async def test_signup_artisan_creates_empty_unavailable_profile(
@@ -197,6 +206,81 @@ async def test_login_rejects_nonexistent_phone_without_creating_an_account(
         await db_session.execute(select(User).where(User.phone == phone))
     ).scalar_one_or_none()
     assert created is None
+
+
+async def test_signup_without_a_name_is_rejected(
+    caplog: pytest.LogCaptureFixture, db_session: AsyncSession
+) -> None:
+    phone = unique_phone()
+    async with await _client() as client:
+        code = await _request_and_capture_code(client, phone, caplog)
+        response = await _verify(
+            client, phone, code, intent="signup", role="client", full_name=None
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "NOM_INVALIDE"
+
+    created = (
+        await db_session.execute(select(User).where(User.phone == phone))
+    ).scalar_one_or_none()
+    assert created is None
+
+
+async def test_signup_with_a_blank_name_is_rejected(
+    caplog: pytest.LogCaptureFixture, db_session: AsyncSession
+) -> None:
+    phone = unique_phone()
+    async with await _client() as client:
+        code = await _request_and_capture_code(client, phone, caplog)
+        response = await _verify(
+            client, phone, code, intent="signup", role="artisan", full_name="   "
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "NOM_INVALIDE"
+
+    created = (
+        await db_session.execute(select(User).where(User.phone == phone))
+    ).scalar_one_or_none()
+    assert created is None
+
+
+async def test_signup_name_is_trimmed(
+    caplog: pytest.LogCaptureFixture, db_session: AsyncSession
+) -> None:
+    phone = unique_phone()
+    async with await _client() as client:
+        code = await _request_and_capture_code(client, phone, caplog)
+        response = await _verify(
+            client, phone, code, intent="signup", role="client", full_name="  Fatou Sarr  "
+        )
+
+    assert response.status_code == 200
+    assert response.json()["user"]["full_name"] == "Fatou Sarr"
+
+
+async def test_login_does_not_change_the_existing_name(
+    caplog: pytest.LogCaptureFixture, db_session: AsyncSession
+) -> None:
+    """Un `full_name` envoyé sur une requête `login` est ignoré -- le nom
+    d'un compte existant ne change jamais via ce flux (édition dédiée,
+    `PATCH /artisans/me` ou `PATCH /users/me`)."""
+    phone = unique_phone()
+    async with await _client() as client:
+        code_1 = await _request_and_capture_code(client, phone, caplog)
+        signup = await _verify(
+            client, phone, code_1, intent="signup", role="client", full_name="Fatou Sarr"
+        )
+        assert signup.status_code == 200
+
+        code_2 = await _request_and_capture_code(client, phone, caplog)
+        login = await _verify(
+            client, phone, code_2, intent="login", role=None, full_name="Nom Different"
+        )
+
+    assert login.status_code == 200
+    assert login.json()["user"]["full_name"] == "Fatou Sarr"
 
 
 async def test_login_nominal_reuses_the_existing_account(

@@ -39,6 +39,7 @@ from app.schemas.reviews import ReviewOut
 from app.services import commission as commission_service
 from app.services import requests as requests_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.identity import public_display_name
 from app.services.verification import compute_verified_status
 
 # Transitions autorisées, par statut de départ (BUILD_PLAN.md §6 Lot 12b).
@@ -185,7 +186,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
                 id=intervention.review.id,
                 rating=intervention.review.rating,
                 comment=intervention.review.comment,
-                author_name=intervention.review.author.full_name,
+                author_name=public_display_name(intervention.review.author.full_name),
                 created_at=intervention.review.created_at,
             )
             if intervention.review

@@ -70,6 +70,10 @@ export interface CreateReviewInput {
 /** `PATCH /artisans/me` (onboarding) — tous les champs sont optionnels, seuls
  * ceux réellement fournis sont appliqués côté serveur (mise à jour partielle). */
 export interface UpdateArtisanProfileInput {
+  // Vit sur `user.full_name`, pas `artisan_profile` -- accepté ici en plus
+  // de `PATCH /users/me` pour que l'artisan n'ait qu'un seul endpoint à
+  // connaître pour éditer tout son profil (fix confidentialité du contact).
+  fullName?: string;
   bio?: string | null;
   yearsExperience?: number | null;
   baseLocation?: { lat: number; lng: number };

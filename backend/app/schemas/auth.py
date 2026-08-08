@@ -24,6 +24,13 @@ class VerifyOtpIn(BaseModel):
     # pas seulement via ce type -- défense en profondeur, greppable et testée.
     intent: Literal["login", "signup"]
     role: Literal["client", "artisan"] | None = None
+    # Requis en signup uniquement (revalidé côté service, comme `role` --
+    # même raison : la présence/les bornes dépendent de `intent`, qu'un
+    # simple `Field(...)` sur ce schéma ne peut pas exprimer). Ignoré en
+    # login : un compte existant garde son nom (fix confidentialité du
+    # contact -- avant ce correctif, un compte se créait avec le téléphone
+    # comme nom, BUILD_PLAN.md).
+    full_name: str | None = None
 
 
 class RefreshIn(BaseModel):

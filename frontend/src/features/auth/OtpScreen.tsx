@@ -11,6 +11,7 @@ interface OtpLocationState {
   phone?: string;
   intent?: AuthIntent;
   role?: SignupRole;
+  fullName?: string;
   from?: Location;
 }
 
@@ -20,7 +21,7 @@ export const OtpScreen: React.FC = () => {
   const auth = useAuth();
 
   const state = (location.state as OtpLocationState | null) ?? {};
-  const { phone, intent, role } = state;
+  const { phone, intent, role, fullName } = state;
 
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +57,7 @@ export const OtpScreen: React.FC = () => {
     setIsSubmitting(true);
     try {
       if (intent === 'signup') {
-        await auth.signup(phone, code, role ?? 'client');
+        await auth.signup(phone, code, role ?? 'client', fullName ?? '');
       } else {
         await auth.login(phone, code);
       }

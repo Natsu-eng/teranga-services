@@ -54,3 +54,21 @@ def normalize_phone(raw: str, settings: Settings | None = None) -> str:
         )
 
     return phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
+
+
+def looks_like_phone_number(value: str, settings: Settings | None = None) -> bool:
+    """`value` ressemble-t-il à un numéro de téléphone (E.164 ou variante
+    locale) ? Utilisé pour ne jamais exposer publiquement un `full_name`
+    resté au placeholder historique d'avant ce correctif (BUILD_PLAN.md,
+    confidentialité du contact) -- `app.services.identity.public_display_name`.
+
+    S'appuie sur `phonenumbers` plutôt qu'une regex maison : un nom légitime
+    ne s'analyse (quasiment) jamais comme un numéro valide, donc le risque de
+    faux positif (masquer un vrai nom) est négligeable face au risque de
+    faux négatif (laisser fuiter un numéro) si on ratait un format local.
+    """
+    candidate = value.strip()
+    if not candidate:
+        return False
+    settings = settings or get_settings()
+    return _try_parse(candidate, settings.phone_default_region) is not None

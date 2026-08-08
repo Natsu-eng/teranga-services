@@ -82,6 +82,7 @@ function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
     requestOtp: vi.fn(),
     login: vi.fn(),
     signup: vi.fn(),
+    updateFullName: vi.fn(),
     logout: vi.fn(),
     ...overrides,
   };

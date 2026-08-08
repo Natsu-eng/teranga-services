@@ -24,6 +24,7 @@ from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewCreateIn, ReviewOut
 from app.services import interventions as interventions_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.identity import public_display_name
 
 
 class InterventionNotCompletedError(ValueError):
@@ -104,7 +105,7 @@ async def list_artisan_reviews(
             id=review.id,
             rating=review.rating,
             comment=review.comment,
-            author_name=review.author.full_name,
+            author_name=public_display_name(review.author.full_name),
             created_at=review.created_at,
         )
         for review in reviews
@@ -148,6 +149,6 @@ async def create_review(
         id=review.id,
         rating=review.rating,
         comment=review.comment,
-        author_name=client_user.full_name,
+        author_name=public_display_name(client_user.full_name),
         created_at=review.created_at,
     )

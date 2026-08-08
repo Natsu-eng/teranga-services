@@ -178,3 +178,81 @@ async def test_cannot_set_verified_status_via_profile_update(db_session: AsyncSe
     stmt = select(ArtisanProfile.verified_status).where(ArtisanProfile.id == artisan.id)
     persisted = (await db_session.execute(stmt)).scalar_one()
     assert persisted == ArtisanVerifiedStatus.NONE  # jamais modifié via ce endpoint
+
+
+async def test_artisan_edits_own_full_name(db_session: AsyncSession) -> None:
+    """`full_name` vit sur `user`, pas `artisan_profile` -- fix
+    confidentialité du contact (BUILD_PLAN.md) : l'édition corrige le
+    placeholder historique (le téléphone) sans passer par un second endpoint."""
+    owner_user = await make_user(db_session, role=Role.ARTISAN)
+    # Simule un compte legacy créé avant ce correctif (placeholder = le
+    # téléphone) -- plus jamais possible pour un nouveau signup.
+    owner_user.full_name = owner_user.phone
+    await db_session.flush()
+    artisan = await make_artisan_profile(db_session, user=owner_user)
+
+    async with await _client() as client:
+        response = await client.patch(
+            "/api/v1/artisans/me",
+            json={"full_name": "Idrissa Diop"},
+            headers=_auth_headers(owner_user),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Idrissa Diop"
+
+    stmt = select(User.full_name).where(User.id == owner_user.id)
+    persisted = (await db_session.execute(stmt)).scalar_one()
+    assert persisted == "Idrissa Diop"
+    assert artisan.id  # sanity : le profil existe toujours, inchangé par ailleurs
+
+
+async def test_artisan_full_name_is_trimmed(db_session: AsyncSession) -> None:
+    owner_user = await make_user(db_session, role=Role.ARTISAN)
+    await make_artisan_profile(db_session, user=owner_user)
+
+    async with await _client() as client:
+        response = await client.patch(
+            "/api/v1/artisans/me",
+            json={"full_name": "  Idrissa Diop  "},
+            headers=_auth_headers(owner_user),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Idrissa Diop"
+
+
+async def test_artisan_blank_full_name_is_rejected(db_session: AsyncSession) -> None:
+    owner_user = await make_user(db_session, role=Role.ARTISAN)
+    await make_artisan_profile(db_session, user=owner_user)
+
+    async with await _client() as client:
+        response = await client.patch(
+            "/api/v1/artisans/me",
+            json={"full_name": " "},
+            headers=_auth_headers(owner_user),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "NOM_INVALIDE"
+
+
+async def test_artisan_cannot_edit_another_artisans_full_name(db_session: AsyncSession) -> None:
+    owner_user = await make_user(db_session, role=Role.ARTISAN, full_name="Owner")
+    await make_artisan_profile(db_session, user=owner_user)
+    other_user = await make_user(db_session, role=Role.ARTISAN, full_name="Other")
+    await make_artisan_profile(db_session, user=other_user)
+
+    async with await _client() as client:
+        response = await client.patch(
+            "/api/v1/artisans/me",
+            json={"full_name": "Usurpateur"},
+            headers=_auth_headers(other_user),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["full_name"] == "Usurpateur"
+
+    stmt = select(User.full_name).where(User.id == owner_user.id)
+    owner_name_untouched = (await db_session.execute(stmt)).scalar_one()
+    assert owner_name_untouched == "Owner"  # jamais affecté : édite toujours SON PROPRE compte

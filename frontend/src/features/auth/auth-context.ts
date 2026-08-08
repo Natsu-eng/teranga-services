@@ -11,9 +11,11 @@ export interface AuthContextValue {
   requestOtp: (phone: string) => Promise<void>;
   /** Vérifie l'OTP pour un compte déjà existant. Ne crée jamais de compte — le backend rejette un numéro inconnu (BUILD_PLAN.md §4). */
   login: (phone: string, code: string) => Promise<void>;
-  /** Vérifie l'OTP et crée un nouveau compte avec le rôle choisi. Le backend rejette un numéro déjà inscrit (BUILD_PLAN.md §4). */
-  signup: (phone: string, code: string, role: SignupRole) => Promise<void>;
+  /** Vérifie l'OTP et crée un nouveau compte avec le rôle choisi. Le backend rejette un numéro déjà inscrit (BUILD_PLAN.md §4). `fullName` est requis (revalidé côté backend) -- fix confidentialité du contact : plus jamais de compte créé avec le téléphone comme nom. */
+  signup: (phone: string, code: string, role: SignupRole, fullName: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Édite le nom du compte courant (`PATCH /users/me`), rôle-agnostique. */
+  updateFullName: (fullName: string) => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);

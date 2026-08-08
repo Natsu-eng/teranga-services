@@ -60,8 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const signup = useCallback(
-    async (phone: string, code: string, role: SignupRole) => {
-      const { user: newUser, tokens } = await authClient.verifyOtp(phone, code, 'signup', role);
+    async (phone: string, code: string, role: SignupRole, fullName: string) => {
+      const { user: newUser, tokens } = await authClient.verifyOtp(
+        phone,
+        code,
+        'signup',
+        role,
+        fullName,
+      );
       applySession(newUser, tokens);
     },
     [applySession],
@@ -78,6 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const updateFullName = useCallback(async (fullName: string) => {
+    const updatedUser = await authClient.updateFullName(fullName);
+    setUser(updatedUser);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -88,8 +99,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login,
       signup,
       logout,
+      updateFullName,
     }),
-    [user, isLoading, requestOtp, login, signup, logout],
+    [user, isLoading, requestOtp, login, signup, logout, updateFullName],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
