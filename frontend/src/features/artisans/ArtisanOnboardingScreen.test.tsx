@@ -41,6 +41,7 @@ function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
     requestOtp: vi.fn(),
     login: vi.fn(),
     signup: vi.fn(),
+    updateFullName: vi.fn(),
     logout: vi.fn(),
     ...overrides,
   };
@@ -116,6 +117,7 @@ describe('ArtisanOnboardingScreen', () => {
 
     expect(await screen.findByDisplayValue('Plombier expérimenté.')).toBeInTheDocument();
     expect(screen.getByDisplayValue('8')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Idrissa Diop')).toBeInTheDocument();
   });
 
   it('shows the "none" status banner and an incomplete checklist before anything is submitted', async () => {
@@ -146,6 +148,26 @@ describe('ArtisanOnboardingScreen', () => {
       ),
     );
     expect(await screen.findByDisplayValue('Nouvelle bio soignée.')).toBeInTheDocument();
+  });
+
+  it('saves an edited full name and reflects the update', async () => {
+    mockedApi.updateMyArtisanProfile.mockResolvedValue({
+      ...profileFixture,
+      fullName: 'Idrissa D. Diop',
+    });
+
+    renderScreen();
+
+    const nameInput = await screen.findByDisplayValue('Idrissa Diop');
+    fireEvent.change(nameInput, { target: { value: '  Idrissa D. Diop  ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer mon profil' }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateMyArtisanProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ fullName: 'Idrissa D. Diop' }),
+      ),
+    );
+    expect(await screen.findByDisplayValue('Idrissa D. Diop')).toBeInTheDocument();
   });
 
   it('uploads a new avatar and reflects the returned URL', async () => {

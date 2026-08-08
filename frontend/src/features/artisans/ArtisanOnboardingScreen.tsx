@@ -102,6 +102,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   const actions = useArtisanProfileActions((next) => setProfile(() => next));
   const documentUpload = useDocumentUpload(reloadVerification);
 
+  const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -121,6 +122,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
 
   if (profile && profile.id !== loadedProfileId) {
     setLoadedProfileId(profile.id);
+    setFullName(profile.fullName);
     setBio(profile.bio ?? '');
     setYearsExperience(profile.yearsExperience != null ? String(profile.yearsExperience) : '');
     setAvatarUrl(profile.avatarUrl ?? '');
@@ -167,6 +169,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     const trimmedBio = bio.trim();
     const trimmedAvatar = avatarUrl.trim();
     await actions.updateProfile({
+      fullName: fullName.trim(),
       bio: trimmedBio === '' ? null : trimmedBio,
       yearsExperience: yearsExperience === '' ? null : Number(yearsExperience),
       avatarUrl: trimmedAvatar === '' ? null : trimmedAvatar,
@@ -294,6 +297,22 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                     className="mt-2 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
                   />
                 </details>
+              </div>
+
+              <div>
+                <label htmlFor="onboarding-full-name" className="text-xs font-sora font-bold text-muted-foreground-soft uppercase">
+                  Nom complet
+                </label>
+                <input
+                  id="onboarding-full-name"
+                  type="text"
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={150}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                />
               </div>
 
               <div>
