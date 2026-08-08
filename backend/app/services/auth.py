@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+from app.core.full_name import validate_full_name
 from app.core.security import (
     TokenInvalideError,
     decode_token,
@@ -93,13 +94,14 @@ async def resolve_account_for_intent(
     *,
     intent: Literal["login", "signup"],
     role: Literal["client", "artisan"] | None,
+    full_name: str | None = None,
 ) -> User:
     """Traduit `(phone, intent, role)` en `User`, après vérification OTP réussie
     (BUILD_PLAN.md §4). En signup, crée le compte (et son `artisan_profile`
     vide si `role == artisan`) -- jamais si le numéro existe déjà. En login,
     retrouve le compte existant -- n'en crée jamais. Un compte existant ne
-    change jamais de rôle via ce flux (le login ne le touche pas, le signup
-    rejette purement et simplement un numéro déjà pris).
+    change jamais de rôle (ni de nom) via ce flux (le login ne le touche
+    pas, le signup rejette purement et simplement un numéro déjà pris).
     """
     now = datetime.now(UTC)
     existing = (await session.execute(select(User).where(User.phone == phone))).scalar_one_or_none()
@@ -110,14 +112,18 @@ async def resolve_account_for_intent(
         if existing is not None:
             raise CompteDejaExistantError()
 
+        # Le nom est requis pour les deux rôles (fix confidentialité du
+        # contact, BUILD_PLAN.md) : plus jamais de placeholder = le
+        # téléphone. `validate_full_name` rejette aussi bien `None` (via le
+        # `or ""`) qu'une chaîne vide/trop courte après trim -- un seul
+        # message actionnable, "le nom est requis".
+        validated_full_name = validate_full_name(full_name or "")
+
         signup_role = Role.ARTISAN if role == "artisan" else Role.CLIENT
         assert signup_role in _SIGNUP_ROLES  # invariant : jamais Role.ADMIN ici
         user = User(
             phone=phone,
-            # Placeholder en attendant une complétion de profil (onboarding,
-            # hors périmètre de ce lot) : le téléphone est la seule donnée
-            # garantie à la création d'un compte par OTP.
-            full_name=phone,
+            full_name=validated_full_name,
             role=signup_role,
             locale=Locale.FR,
             phone_verified_at=now,

@@ -99,7 +99,7 @@ async def verify_otp(
 
     try:
         user = await auth_service.resolve_account_for_intent(
-            session, phone, intent=payload.intent, role=payload.role
+            session, phone, intent=payload.intent, role=payload.role, full_name=payload.full_name
         )
     except AppError:
         # Idem : un rejet ici (rôle invalide, compte déjà existant / inexistant)
