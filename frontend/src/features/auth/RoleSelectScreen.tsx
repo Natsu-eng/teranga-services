@@ -49,7 +49,7 @@ export const RoleSelectScreen: React.FC = () => {
   const from = (location.state as { from?: Location } | null)?.from;
 
   const selectRole = (role: SignupRole) => {
-    navigate('/connexion/telephone', { state: { intent: 'signup', role, from } });
+    navigate('/connexion/nom', { state: { intent: 'signup', role, from } });
   };
 
   return (

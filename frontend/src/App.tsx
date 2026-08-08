@@ -9,6 +9,7 @@ import { MinimalLayout } from './components/layout/MinimalLayout';
 import { LandingScreen } from './features/landing/LandingScreen';
 import { AuthEntryScreen } from './features/auth/AuthEntryScreen';
 import { RoleSelectScreen } from './features/auth/RoleSelectScreen';
+import { NameScreen } from './features/auth/NameScreen';
 import { PhoneScreen } from './features/auth/PhoneScreen';
 import { OtpScreen } from './features/auth/OtpScreen';
 import { ArtisanWelcomeScreen } from './features/auth/ArtisanWelcomeScreen';
@@ -35,6 +36,7 @@ export function AppRoutes() {
           <Route index element={<LandingScreen />} />
           <Route path="connexion" element={<AuthEntryScreen />} />
           <Route path="connexion/role" element={<RoleSelectScreen />} />
+          <Route path="connexion/nom" element={<NameScreen />} />
           <Route path="connexion/telephone" element={<PhoneScreen />} />
           <Route path="connexion/code" element={<OtpScreen />} />
           <Route

@@ -14,7 +14,7 @@ function renderRoleSelectScreen(state: unknown = null) {
       <Routes>
         <Route path="/connexion" element={<div>Auth entry screen</div>} />
         <Route path="/connexion/role" element={<RoleSelectScreen />} />
-        <Route path="/connexion/telephone" element={<StateProbe label="Phone screen" />} />
+        <Route path="/connexion/nom" element={<StateProbe label="Name screen" />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -30,7 +30,7 @@ describe('RoleSelectScreen', () => {
 
     expect(
       await screen.findByText(
-        'Phone screen: {"intent":"signup","role":"client","from":{"pathname":"/demande"}}',
+        'Name screen: {"intent":"signup","role":"client","from":{"pathname":"/demande"}}',
       ),
     ).toBeInTheDocument();
   });
@@ -41,7 +41,7 @@ describe('RoleSelectScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: /Je suis un artisan/ }));
 
     expect(
-      await screen.findByText('Phone screen: {"intent":"signup","role":"artisan"}'),
+      await screen.findByText('Name screen: {"intent":"signup","role":"artisan"}'),
     ).toBeInTheDocument();
   });
 

@@ -42,6 +42,7 @@ describe('OtpScreen', () => {
       login,
       signup,
       logout: vi.fn(),
+      updateFullName: vi.fn(),
     } satisfies AuthContextValue);
   });
 
@@ -84,25 +85,35 @@ describe('OtpScreen', () => {
 
   it('signs up a client (intent=signup, role=client) and navigates to /profil by default', async () => {
     signup.mockResolvedValue(undefined);
-    renderOtpScreen({ phone: '+221771234501', intent: 'signup', role: 'client' });
+    renderOtpScreen({
+      phone: '+221771234501',
+      intent: 'signup',
+      role: 'client',
+      fullName: 'Fatou Sarr',
+    });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Valider' }));
 
     expect(await screen.findByText('Profile screen')).toBeInTheDocument();
-    expect(signup).toHaveBeenCalledWith('+221771234501', '123456', 'client');
+    expect(signup).toHaveBeenCalledWith('+221771234501', '123456', 'client', 'Fatou Sarr');
     expect(login).not.toHaveBeenCalled();
   });
 
   it('signs up an artisan (intent=signup, role=artisan) and navigates to the welcome screen', async () => {
     signup.mockResolvedValue(undefined);
-    renderOtpScreen({ phone: '+221771234501', intent: 'signup', role: 'artisan' });
+    renderOtpScreen({
+      phone: '+221771234501',
+      intent: 'signup',
+      role: 'artisan',
+      fullName: 'Idrissa Diop',
+    });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Valider' }));
 
     expect(await screen.findByText('Artisan welcome screen')).toBeInTheDocument();
-    expect(signup).toHaveBeenCalledWith('+221771234501', '123456', 'artisan');
+    expect(signup).toHaveBeenCalledWith('+221771234501', '123456', 'artisan', 'Idrissa Diop');
   });
 
   it('returns to the originating page (from) after login when the phone step carried one', async () => {

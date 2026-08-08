@@ -61,10 +61,14 @@ export const authClient = {
     code: string,
     intent: AuthIntent,
     role?: SignupRole,
+    // Requis en signup uniquement (le backend le revalide -- fix
+    // confidentialité du contact, BUILD_PLAN.md : plus jamais de compte créé
+    // avec le téléphone comme nom). Ignoré en login.
+    fullName?: string,
   ): Promise<{ user: AuthUser; tokens: TokenPair }> {
     const response = await apiRequest<BackendAuthResponse>('/auth/verify-otp', {
       method: 'POST',
-      body: { phone, code, intent, role },
+      body: { phone, code, intent, role, full_name: fullName },
       skipAuth: true,
     });
     return { user: mapUser(response.user), tokens: { access: response.access, refresh: response.refresh } };
@@ -72,6 +76,18 @@ export const authClient = {
 
   async me(): Promise<AuthUser> {
     const user = await apiRequest<BackendUser>('/auth/me');
+    return mapUser(user);
+  },
+
+  // `PATCH /users/me` : rôle-agnostique (client ET artisan), toujours son
+  // propre compte -- distinct de `PATCH /artisans/me` (profil artisan
+  // étendu), qui accepte aussi `full_name` pour ne pas forcer l'artisan à
+  // utiliser deux endpoints différents.
+  async updateFullName(fullName: string): Promise<AuthUser> {
+    const user = await apiRequest<BackendUser>('/users/me', {
+      method: 'PATCH',
+      body: { full_name: fullName },
+    });
     return mapUser(user);
   },
 

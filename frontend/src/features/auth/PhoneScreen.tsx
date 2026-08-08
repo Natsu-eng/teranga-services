@@ -13,6 +13,7 @@ const INTERNATIONAL_PHONE_REGEX = /^\+[1-9]\d{7,14}$/;
 interface PhoneLocationState {
   intent?: AuthIntent;
   role?: SignupRole;
+  fullName?: string;
   from?: Location;
 }
 
@@ -22,7 +23,7 @@ export const PhoneScreen: React.FC = () => {
   const auth = useAuth();
 
   const state = (location.state as PhoneLocationState | null) ?? {};
-  const { intent, role, from } = state;
+  const { intent, role, fullName, from } = state;
 
   const [phone, setPhone] = useState('+221');
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +51,7 @@ export const PhoneScreen: React.FC = () => {
     setIsSubmitting(true);
     try {
       await auth.requestOtp(phone);
-      navigate('/connexion/code', { state: { phone, intent, role, from } });
+      navigate('/connexion/code', { state: { phone, intent, role, fullName, from } });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
     } finally {

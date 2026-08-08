@@ -35,6 +35,7 @@ describe('PhoneScreen', () => {
       requestOtp,
       login: vi.fn(),
       signup: vi.fn(),
+      updateFullName: vi.fn(),
       logout: vi.fn(),
     } satisfies AuthContextValue);
   });

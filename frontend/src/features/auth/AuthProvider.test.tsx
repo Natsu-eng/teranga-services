@@ -32,7 +32,10 @@ function Probe() {
       <span data-testid="name">{auth.user?.fullName ?? ''}</span>
       <button onClick={() => void auth.requestOtp('+221771234501')}>request</button>
       <button onClick={() => void auth.login('+221771234501', '123456')}>login</button>
-      <button onClick={() => void auth.signup('+221771234501', '123456', 'artisan')}>signup</button>
+      <button onClick={() => void auth.signup('+221771234501', '123456', 'artisan', 'Idrissa Diop')}>
+        signup
+      </button>
+      <button onClick={() => void auth.updateFullName('Nouveau Nom')}>updateFullName</button>
       <button onClick={() => void auth.logout()}>logout</button>
     </div>
   );
@@ -126,8 +129,47 @@ describe('AuthProvider', () => {
 
     const verifyCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/auth/verify-otp'));
     expect(verifyCall?.[1]?.body).toBe(
-      JSON.stringify({ phone: '+221771234501', code: '123456', intent: 'signup', role: 'artisan' }),
+      JSON.stringify({
+        phone: '+221771234501',
+        code: '123456',
+        intent: 'signup',
+        role: 'artisan',
+        full_name: 'Idrissa Diop',
+      }),
     );
+  });
+
+  it('updates the current name through updateFullName (PATCH /users/me)', async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/auth/verify-otp')) {
+        return Promise.resolve(
+          jsonResponse(200, { access: 'access-1', refresh: 'refresh-1', user: backendUser }),
+        );
+      }
+      if (url.endsWith('/users/me')) {
+        return Promise.resolve(jsonResponse(200, { ...backendUser, full_name: 'Nouveau Nom' }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+
+    fireEvent.click(screen.getByText('login'));
+    await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('true'));
+
+    fireEvent.click(screen.getByText('updateFullName'));
+
+    await waitFor(() => expect(screen.getByTestId('name').textContent).toBe('Nouveau Nom'));
+
+    const patchCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/users/me'));
+    expect(patchCall?.[1]?.method).toBe('PATCH');
+    expect(patchCall?.[1]?.body).toBe(JSON.stringify({ full_name: 'Nouveau Nom' }));
   });
 
   it('restores the session on mount from a persisted refresh token (silent refresh via GET /auth/me)', async () => {
