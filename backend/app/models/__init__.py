@@ -11,6 +11,7 @@ from app.models.intervention import Intervention, Quote
 from app.models.messaging import Conversation, Message
 from app.models.otp import OtpCode
 from app.models.payment import Payment, Payout, PlatformFee
+from app.models.rate_limit import RateLimitHit
 from app.models.refresh_token import RefreshToken
 from app.models.request import ServiceRequest
 from app.models.review import Review
@@ -30,6 +31,7 @@ __all__ = [
     "PlatformFee",
     "Payout",
     "Quote",
+    "RateLimitHit",
     "RefreshToken",
     "Review",
     "ServiceRequest",

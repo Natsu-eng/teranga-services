@@ -119,6 +119,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
 | `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
 | `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
+| `RATE_LIMIT_BACKEND` | Non (`memory` en dev, `postgres` sinon) | Stockage des compteurs de rate limiting : `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors dev. |
 | `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
 | `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
@@ -169,12 +170,17 @@ commercial n'est branché à ce stade ; ce choix reste à trancher avant la
 mise en production (`SMS_PROVIDER=unconfigured` échoue explicitement en
 attendant).
 
-**Rate limiting** sur `request-otp` : fenêtre glissante **en mémoire**
-(`app/services/rate_limit.py`), par numéro et par IP. Dette technique
-documentée : cet état est local au processus, il ne survit ni à un
-redémarrage ni à plusieurs instances/workers -- à remplacer par un backend
-partagé (Redis, ou une table dédiée) si le trafic ou le nombre d'instances
-grandit.
+**Rate limiting** sur `request-otp` (par numéro et par IP), et de la même
+façon sur le triage IA, les documents et les photos de profil : fenêtre
+glissante (`app/services/rate_limit.py`). En staging/prod, les compteurs
+vivent dans la table `rate_limit_hit` (`RATE_LIMIT_BACKEND=postgres`, par
+défaut hors dev) : **partagés par toutes les instances et conservés au
+redémarrage**. Chaque vérification tourne dans sa propre transaction
+(un appel refusé ensuite reste décompté), un verrou consultatif par clé
+empêche N requêtes simultanées de dépasser la limite, et la clé (numéro,
+IP, utilisateur) n'est jamais stockée en clair -- seulement son empreinte
+SHA-256. Base indisponible = requête refusée (échec fermé). En dev, l'état
+reste en mémoire pour simplifier.
 
 ## Lecture des artisans (recherche géo, avis, stats)
 

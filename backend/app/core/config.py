@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -121,11 +121,32 @@ class Settings(BaseSettings):
             )
         return v
 
-    # Rate limiting sur /auth/request-otp, fenêtre glissante en mémoire
-    # (voir app/services/rate_limit.py). Dette documentée pour Railway : un
-    # limiteur en mémoire ne survit ni à un redémarrage, ni à plusieurs
-    # instances -- acceptable pour le lancement, à remplacer par un backend
-    # partagé (Redis, ou la base) si le trafic ou le nombre d'instances grandit.
+    # Stockage des compteurs de TOUS les rate limitings (OTP, triage IA,
+    # documents, médias de profil) -- voir app/services/rate_limit.py.
+    # - "postgres" : table `rate_limit_hit`, partagée par toutes les
+    #   instances et persistante (survit à un redémarrage/déploiement).
+    # - "memory" : état local au processus, pour le dev et les tests.
+    # Non renseigné : "memory" en dev, "postgres" en staging/prod. "memory"
+    # explicitement demandé en staging/prod est REFUSÉ au démarrage
+    # (`validate_rate_limit_backend`) : derrière plusieurs instances, chacune
+    # appliquerait sa propre limite (limite réelle multipliée d'autant), et
+    # chaque redéploiement remettrait tous les compteurs à zéro.
+    rate_limit_backend: Literal["memory", "postgres"] | None = None
+
+    @model_validator(mode="after")
+    def validate_rate_limit_backend(self) -> "Settings":
+        if self.rate_limit_backend is None:
+            self.rate_limit_backend = "memory" if self.app_env == "dev" else "postgres"
+        elif self.rate_limit_backend == "memory" and self.app_env != "dev":
+            raise ValueError(
+                f"RATE_LIMIT_BACKEND=memory est interdit avec APP_ENV={self.app_env} : "
+                "les limites ne seraient ni partagées entre instances ni conservées au "
+                "redémarrage. Utilisez RATE_LIMIT_BACKEND=postgres (ou laissez-la vide)."
+            )
+        return self
+
+    # Rate limiting sur /auth/request-otp, fenêtre glissante (stockage selon
+    # RATE_LIMIT_BACKEND ci-dessus).
     rate_limit_otp_per_phone_max: int = 3
     rate_limit_otp_per_phone_window_seconds: int = 600
     rate_limit_otp_per_ip_max: int = 10
@@ -188,7 +209,7 @@ class Settings(BaseSettings):
     mistral_timeout_seconds: float = 10.0
 
     # Rate limiting sur POST /api/v1/ai/analyze, même mécanisme (fenêtre
-    # glissante en mémoire) que RATE_LIMIT_OTP_* -- voir
+    # glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_* -- voir
     # app/services/rate_limit.py. Par IP uniquement : l'endpoint est public,
     # non authentifié (l'écran /demande ne requiert pas de connexion), donc
     # aucune identité utilisateur fiable à clé dessus. Chaque appel coûte
@@ -219,7 +240,7 @@ class Settings(BaseSettings):
     storage_max_upload_bytes: int = 8 * 1024 * 1024
 
     # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
-    # (fenêtre glissante en mémoire) que RATE_LIMIT_OTP_*. Par utilisateur
+    # (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_*. Par utilisateur
     # authentifié (pas par IP : l'endpoint exige déjà un compte artisan) --
     # une écriture disque + un hachage de magic bytes par appel ne doivent
     # pas pouvoir être déclenchés en boucle.
@@ -254,7 +275,7 @@ class Settings(BaseSettings):
     cover_max_upload_bytes: int = 4 * 1024 * 1024
 
     # Rate limiting sur POST /api/v1/artisans/me/avatar et .../me/cover,
-    # même mécanisme (fenêtre glissante en mémoire) que
+    # même mécanisme (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que
     # RATE_LIMIT_DOCUMENT_UPLOAD_*. Budget partagé entre les deux endpoints
     # (même limiteur, même clé `user:{id}`) : ce sont deux variantes du même
     # geste ("changer une photo de mon profil public"), pas deux

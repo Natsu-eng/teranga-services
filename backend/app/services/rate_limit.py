@@ -1,27 +1,68 @@
-"""Rate limiting à fenêtre glissante, en mémoire (BUILD_PLAN.md §4).
+"""Rate limiting à fenêtre glissante (BUILD_PLAN.md §4), deux stockages
+interchangeables derrière le même contrat `RateLimiter` :
 
-**Dette technique documentée pour Railway** : cet état vit dans le
-processus Python (un `dict` protégé par un verrou asyncio). Il ne survit
-ni à un redémarrage, ni à plusieurs instances/workers -- deux instances
-derrière un load balancer appliqueraient chacune leur propre limite,
-divisant de fait la limite réelle par le nombre d'instances. Acceptable
-pour un lancement à une seule instance ; à remplacer par un backend
-partagé (Redis, ou une table dédiée) si le trafic ou le nombre
-d'instances grandit.
+- `PostgresRateLimiter` (staging/prod) : compteurs dans la table
+  `rate_limit_hit`, partagés par toutes les instances et persistants -- la
+  limite reste la même quel que soit le nombre de workers, et un
+  redéploiement ne remet pas les compteurs à zéro.
+- `SlidingWindowRateLimiter` (dev, tests) : `dict` en mémoire, local au
+  processus.
+
+Le choix se fait par `RATE_LIMIT_BACKEND` (app/core/config.py), qui refuse
+"memory" hors dev. Les routes ne dépendent que du contrat, via les
+dépendances `get_*_rate_limiter` ci-dessous (que les tests remplacent par
+une instance fraîche avec `dependency_overrides`).
 """
 
 import asyncio
+import hashlib
 import time
+from datetime import timedelta
+from typing import Annotated, Protocol
+
+from fastapi import Depends
+from sqlalchemy import Interval, bindparam, delete, func, insert, select, text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from app.core.config import Settings, get_settings
+from app.models.rate_limit import RateLimitHit
+
+# Au-delà, une fenêtre n'a plus de sens pour un rate limiting anti-abus, et
+# la purge globale (lignes de plus de 24 h) effacerait des appels encore
+# décomptés. Toutes les fenêtres configurées aujourd'hui font 10 minutes.
+MAX_WINDOW_SECONDS = 24 * 3600
+
+# Purge globale des lignes expirées, au plus une fois par intervalle et par
+# processus -- les clés jamais revues (numéro saisi une seule fois...) ne
+# restent pas indéfiniment en base.
+_GLOBAL_PURGE_INTERVAL_SECONDS = 600
+
+
+class RateLimiter(Protocol):
+    async def check(self, key: str, *, max_hits: int, window_seconds: int) -> bool:
+        """Enregistre un appel pour `key` et renvoie `False` (sans le
+        décompter) si `max_hits` appels ont déjà eu lieu sur les
+        `window_seconds` dernières secondes."""
+        ...
+
+
+def _validate_window(window_seconds: int) -> None:
+    if not 0 < window_seconds <= MAX_WINDOW_SECONDS:
+        raise ValueError(
+            f"Fenêtre de rate limiting invalide : {window_seconds} s "
+            f"(attendu entre 1 et {MAX_WINDOW_SECONDS})."
+        )
 
 
 class SlidingWindowRateLimiter:
+    """Stockage en mémoire, local au processus (dev et tests uniquement)."""
+
     def __init__(self) -> None:
         self._hits: dict[str, list[float]] = {}
         self._lock = asyncio.Lock()
 
     async def check(self, key: str, *, max_hits: int, window_seconds: int) -> bool:
-        """Enregistre un hit pour `key` et renvoie `False` si `max_hits` est
-        dépassé sur les `window_seconds` dernières secondes."""
+        _validate_window(window_seconds)
         now = time.monotonic()
         cutoff = now - window_seconds
         async with self._lock:
@@ -41,38 +82,123 @@ class SlidingWindowRateLimiter:
             return True
 
 
-otp_rate_limiter = SlidingWindowRateLimiter()
-ai_analyze_rate_limiter = SlidingWindowRateLimiter()
-document_upload_rate_limiter = SlidingWindowRateLimiter()
-profile_media_upload_rate_limiter = SlidingWindowRateLimiter()
+def hash_rate_limit_key(bucket: str, key: str) -> str:
+    """Empreinte stockée à la place de la clé : jamais de numéro de
+    téléphone, d'IP ou d'identifiant en clair dans `rate_limit_hit`. Le
+    `bucket` est inclus pour qu'une même clé n'ait pas la même empreinte
+    d'un limiteur à l'autre."""
+    return hashlib.sha256(f"{bucket}\x00{key}".encode()).hexdigest()
 
 
-def get_otp_rate_limiter() -> SlidingWindowRateLimiter:
-    """Dépendance FastAPI -- indirection nécessaire pour que les tests
-    puissent substituer une instance fraîche par requête (`dependency_overrides`)
-    sans se marcher dessus via le singleton partagé par tout le processus.
+class PostgresRateLimiter:
+    """Stockage partagé dans `rate_limit_hit` (staging/prod).
+
+    Chaque vérification tourne dans SA PROPRE transaction, sur sa propre
+    connexion, commitée immédiatement -- jamais dans la session de la
+    requête : un appel refusé ensuite (fichier invalide, code OTP faux...)
+    reste décompté, sinon il suffirait d'échouer volontairement pour
+    contourner la limite.
+
+    Concurrence : un verrou consultatif transactionnel par (bucket, clé)
+    sérialise les vérifications simultanées d'une même clé, y compris
+    depuis plusieurs instances -- sans lui, N requêtes parallèles liraient
+    toutes « 2 appels sur 3 » et passeraient toutes. Les clés différentes ne
+    se bloquent jamais entre elles.
+
+    Base indisponible : l'exception remonte (500), la requête est refusée
+    -- échec FERMÉ, jamais une limite levée en silence.
     """
-    return otp_rate_limiter
+
+    def __init__(self, engine: AsyncEngine, bucket: str) -> None:
+        self._engine = engine
+        self._bucket = bucket
+        self._last_global_purge = float("-inf")
+
+    async def check(self, key: str, *, max_hits: int, window_seconds: int) -> bool:
+        _validate_window(window_seconds)
+        key_hash = hash_rate_limit_key(self._bucket, key)
+        window = bindparam("window", timedelta(seconds=window_seconds), type_=Interval)
+        same_key = (RateLimitHit.bucket == self._bucket) & (RateLimitHit.key_hash == key_hash)
+
+        async with self._engine.begin() as conn:
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(hashtextextended(:lock_key, 0))"),
+                {"lock_key": f"rate_limit:{key_hash}"},
+            )
+            await conn.execute(
+                delete(RateLimitHit).where(
+                    same_key, RateLimitHit.hit_at <= func.clock_timestamp() - window
+                )
+            )
+            count = await conn.scalar(
+                select(func.count()).select_from(RateLimitHit).where(same_key)
+            )
+            allowed = (count or 0) < max_hits
+            if allowed:
+                await conn.execute(
+                    insert(RateLimitHit).values(bucket=self._bucket, key_hash=key_hash)
+                )
+
+        await self._maybe_purge_expired()
+        return allowed
+
+    async def _maybe_purge_expired(self) -> None:
+        now = time.monotonic()
+        if now - self._last_global_purge < _GLOBAL_PURGE_INTERVAL_SECONDS:
+            return
+        self._last_global_purge = now
+        horizon = bindparam("horizon", timedelta(seconds=MAX_WINDOW_SECONDS), type_=Interval)
+        async with self._engine.begin() as conn:
+            await conn.execute(
+                delete(RateLimitHit).where(RateLimitHit.hit_at <= func.clock_timestamp() - horizon)
+            )
 
 
-def get_ai_analyze_rate_limiter() -> SlidingWindowRateLimiter:
-    """Dépendance FastAPI pour `POST /api/v1/ai/analyze` -- instance distincte
-    de `otp_rate_limiter` : une même IP ne doit pas partager son compteur
-    entre deux fonctionnalités sans rapport (mêmes raisons d'indirection que
-    `get_otp_rate_limiter`, voir ci-dessus)."""
-    return ai_analyze_rate_limiter
+# Un limiteur par fonctionnalité : une même IP ou un même utilisateur ne
+# partage jamais son compteur entre deux usages sans rapport.
+OTP_BUCKET = "otp"
+AI_ANALYZE_BUCKET = "ai_analyze"
+DOCUMENT_UPLOAD_BUCKET = "document_upload"
+PROFILE_MEDIA_UPLOAD_BUCKET = "profile_media_upload"
+
+_memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
+_postgres_limiters: dict[str, PostgresRateLimiter] = {}
 
 
-def get_document_upload_rate_limiter() -> SlidingWindowRateLimiter:
-    """Dépendance FastAPI pour `POST /api/v1/artisans/me/documents` --
-    instance distincte, clé par utilisateur authentifié (pas par IP, voir
-    app/api/v1/artisans.py)."""
-    return document_upload_rate_limiter
+def _limiter_for(bucket: str, settings: Settings) -> RateLimiter:
+    """Instance unique par bucket et par processus, du stockage choisi par
+    `RATE_LIMIT_BACKEND` (déjà résolu et validé par `Settings`)."""
+    if settings.rate_limit_backend == "postgres":
+        if bucket not in _postgres_limiters:
+            # Import tardif : le moteur applicatif n'est créé que si le
+            # stockage partagé est réellement utilisé.
+            from app.db.session import engine
+
+            _postgres_limiters[bucket] = PostgresRateLimiter(engine, bucket)
+        return _postgres_limiters[bucket]
+    return _memory_limiters.setdefault(bucket, SlidingWindowRateLimiter())
 
 
-def get_profile_media_upload_rate_limiter() -> SlidingWindowRateLimiter:
-    """Dépendance FastAPI pour `POST /api/v1/artisans/me/avatar` et
-    `.../me/cover` -- un seul budget partagé entre les deux (même clé par
-    utilisateur authentifié), distinct de `document_upload_rate_limiter`
-    (documents de vérification, régime privé)."""
-    return profile_media_upload_rate_limiter
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_otp_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/auth/request-otp` -- clés par numéro et par IP."""
+    return _limiter_for(OTP_BUCKET, settings)
+
+
+def get_ai_analyze_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/ai/analyze` -- clé par IP (endpoint public)."""
+    return _limiter_for(AI_ANALYZE_BUCKET, settings)
+
+
+def get_document_upload_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/artisans/me/documents` -- clé par utilisateur
+    authentifié (documents de vérification, régime privé)."""
+    return _limiter_for(DOCUMENT_UPLOAD_BUCKET, settings)
+
+
+def get_profile_media_upload_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/artisans/me/avatar` et `.../me/cover` -- un seul budget
+    partagé entre les deux (même clé par utilisateur authentifié)."""
+    return _limiter_for(PROFILE_MEDIA_UPLOAD_BUCKET, settings)

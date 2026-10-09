@@ -24,7 +24,7 @@ from app.core.errors import AppError
 from app.db.session import get_session
 from app.schemas.ai_triage import AnalyzeProblemIn, TriageResult
 from app.services import ai_triage as ai_triage_service
-from app.services.rate_limit import SlidingWindowRateLimiter, get_ai_analyze_rate_limiter
+from app.services.rate_limit import RateLimiter, get_ai_analyze_rate_limiter
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -48,7 +48,7 @@ async def analyze(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    rate_limiter: Annotated[SlidingWindowRateLimiter, Depends(get_ai_analyze_rate_limiter)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_ai_analyze_rate_limiter)],
 ) -> TriageResult:
     allowed = await rate_limiter.check(
         f"ip:{_client_ip(request)}",

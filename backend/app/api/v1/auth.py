@@ -34,7 +34,7 @@ from app.schemas.auth import (
 )
 from app.services import auth as auth_service
 from app.services import otp as otp_service
-from app.services.rate_limit import SlidingWindowRateLimiter, get_otp_rate_limiter
+from app.services.rate_limit import RateLimiter, get_otp_rate_limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -58,7 +58,7 @@ async def request_otp(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
-    rate_limiter: Annotated[SlidingWindowRateLimiter, Depends(get_otp_rate_limiter)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_otp_rate_limiter)],
 ) -> Response:
     phone = normalize_phone(payload.phone, settings)
 
