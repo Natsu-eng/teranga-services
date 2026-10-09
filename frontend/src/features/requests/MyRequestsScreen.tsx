@@ -3,6 +3,7 @@ import { ClipboardList } from 'lucide-react';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { AppBar } from '../../components/ui/AppBar';
 import { useMyRequests } from './hooks/useMyRequests';
 import type { ServiceRequestStatus } from '../../types';
 
@@ -26,49 +27,50 @@ export const MyRequestsScreen: React.FC = () => {
   const { data: requests, isLoading, error, reload } = useMyRequests();
 
   return (
-    <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
-      <h2 className="font-bold text-2xl text-primary">Mes demandes</h2>
-
-      {isLoading && requests === null ? (
-        <div className="space-y-3">
-          {[0, 1, 2].map((key) => (
-            <div
-              key={key}
-              className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle space-y-2"
-            >
-              <Skeleton className="h-4 w-2/3" />
-              <Skeleton className="h-3 w-1/3" />
-            </div>
-          ))}
-        </div>
-      ) : error && requests === null ? (
-        <ErrorState message={error.message} onRetry={reload} />
-      ) : requests && requests.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />}
-          title="Vous n'avez pas encore de demande."
-          description="Décrivez votre problème à notre assistant IA pour trouver un artisan."
-        />
-      ) : (
-        <div className="space-y-3">
-          {(requests ?? []).map((request) => (
-            <div
-              key={request.id}
-              className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle space-y-2"
-            >
-              <div className="flex justify-between items-start gap-3">
-                <h3 className="font-bold text-base text-foreground">{request.tradeLabel}</h3>
-                <span
-                  className={`px-2.5 py-0.5 rounded-full font-sora text-[11px] font-semibold shrink-0 ${STATUS_STYLES[request.status]}`}
-                >
-                  {STATUS_LABELS[request.status]}
-                </span>
+    <>
+      <AppBar title="Mes demandes" backTo="/profil" />
+      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
+        {isLoading && requests === null ? (
+          <div className="space-y-3">
+            {[0, 1, 2].map((key) => (
+              <div
+                key={key}
+                className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle space-y-2"
+              >
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/3" />
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">{request.description}</p>
-            </div>
-          ))}
-        </div>
-      )}
-    </main>
+            ))}
+          </div>
+        ) : error && requests === null ? (
+          <ErrorState message={error.message} onRetry={reload} />
+        ) : requests && requests.length === 0 ? (
+          <EmptyState
+            icon={<ClipboardList className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />}
+            title="Vous n'avez pas encore de demande."
+            description="Décrivez votre problème à notre assistant IA pour trouver un artisan."
+          />
+        ) : (
+          <div className="space-y-3">
+            {(requests ?? []).map((request) => (
+              <div
+                key={request.id}
+                className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle space-y-2"
+              >
+                <div className="flex justify-between items-start gap-3">
+                  <h3 className="font-bold text-base text-foreground">{request.tradeLabel}</h3>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full font-sora text-[11px] font-semibold shrink-0 ${STATUS_STYLES[request.status]}`}
+                  >
+                    {STATUS_LABELS[request.status]}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2">{request.description}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </>
   );
 };

@@ -7,6 +7,7 @@ interface ComingSoonProps {
   description?: string;
   /** Lien de retour (ex. `/pro` pour un artisan). */
   backTo?: string;
+  backLabel?: string;
 }
 
 /**
@@ -18,8 +19,9 @@ export const ComingSoon: React.FC<ComingSoonProps> = ({
   title = 'Bientôt disponible',
   description = 'Cette fonctionnalité arrive prochainement. Merci de votre patience.',
   backTo = '/accueil',
+  backLabel = "Retour à l'accueil",
 }) => (
-  <main className="max-w-md mx-auto px-4 pt-16 pb-28 text-center flex flex-col items-center gap-5">
+  <main className="max-w-md mx-auto px-4 pt-12 pb-8 text-center flex flex-col items-center gap-5">
     <span
       aria-hidden
       className="inline-flex w-20 h-20 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"
@@ -31,7 +33,7 @@ export const ComingSoon: React.FC<ComingSoonProps> = ({
       <p className="text-sm text-muted-foreground">{description}</p>
     </div>
     <ButtonLink to={backTo} variant="outline">
-      Retour à l&apos;accueil
+      {backLabel}
     </ButtonLink>
   </main>
 );

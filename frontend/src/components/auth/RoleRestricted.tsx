@@ -34,7 +34,7 @@ interface RoleRestrictedProps {
 export const RoleRestricted: React.FC<RoleRestrictedProps> = ({ reservedFor, currentRole }) => {
   const exit = HOME_FOR_ROLE[currentRole ?? 'client'];
   return (
-    <main className="max-w-md mx-auto px-4 pt-16 pb-28 text-center flex flex-col items-center gap-5">
+    <main className="max-w-md mx-auto px-4 pt-12 pb-8 text-center flex flex-col items-center gap-5">
       <span
         aria-hidden
         className="inline-flex w-20 h-20 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"

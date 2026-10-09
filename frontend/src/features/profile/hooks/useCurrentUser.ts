@@ -7,8 +7,9 @@ import { initialsFrom } from '../../../lib/initials';
  * The current user/role now comes from `AuthProvider` — the single source
  * of truth for identity since Lot 10 — not from an `api.getCurrentUser()`
  * call. This keeps the hook's shape (`{data, isLoading, error, reload}`)
- * so existing call sites (Header, BottomNav, UserProfileScreen) don't need
- * to change, while removing the redundant network round-trip: the auth
+ * so existing call sites (UserProfileScreen, ArtisanDashboardScreen,
+ * ArtisanOnboardingScreen) don't need to change, while removing the
+ * redundant network round-trip: the auth
  * context already holds the backend user.
  */
 export function useCurrentUser() {

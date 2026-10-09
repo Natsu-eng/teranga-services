@@ -1,113 +1,84 @@
 import React from 'react';
-import { LayoutDashboard, MessageCircle, User, Home, Search } from 'lucide-react';
-import { Link, useLocation, useNavigate } from 'react-router';
-import { useAuth } from '../../features/auth/hooks/useAuth';
-import { toDisplayRole } from '../../features/auth/role';
-import { useCurrentUser } from '../../features/profile/hooks/useCurrentUser';
+import { Home, LayoutDashboard, MessageCircle, Search, User, type LucideIcon } from 'lucide-react';
+import { NavLink } from 'react-router';
+import { cn } from '../../lib/cn';
 
-export const BottomNav: React.FC = () => {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const auth = useAuth();
-  const userRole = toDisplayRole(auth.role);
-  const { data: currentUser } = useCurrentUser();
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  /** Actif uniquement sur l'URL exacte (sinon aussi sur ses sous-pages). */
+  end?: boolean;
+}
 
-  const goToMessages = () => {
-    if (currentUser) navigate(`/messages/${currentUser.artisanId ?? currentUser.id}`);
-  };
+/*
+ * Deux navigations volontairement distinctes, visuellement ET
+ * structurellement : 4 entrées sur fond clair côté client, 3 entrées sur
+ * le vert profond de l'espace Pro côté artisan.
+ */
+const CLIENT_ITEMS: NavItem[] = [
+  { to: '/accueil', label: 'Accueil', icon: Home, end: true },
+  { to: '/recherche', label: 'Recherche', icon: Search, end: true },
+  { to: '/messages', label: 'Messages', icon: MessageCircle },
+  { to: '/profil', label: 'Profil', icon: User, end: true },
+];
 
-  const isMessagesActive = pathname.startsWith('/messages');
+const PRO_ITEMS: NavItem[] = [
+  { to: '/pro', label: 'Tableau de bord', icon: LayoutDashboard, end: true },
+  { to: '/messages', label: 'Messages', icon: MessageCircle },
+  { to: '/profil', label: 'Profil', icon: User, end: true },
+];
 
-  if (userRole === 'artisan') {
-    return (
-      <nav className="fixed bottom-0 left-0 right-0 z-40 flex justify-around items-center px-4 py-2 bg-background border-t border-border shadow-lg pb-safe">
-        <Link
-          to="/pro"
-          className={`flex flex-col items-center justify-center px-5 py-1.5 rounded-full transition-all ${
-            pathname === '/pro'
-              ? 'bg-primary-emerald text-white shadow-sm'
-              : 'text-muted-foreground hover:bg-surface-muted'
-          }`}
-        >
-          <LayoutDashboard className="w-5 h-5" />
-          <span className="font-sora text-[11px] font-medium mt-0.5">Tableau de bord</span>
-        </Link>
+/** Barre de navigation client : surface claire, indicateur vert clair sur l'entrée active. */
+export const ClientBottomNav: React.FC = () => (
+  <nav
+    aria-label="Navigation principale"
+    className="fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur-md shadow-bar pb-safe"
+  >
+    <ul className="max-w-md mx-auto grid grid-cols-4 px-2 pt-2">
+      {CLIENT_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        <li key={to}>
+          <NavLink
+            to={to}
+            end={end}
+            className="group flex flex-col items-center gap-1 py-1 rounded-field text-caption font-medium text-muted-foreground aria-[current=page]:text-primary aria-[current=page]:font-semibold"
+          >
+            <span className="inline-flex w-14 h-8 items-center justify-center rounded-full transition-colors group-hover:bg-surface-muted group-aria-[current=page]:bg-emerald-tint">
+              <Icon aria-hidden className="w-5 h-5" />
+            </span>
+            {label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  </nav>
+);
 
-        <button
-          onClick={goToMessages}
-          className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-            isMessagesActive ? 'bg-primary-emerald text-white' : 'text-muted-foreground hover:bg-surface-muted'
-          }`}
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="font-sora text-[11px] font-medium mt-0.5">Messages</span>
-        </button>
-
-        <Link
-          to="/profil"
-          className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-            pathname === '/profil'
-              ? 'bg-primary-emerald text-white'
-              : 'text-muted-foreground hover:bg-surface-muted'
-          }`}
-        >
-          <User className="w-5 h-5" />
-          <span className="font-sora text-[11px] font-medium mt-0.5">Profil</span>
-        </Link>
-      </nav>
-    );
-  }
-
-  // Client role navigation
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 flex justify-around items-center px-4 py-2 bg-background border-t border-border shadow-lg pb-safe">
-      <Link
-        to="/accueil"
-        className={`flex flex-col items-center justify-center px-5 py-1.5 rounded-full transition-all ${
-          pathname === '/accueil'
-            ? 'bg-primary-emerald text-primary-emerald-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-surface-muted'
-        }`}
-      >
-        <Home className="w-5 h-5" {...(pathname === '/accueil' ? { fill: 'currentColor' } : {})} />
-        <span className="font-sora text-[11px] mt-0.5">Accueil</span>
-      </Link>
-
-      <Link
-        to="/recherche"
-        className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-          pathname === '/recherche'
-            ? 'bg-primary-emerald text-primary-emerald-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-surface-muted'
-        }`}
-      >
-        <Search className="w-5 h-5" />
-        <span className="font-sora text-[11px] mt-0.5">Recherche</span>
-      </Link>
-
-      <button
-        onClick={goToMessages}
-        className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-          isMessagesActive
-            ? 'bg-primary-emerald text-primary-emerald-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-surface-muted'
-        }`}
-      >
-        <MessageCircle className="w-5 h-5" />
-        <span className="font-sora text-[11px] mt-0.5">Messages</span>
-      </button>
-
-      <Link
-        to="/profil"
-        className={`flex flex-col items-center justify-center px-4 py-1.5 rounded-full transition-all ${
-          pathname === '/profil'
-            ? 'bg-primary-emerald text-primary-emerald-foreground font-semibold'
-            : 'text-muted-foreground hover:bg-surface-muted'
-        }`}
-      >
-        <User className="w-5 h-5" />
-        <span className="font-sora text-[11px] mt-0.5">Profil</span>
-      </Link>
-    </nav>
-  );
-};
+/** Barre de navigation Pro : vert profond, indicateur or sur l'entrée active. */
+export const ProBottomNav: React.FC = () => (
+  <nav
+    aria-label="Navigation de l'espace Pro"
+    data-tone="dark"
+    className="fixed bottom-0 inset-x-0 z-40 bg-primary text-white shadow-bar pb-safe"
+  >
+    <ul className="max-w-md mx-auto grid grid-cols-3 px-2 pt-2">
+      {PRO_ITEMS.map(({ to, label, icon: Icon, end }) => (
+        <li key={to}>
+          <NavLink
+            to={to}
+            end={end}
+            className={cn(
+              'group flex flex-col items-center gap-1 py-1 rounded-field text-caption font-medium',
+              'text-primary-emerald-foreground aria-[current=page]:text-white aria-[current=page]:font-semibold',
+            )}
+          >
+            <span className="inline-flex w-14 h-8 items-center justify-center rounded-full transition-colors group-hover:bg-white/10 group-aria-[current=page]:bg-accent group-aria-[current=page]:text-primary">
+              <Icon aria-hidden className="w-5 h-5" />
+            </span>
+            {label}
+          </NavLink>
+        </li>
+      ))}
+    </ul>
+  </nav>
+);
