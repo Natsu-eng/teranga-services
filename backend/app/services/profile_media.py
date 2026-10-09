@@ -95,8 +95,9 @@ def owned_media_key(
     key = url.removeprefix(prefix)
     # Format exact généré par `build_media_key` : aucune place pour un `..`,
     # un autre répertoire de profil ou un préfixe de l'autre type de média.
-    pattern = rf"{re.escape(str(profile_id))}/{_FILENAME_PREFIX[kind]}[0-9a-f]{{32}}\.(?:{_MEDIA_EXTENSIONS})"
-    if re.fullmatch(pattern, key) is None:
+    directory = re.escape(str(profile_id))
+    filename = rf"{_FILENAME_PREFIX[kind]}[0-9a-f]{{32}}\.(?:{_MEDIA_EXTENSIONS})"
+    if re.fullmatch(f"{directory}/{filename}", key) is None:
         return None
     return key
 
