@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Camera,
   CheckCircle2,
   Circle,
   FileText,
@@ -20,6 +21,7 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
+import { PROFILE_MEDIA_ACCEPT } from './profileMedia';
 import { useArtisanProfileActions } from './hooks/useArtisanProfileActions';
 import { useDocumentUpload } from './hooks/useDocumentUpload';
 import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
@@ -106,6 +108,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   const [bio, setBio] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [coverUrl, setCoverUrl] = useState('');
   const [pendingLocation, setPendingLocation] = useState<Coordinates | null>(null);
   // Trace le profil déjà servi au formulaire, pas un booléen "initialisé" --
   // ajustement d'état pendant le rendu (pattern React officiel : "Adjusting
@@ -126,6 +129,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     setBio(profile.bio ?? '');
     setYearsExperience(profile.yearsExperience != null ? String(profile.yearsExperience) : '');
     setAvatarUrl(profile.avatarUrl ?? '');
+    setCoverUrl(profile.coverUrl ?? '');
   }
 
   const latestByType = useMemo(
@@ -168,11 +172,13 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     event.preventDefault();
     const trimmedBio = bio.trim();
     const trimmedAvatar = avatarUrl.trim();
+    const trimmedCover = coverUrl.trim();
     await actions.updateProfile({
       fullName: fullName.trim(),
       bio: trimmedBio === '' ? null : trimmedBio,
       yearsExperience: yearsExperience === '' ? null : Number(yearsExperience),
       avatarUrl: trimmedAvatar === '' ? null : trimmedAvatar,
+      coverUrl: trimmedCover === '' ? null : trimmedCover,
       ...(pendingLocation ? { baseLocation: pendingLocation } : {}),
     });
     setPendingLocation(null);
@@ -211,6 +217,18 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     if (!file) return;
     const updated = await actions.uploadAvatar(file);
     if (updated) setAvatarUrl(updated.avatarUrl ?? '');
+  }
+
+  async function handleCoverFileSelected(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ): Promise<void> {
+    const file = event.target.files?.[0];
+    // Réinitialisé tout de suite : resélectionner le MÊME fichier après une
+    // erreur doit redéclencher `onChange` (sinon le navigateur l'ignore).
+    event.target.value = '';
+    if (!file) return;
+    const updated = await actions.uploadCover(file);
+    if (updated) setCoverUrl(updated.coverUrl ?? '');
   }
 
   const declaredTradeCodes = new Set((profile?.trades ?? []).map((t) => t.tradeCode));
@@ -261,41 +279,98 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                 <User className="w-5 h-5" /> Mon profil
               </h2>
 
-              <div className="flex flex-col items-center gap-3 pt-1 pb-2">
-                <div className="w-24 h-24 rounded-full overflow-hidden border-2 border-border-subtle shrink-0 bg-surface-muted">
-                  <SafeImage
-                    src={avatarUrl || null}
-                    fallback="/images/placeholder-avatar.svg"
-                    alt="Photo de profil"
-                    className="w-full h-full object-cover"
-                  />
+              {/* Aperçu fidèle à la fiche publique (ArtisanProfileScreen) :
+                  bandeau de couverture, avatar en chevauchement. Chaque
+                  photo a son propre bouton, son propre état d'envoi et son
+                  propre message d'erreur. */}
+              <div className="space-y-3 pt-1 pb-2">
+                <div className="relative">
+                  <div className="h-32 md:h-40 rounded-xl overflow-hidden bg-surface-muted border border-border-subtle">
+                    <SafeImage
+                      src={coverUrl || null}
+                      fallback="/images/placeholder-cover.svg"
+                      alt="Photo de couverture"
+                      className={`w-full h-full object-cover transition-opacity ${actions.isUploadingCover ? 'opacity-50' : ''}`}
+                    />
+                  </div>
+                  <label className="absolute top-2 right-2 inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-white/90 backdrop-blur text-primary font-sora text-[11px] font-bold cursor-pointer shadow-sm hover:bg-white active:scale-95 transition-all focus-within:ring-2 focus-within:ring-primary">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{actions.isUploadingCover ? 'Envoi...' : 'Changer la couverture'}</span>
+                    <input
+                      type="file"
+                      accept={PROFILE_MEDIA_ACCEPT}
+                      aria-label="Photo de couverture"
+                      className="sr-only"
+                      disabled={actions.isUploadingCover}
+                      onChange={handleCoverFileSelected}
+                    />
+                  </label>
+                  <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-24 h-24 rounded-full overflow-hidden ring-4 ring-white bg-surface-muted">
+                    <SafeImage
+                      src={avatarUrl || null}
+                      fallback="/images/placeholder-avatar.svg"
+                      alt="Photo de profil"
+                      className={`w-full h-full object-cover transition-opacity ${actions.isUploadingAvatar ? 'opacity-50' : ''}`}
+                    />
+                  </div>
                 </div>
-                <label className="inline-flex items-center gap-2 py-2 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold cursor-pointer hover:bg-primary/5 active:scale-95 transition-all">
-                  <UploadCloud className="w-4 h-4" />
-                  <span>{actions.isUploadingAvatar ? 'Envoi...' : 'Changer la photo'}</span>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg"
-                    className="hidden"
-                    disabled={actions.isUploadingAvatar}
-                    onChange={handleAvatarFileSelected}
-                  />
-                </label>
-                {actions.avatarError && (
-                  <p className="text-xs text-destructive text-center">{actions.avatarError}</p>
-                )}
-                <details className="w-full text-center">
-                  <summary className="text-[11px] font-sora text-muted-foreground-soft cursor-pointer">
-                    Ou collez une URL d’image existante
+
+                <div className="flex flex-col items-center gap-2 pt-11">
+                  <label className="inline-flex items-center gap-2 py-2 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold cursor-pointer hover:bg-primary/5 active:scale-95 transition-all focus-within:ring-2 focus-within:ring-primary">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>{actions.isUploadingAvatar ? 'Envoi...' : 'Changer la photo'}</span>
+                    <input
+                      type="file"
+                      accept={PROFILE_MEDIA_ACCEPT}
+                      aria-label="Photo de profil"
+                      className="sr-only"
+                      disabled={actions.isUploadingAvatar}
+                      onChange={handleAvatarFileSelected}
+                    />
+                  </label>
+                  <p className="text-[11px] font-sora text-muted-foreground-soft">
+                    JPEG ou PNG, 4 Mo maximum
+                  </p>
+                  {actions.coverError && (
+                    <p role="alert" className="text-xs text-destructive text-center">
+                      {actions.coverError}
+                    </p>
+                  )}
+                  {actions.avatarError && (
+                    <p role="alert" className="text-xs text-destructive text-center">
+                      {actions.avatarError}
+                    </p>
+                  )}
+                </div>
+
+                <details className="w-full">
+                  <summary className="text-[11px] font-sora text-muted-foreground-soft cursor-pointer text-center">
+                    Ou collez des URL d’images existantes
                   </summary>
-                  <input
-                    id="onboarding-avatar-url"
-                    type="url"
-                    value={avatarUrl}
-                    onChange={(e) => setAvatarUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="mt-2 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
-                  />
+                  <div className="mt-2 space-y-2">
+                    <label htmlFor="onboarding-avatar-url" className="sr-only">
+                      URL de la photo de profil
+                    </label>
+                    <input
+                      id="onboarding-avatar-url"
+                      type="url"
+                      value={avatarUrl}
+                      onChange={(e) => setAvatarUrl(e.target.value)}
+                      placeholder="Photo de profil : https://..."
+                      className="w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                    />
+                    <label htmlFor="onboarding-cover-url" className="sr-only">
+                      URL de la photo de couverture
+                    </label>
+                    <input
+                      id="onboarding-cover-url"
+                      type="url"
+                      value={coverUrl}
+                      onChange={(e) => setCoverUrl(e.target.value)}
+                      placeholder="Photo de couverture : https://..."
+                      className="w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                    />
+                  </div>
                 </details>
               </div>
 

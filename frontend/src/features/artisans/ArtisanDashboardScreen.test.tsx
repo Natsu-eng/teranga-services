@@ -53,6 +53,7 @@ const profileFixture: MyArtisanProfile = {
   bio: 'Plombier expérimenté.',
   yearsExperience: 8,
   avatarUrl: null,
+  coverUrl: null,
   isAvailable: true,
   verifiedStatus: 'verified',
   trades: [

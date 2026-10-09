@@ -204,6 +204,9 @@ export interface MyArtisanProfile {
   bio: string | null;
   yearsExperience: number | null;
   avatarUrl: string | null;
+  // Photo de couverture (bandeau de la fiche publique) -- même régime
+  // public que `avatarUrl`, éditée depuis l'onboarding (lot feat/profile-media).
+  coverUrl: string | null;
   isAvailable: boolean;
   verifiedStatus: ArtisanVerifiedStatus;
   trades: ArtisanTradeDetail[];
