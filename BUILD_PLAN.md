@@ -443,7 +443,9 @@ GET  /api/v1/artisans/{id}/stats                               → indicateurs d
                                    admin (403 STATISTIQUES_PRIVEES_INTERDITES pour un tiers authentifié)
 GET  /api/v1/trades                                            → référentiel des métiers actifs
 PATCH /api/v1/artisans/me         (artisan) { is_available?, bio?, years_experience?,           ✅ Lot 12c
-                                   base_location?, avatar_url? }                          ✅ onboarding artisan
+                                   base_location?, avatar_url?, cover_url? }              ✅ onboarding artisan
+                                   -- avatar_url/cover_url : URL http(s) absolue
+                                   uniquement (422 sinon), chaîne vide = retirer.
                                    -- édite son propre artisan_profile (résolu depuis le
                                    token), mise à jour PARTIELLE (seuls les champs fournis
                                    sont appliqués). Ne touche jamais verified_status (dérivé)
@@ -459,6 +461,11 @@ POST /api/v1/artisans/me/avatar   (artisan) multipart/form-data { file }        
                                    PATCH /artisans/me (ci-dessus) accepte toujours
                                    avatar_url en texte libre en complément (coller un
                                    lien externe), les deux chemins écrivent le même champ.
+POST /api/v1/artisans/me/cover    (artisan) multipart/form-data { file }              ✅ feat/profile-media
+                                   -- photo de couverture : même régime PUBLIC, même
+                                   stockage et mêmes garde-fous que l'avatar (taille
+                                   COVER_MAX_UPLOAD_BYTES). Budget d'envois PARTAGÉ avec
+                                   /me/avatar (429 TROP_DE_DEMANDES au-delà).
 POST /api/v1/artisans/me/trades   (artisan) { trade_code, hourly_rate_fcfa,           ✅ onboarding artisan
                                    service_radius_m, service_area? } -- déclare un métier
                                    exercé. Rejette un trade_code inconnu/inactif
@@ -706,7 +713,8 @@ Railway (pas de disque persistant).
    publique (§3.2), jamais comme valeur de sortie API (toujours recalculée
    à la volée par la couche de lecture).
 
-**Stockage PUBLIC (photo de profil, `POST /artisans/me/avatar`)** — à ne
+**Stockage PUBLIC (photo de profil `POST /artisans/me/avatar`, photo de
+couverture `POST /artisans/me/cover`)** — à ne
 jamais confondre avec le stockage privé ci-dessus. Une photo de profil est
 censée être visible (recherche, profil détaillé), contrairement à une CNI :
 `get_avatar_storage_backend` (même `Protocol StorageBackend`, répertoire
@@ -714,16 +722,39 @@ dédié `AVATAR_STORAGE_LOCAL_DIR`, jamais `STORAGE_LOCAL_DIR`) écrit sous un
 répertoire monté en **lecture publique** par `app.main`
 (`StaticFiles`, `/static/avatars`). Mêmes garde-fous d'upload que les
 documents (magic bytes JPEG/PNG uniquement, taille plafonnée
-`AVATAR_MAX_UPLOAD_BYTES`), sans rate limiting dédié (risque bien moindre
-qu'un KYC : authentifié, ne peut affecter que son propre stockage).
-`avatar_url` renvoyé est une **URL absolue**
+`AVATAR_MAX_UPLOAD_BYTES` / `COVER_MAX_UPLOAD_BYTES`), et un **rate limiting
+par utilisateur** (`RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_*`, budget
+unique partagé entre avatar et couverture, ajouté par le lot
+`feat/profile-media` — avant lui, l'avatar n'en avait aucun). La couverture
+partage le même stockage public que l'avatar (clé préfixée `cover-`) :
+la distinction qui compte pour la confidentialité est public/privé, pas
+avatar/couverture. `avatar_url`/`cover_url` renvoyés sont des **URL absolues**
 (`{BACKEND_PUBLIC_BASE_URL}/static/avatars/...}`) et non relative : front
 (Vercel) et back (Railway) sont deux services sur des origines différentes
-en prod (§1), le front ne peut pas deviner l'origine du back. L'ancien
-fichier est supprimé au remplacement (best-effort, jamais bloquant).
-`PATCH /artisans/me` continue par ailleurs d'accepter `avatar_url` en texte
-libre (coller une URL externe) : les deux chemins écrivent le même champ,
-sans que l'un n'exclue l'autre.
+en prod (§1), le front ne peut pas deviner l'origine du back.
+`PATCH /artisans/me` continue par ailleurs d'accepter `avatar_url`/`cover_url`
+en texte libre (coller une URL externe, **http(s) absolue uniquement** —
+jamais `javascript:`/`data:`, ces URL étant rendues dans un `<img src>`
+public) : les deux chemins écrivent le même champ, sans que l'un n'exclue
+l'autre.
+
+**Remplacement d'un média — deux règles de fiabilité**
+(`app/services/profile_media.py`, communes aux deux médias) :
+
+1. **On n'efface jamais un fichier qu'on ne peut pas prouver être le sien.**
+   Comme l'URL reste éditable à la main, reconnaître le seul préfixe
+   `/static/avatars/` permettait à un artisan de coller l'URL publique du
+   média d'un autre artisan puis d'uploader une photo pour faire effacer le
+   fichier de l'autre (défaut présent sur l'avatar avant le lot
+   `feat/profile-media`, corrigé par lui). L'ancien fichier n'est supprimé
+   que si sa clé a **exactement** le format généré
+   (`{profile_id}/[cover-]{uuid hex}.{jpg|png}`), sous le répertoire du
+   profil courant et du bon type de média.
+2. **Suppression APRÈS le commit**, jamais avant : le service renvoie la
+   clé obsolète, la route l'efface une fois la nouvelle URL durablement
+   enregistrée. Un commit raté laisse au pire un fichier orphelin, jamais
+   un profil qui pointe vers un fichier disparu. Best-effort, jamais
+   bloquant.
 
 ---
 
@@ -1135,6 +1166,27 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   profil) et au profil client (icône crayon inline). *But : plus aucun
   compte ne peut se créer sans nom, et le nom affiché publiquement n'est
   jamais un numéro de téléphone.*
+- **Lot `feat/profile-media` — Photo de couverture, fiabilité des médias
+  publics.** Nouvel endpoint `POST /artisans/me/cover` (même régime PUBLIC
+  que l'avatar : magic bytes JPEG/PNG, `COVER_MAX_UPLOAD_BYTES`, stockage
+  `get_avatar_storage_backend`, URL absolue), `cover_url` accepté dans
+  `PATCH /artisans/me`. Rate limiting par utilisateur ajouté sur les deux
+  uploads, **budget partagé** (`RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_*`,
+  20 envois / 10 min, `429 TROP_DE_DEMANDES`) — l'avatar n'en avait aucun.
+  Durcissement commun avatar/couverture (`app/services/profile_media.py`,
+  §3.3) : suppression de l'ancien fichier limitée à une clé prouvée
+  appartenir au profil et au type de média (corrige une suppression
+  possible du média d'un autre artisan via une URL collée à la main),
+  déplacée **après** le commit ; `avatar_url`/`cover_url` saisies à la main
+  restreintes au http(s) absolu. Tests : `test_artisan_cover_endpoint.py`,
+  `test_profile_media_privacy.py`, `test_profile_media_rate_limit.py`,
+  `test_profile_media_ownership.py`. Front : bandeau de couverture dans
+  l'onboarding (aperçu fidèle à la fiche publique, avatar en
+  chevauchement), un bouton, un état d'envoi et un message d'erreur par
+  photo, pré-contrôle local type/taille (aucune requête ni budget consommé
+  pour un fichier voué au refus), champ URL de couverture à côté de celui
+  de l'avatar. *But : l'artisan maîtrise toute l'image de sa fiche
+  publique, sans qu'un autre compte puisse jamais y toucher.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
