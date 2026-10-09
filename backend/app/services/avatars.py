@@ -14,12 +14,14 @@ from app.core.errors import AppError
 from app.models.user import User
 from app.services.artisans import get_own_profile, to_detail
 from app.services.file_validation import detect_file_type
+from app.services.image_processing import ImageNonDecodableError
 from app.services.profile_media import (
     ALLOWED_MEDIA_TYPES,
     MediaKind,
     MediaUploadResult,
     build_media_key,
     owned_media_key,
+    prepare_profile_image,
     public_media_url,
 )
 from app.services.storage import StorageBackend
@@ -79,8 +81,16 @@ async def upload_avatar(
         profile.avatar_url, settings=settings, profile_id=profile.id, kind=MediaKind.AVATAR
     )
 
-    key = build_media_key(profile_id=profile.id, kind=MediaKind.AVATAR, detected=detected)
-    reference = await storage.store(content, key)
+    # Jamais les octets envoyés : uniquement l'image décodée puis réencodée
+    # (métadonnées EXIF/GPS retirées, redimensionnée) -- voir
+    # app/services/image_processing.py.
+    try:
+        processed = await prepare_profile_image(content, kind=MediaKind.AVATAR, settings=settings)
+    except ImageNonDecodableError:
+        raise AvatarTypeInvalideError() from None
+
+    key = build_media_key(profile_id=profile.id, kind=MediaKind.AVATAR, detected=processed.detected)
+    reference = await storage.store(processed.content, key)
 
     profile.avatar_url = public_media_url(reference, settings=settings)
     await session.flush()

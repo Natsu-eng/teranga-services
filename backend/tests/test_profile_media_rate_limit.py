@@ -17,8 +17,9 @@ from app.main import app
 from app.models.enums import Role
 from app.services.rate_limit import SlidingWindowRateLimiter, get_profile_media_upload_rate_limiter
 from tests.factories import make_artisan_profile, make_user
+from tests.images import make_png
 
-_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_PNG_BYTES = make_png()
 
 
 @pytest.fixture(autouse=True)

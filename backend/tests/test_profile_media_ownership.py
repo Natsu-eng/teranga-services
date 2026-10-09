@@ -32,9 +32,10 @@ from app.services.profile_media import MediaKind, owned_media_key
 from app.services.rate_limit import SlidingWindowRateLimiter, get_profile_media_upload_rate_limiter
 from app.services.storage import LocalStorageBackend
 from tests.factories import make_artisan_profile, make_user
+from tests.images import make_png
 
-_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
-_OTHER_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x22" * 32
+_PNG_BYTES = make_png()
+_OTHER_PNG_BYTES = make_png(color=(34, 34, 34))
 
 
 @pytest.fixture(autouse=True)

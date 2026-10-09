@@ -23,6 +23,7 @@ Deux règles de fiabilité y vivent, une seule fois pour les deux médias :
    n'est jamais visible par un visiteur.
 """
 
+import asyncio
 import contextlib
 import re
 import uuid
@@ -30,8 +31,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.schemas.artisans import ArtisanDetailOut
 from app.services.file_validation import EXTENSION_BY_TYPE, DetectedFileType
+from app.services.image_processing import ImageTropGrandeError, ProcessedImage, reencode_image
 from app.services.storage import StorageBackend
 
 # Chemin public sous lequel `app.main` monte le stockage des médias de
@@ -55,6 +58,43 @@ class MediaKind(StrEnum):
 # préfixe (format historique, conservé pour reconnaître les avatars déjà
 # uploadés avant ce lot).
 _FILENAME_PREFIX: dict[MediaKind, str] = {MediaKind.AVATAR: "", MediaKind.COVER: "cover-"}
+
+
+class ImageDimensionsExcessivesError(AppError):
+    """Commune aux deux médias : la limite porte sur le décodage, pas sur
+    l'usage de l'image."""
+
+    def __init__(self, *, width: int | None, height: int | None, max_pixels: int) -> None:
+        max_mpx = max_pixels // 1_000_000
+        size = f"{width} × {height} pixels, " if width and height else ""
+        super().__init__(
+            code="IMAGE_DIMENSIONS_EXCESSIVES",
+            message=f"L'image est trop grande ({size}{max_mpx} mégapixels maximum).",
+            status_code=422,
+        )
+
+
+def max_side_px(kind: MediaKind, settings: Settings) -> int:
+    return settings.avatar_max_side_px if kind is MediaKind.AVATAR else settings.cover_max_side_px
+
+
+async def prepare_profile_image(
+    content: bytes, *, kind: MediaKind, settings: Settings
+) -> ProcessedImage:
+    """Réencode l'image envoyée (app/services/image_processing.py) hors de
+    la boucle d'événements. Laisse remonter `ImageNonDecodableError`, que
+    chaque service traduit dans SON message d'erreur (avatar/couverture)."""
+    try:
+        return await asyncio.to_thread(
+            reencode_image,
+            content,
+            max_side_px=max_side_px(kind, settings),
+            max_pixels=settings.profile_media_max_pixels,
+        )
+    except ImageTropGrandeError as exc:
+        raise ImageDimensionsExcessivesError(
+            width=exc.width, height=exc.height, max_pixels=exc.max_pixels
+        ) from None
 
 
 @dataclass(frozen=True)
