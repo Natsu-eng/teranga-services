@@ -315,8 +315,8 @@ jamais un fournisseur concret.
 - **Portée** : ce lot couvre uniquement l'analyse (`POST /ai/analyze`). La
   persistance de la demande (`POST /requests`) et l'upload photo réel
   restent hors périmètre (BUILD_PLAN.md §6, note de portée du Lot 11).
-  L'Express `/api/analyze-problem` reste en place (retrait prévu au Lot 13)
-  mais n'est plus appelé par le front.
+  L'Express `/api/analyze-problem` (Gemini) a été supprimé au Lot 13 : ce
+  endpoint est désormais la seule implémentation du triage IA du projet.
 
 **Vérification manuelle** (nécessite une vraie clé Mistral) :
 

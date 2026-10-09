@@ -337,6 +337,66 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   processus (même dette que l'OTP) ; aucun redimensionnement/recompression
   serveur des images (une couverture de 4 Mo est servie telle quelle).
 
+## Mise à jour — `chore/remove-express` (Lot 13)
+
+- **§6, double implémentation de l'IA : close.** Diagnostic préalable
+  (lecture seule) : `frontend/server.ts` portait quatre responsabilités —
+  proxy de dev `/api/v1`, endpoint Gemini `POST /api/analyze-problem`, Vite
+  en middleware, service statique + fallback SPA en production. Le seul
+  appelant restant de `/api/analyze-problem` était `mock.ts` (jamais routé
+  en production). Remplacements : proxy natif Vite (testé seul avant toute
+  suppression), fallback SPA côté hébergeur (`vercel.json`), triage déjà
+  migré (`POST /api/v1/ai/analyze`). Supprimés ensuite, preuve grep à
+  l'appui : `server.ts`, `express`, `@types/express`,
+  `http-proxy-middleware`, `@google/genai`, `dotenv`, `tsx`, `esbuild`,
+  `GEMINI_API_KEY`, `APP_URL`, `metadata.json` et `DISABLE_HMR` (restes
+  AI Studio), l'analyse legacy de `mock.ts`. Un seul jeu de configuration IA
+  subsiste, côté backend (`MISTRAL_API_KEY` inchangée).
+- **Fallback mock silencieux (constaté au Lot 12c, faux revenus artisan) :
+  supprimé, pas seulement balisé.** `index.ts` exportait
+  `{ ...mockApiClient, ...httpApiClient }` : toute méthode absente du client
+  HTTP retombait sur des données fictives sans le signaler. Désormais
+  `api = httpApiClient`, typé `ApiClient` complet — une méthode ajoutée au
+  contrat sans implémentation HTTP ne compile plus. Les quatre méthodes
+  encore servies par le seul mock (`listJobRequests`, `getChatMessages`,
+  `sendChatMessage`, `getCurrentUser`) n'avaient aucun appelant (preuve
+  grep) : retirées du contrat avec leurs données et types orphelins. Pour
+  une fonctionnalité future sans backend : `notImplemented(feature)` lève
+  une `ApiError` de code `not_implemented` au message affichable. `mock.ts`
+  est réservé aux tests ; ESLint (`no-restricted-imports`, vérifié par une
+  sonde) refuse tout import du mock ou de `mockData` depuis le code de
+  production. Le bundle ne contient plus aucune donnée fictive (vérifié par
+  grep sur `dist/`, 385 → 375 kB).
+- **Dépendances** : `npm audit` passe de 16 vulnérabilités (1 critique) à
+  0. Le retrait d'Express en élimine 7 (`proxy-addr`, `qs`, `braces`…) ;
+  le reste est corrigé en patch dans les plages déclarées, dont
+  `react-router` 7.18.1 → 7.18.4 (GHSA-qwww-vcr4-c8h2), seule dépendance
+  vulnérable embarquée dans le bundle. npm 10.9.2 plantant dans
+  `audit fix` (`edgesOut`), le lockfile a été résolu avec npm 11 puis
+  vérifié par `npm ci` sous npm 10.
+- **Production** : front 100 % statique ; `VITE_API_BASE_URL` (validée au
+  chargement, testée) pour le déploiement multi-origines ; `vercel.json`
+  ajoute des en-têtes de sécurité absents jusqu'ici (CSP, anti-clickjacking,
+  `nosniff`, `Referrer-Policy`, `Permissions-Policy`), rejoués à
+  l'identique par `vite preview`.
+- **Vérification** : `npm run validate` vert après chaque commit ; build
+  statique servi par `vite preview` (fallback SPA sur route profonde, en-têtes
+  présents, une route API inconnue reste un 404 JSON et non `index.html`) ;
+  parcours bout en bout **à travers le proxy Vite** (17/17) : front servi,
+  fallback SPA, recherche, inscription artisan par OTP, `/auth/me`, triage
+  IA, uploads avatar + couverture puis lecture publique, stats du dashboard,
+  `/interventions/me`, rotation du refresh, rejeu refusé, logout.
+- **Constaté pendant la vérification, hors périmètre** : la
+  `MISTRAL_API_KEY` du `backend/.env` local est refusée par Mistral (401).
+  Le triage retombe sur l'heuristique comme prévu (aucune erreur côté
+  utilisateur) mais l'IA réelle n'est pas exercée tant que la clé n'est pas
+  renouvelée.
+- **Reste à vérifier au premier déploiement réel** : la CSP n'a été testée
+  qu'en en-têtes HTTP (présence, valeurs), pas dans un navigateur réel en
+  production. Points à surveiller dans la console : polices Google Fonts,
+  images collées à la main (autorisées en `https:` uniquement), ouverture
+  d'un PDF de vérification (URL `blob:`) côté admin.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.
@@ -466,7 +526,7 @@ Les 16 tables métier + `refresh_token` existent **toutes** en modèle SQLAlchem
 
 ## 6. Dettes et incohérences visibles
 
-- **Double implémentation de l'IA de triage.** `frontend/server.ts:42-149` contient encore l'ancien endpoint Express `POST /api/analyze-problem` (Gemini + fallback heuristique en dur), **mort en usage normal** (le front appelle `httpApiClient.analyzeProblem`, qui tape `/api/v1/ai/analyze`) mais toujours présent dans le code, toujours buildé, et toujours référencé par `mock.ts:145-179`. Deux fournisseurs IA différents coexistent dans le repo (Gemini côté Express legacy, Mistral côté FastAPI réel) avec deux jeux de variables d'env différents (`GEMINI_API_KEY` à la racine vs `AI_TRIAGE_PROVIDER`/`MISTRAL_API_KEY` dans `backend/.env.example`) — confusion probable pour quiconque configure l'environnement sans connaître l'historique. Ce nettoyage est le Lot 13 annoncé ("Retrait d'Express"), pas encore fait — cohérent avec le séquençage du plan, mais à garder en tête comme dette déjà identifiée et non une découverte.
+- ✅ *Résolu au Lot 13 (`chore/remove-express`, voir la mise à jour dédiée en tête de document).* **Double implémentation de l'IA de triage.** `frontend/server.ts:42-149` contient encore l'ancien endpoint Express `POST /api/analyze-problem` (Gemini + fallback heuristique en dur), **mort en usage normal** (le front appelle `httpApiClient.analyzeProblem`, qui tape `/api/v1/ai/analyze`) mais toujours présent dans le code, toujours buildé, et toujours référencé par `mock.ts:145-179`. Deux fournisseurs IA différents coexistent dans le repo (Gemini côté Express legacy, Mistral côté FastAPI réel) avec deux jeux de variables d'env différents (`GEMINI_API_KEY` à la racine vs `AI_TRIAGE_PROVIDER`/`MISTRAL_API_KEY` dans `backend/.env.example`) — confusion probable pour quiconque configure l'environnement sans connaître l'historique. Ce nettoyage est le Lot 13 annoncé ("Retrait d'Express"), pas encore fait — cohérent avec le séquençage du plan, mais à garder en tête comme dette déjà identifiée et non une découverte.
 - **BottomNav artisan incohérente** : "Demandes" et "Revenus" sont deux liens distincts qui pointent tous les deux vers `/pro` (le même placeholder) — `BottomNav.tsx:25` et `:37`.
 - **`artisanId: user.id` en dur** (`useCurrentUser.ts:34`) : placeholder documenté en commentaire mais fragile — dès qu'un vrai compte artisan sera créé avec un `artisan_profile.id` distinct de `user.id`, `UserProfileScreen` et le lien "Messages" casseront silencieusement (404 sur `useArtisan`).
 - **`DescribeProblemScreen` ignore son propre résultat IA** : le bouton final choisit un artisan par id fixe (`'idrissa-diop'`) ou le premier de la liste (L253), sans rapport avec le `trade_code` détecté par l'IA — le "matching" affiché à l'utilisateur est cosmétique.
