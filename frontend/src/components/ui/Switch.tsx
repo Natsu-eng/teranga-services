@@ -13,8 +13,9 @@ interface SwitchProps {
 
 /**
  * Interrupteur on/off (`role="switch"`, état dans `aria-checked`).
- * Activé : pastille or sur piste émeraude claire — l'état se lit aussi par
- * la position du curseur, pas seulement par la couleur.
+ * Activé : curseur vert profond sur piste émeraude claire (lisible sur fond
+ * clair comme sur le bandeau Pro) ; l'état se lit aussi par la position du
+ * curseur, pas seulement par la couleur.
  */
 export const Switch: React.FC<SwitchProps> = ({
   checked,

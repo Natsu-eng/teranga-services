@@ -1,33 +1,37 @@
 import React from 'react';
 import { Clock3 } from 'lucide-react';
-import { Link } from 'react-router';
+import { ButtonLink } from './Button';
 
 interface ComingSoonProps {
   title?: string;
   description?: string;
+  /** Lien de retour (ex. `/pro` pour un artisan). */
+  backTo?: string;
 }
 
 /**
- * An honest placeholder for screens the backend doesn't cover yet (chat,
- * artisan dashboard) — used instead of continuing to serve mock data once
- * a real backend exists (Lot 10). Not an error, not a blank page: a
- * deliberate, on-brand "not yet" state.
+ * Écran honnête pour une fonctionnalité que le backend ne sert pas encore
+ * (messagerie) : ni erreur, ni page blanche, ni données fictives — un « pas
+ * encore » assumé, dans le style de l'app.
  */
 export const ComingSoon: React.FC<ComingSoonProps> = ({
   title = 'Bientôt disponible',
   description = 'Cette fonctionnalité arrive prochainement. Merci de votre patience.',
+  backTo = '/accueil',
 }) => (
-  <main className="max-w-md mx-auto px-4 pt-24 pb-28 text-center space-y-4">
-    <div className="w-16 h-16 mx-auto rounded-full bg-surface-muted flex items-center justify-center">
-      <Clock3 className="w-8 h-8 text-muted-foreground-soft" />
-    </div>
-    <h2 className="font-bold text-xl text-primary">{title}</h2>
-    <p className="text-sm text-muted-foreground">{description}</p>
-    <Link
-      to="/accueil"
-      className="inline-block mt-2 text-sm font-sora text-primary underline decoration-1 underline-offset-2"
+  <main className="max-w-md mx-auto px-4 pt-16 pb-28 text-center flex flex-col items-center gap-5">
+    <span
+      aria-hidden
+      className="inline-flex w-20 h-20 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"
     >
+      <Clock3 className="w-9 h-9" />
+    </span>
+    <div className="space-y-2">
+      <h1 className="font-display text-display-md font-semibold text-primary">{title}</h1>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+    <ButtonLink to={backTo} variant="outline">
       Retour à l&apos;accueil
-    </Link>
+    </ButtonLink>
   </main>
 );
