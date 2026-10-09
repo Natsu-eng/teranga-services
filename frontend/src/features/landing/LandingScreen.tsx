@@ -1,110 +1,174 @@
 import React from 'react';
-import { ArrowRight, BadgeCheck, HeartHandshake, Star } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { ArrowRight, Lock, MessageSquareText, ReceiptText, Sparkles, Star } from 'lucide-react';
+import { Link } from 'react-router';
+import { ButtonLink } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { Logo } from '../../components/ui/Logo';
 import { SafeImage } from '../../components/ui/SafeImage';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 
-export const LandingScreen: React.FC = () => {
-  const navigate = useNavigate();
+/*
+ * Promesses affichées : uniquement ce que le produit garantit réellement
+ * aujourd'hui (aucun chiffre inventé, aucune fonctionnalité absente comme
+ * le paiement en ligne).
+ */
+const TRUST_POINTS = [
+  {
+    icon: <Star aria-hidden className="w-5 h-5" fill="currentColor" strokeWidth={0} />,
+    title: 'Avis authentiques',
+    text: 'Seul un client dont l’intervention est terminée peut laisser un avis.',
+  },
+  {
+    icon: <Lock aria-hidden className="w-5 h-5" />,
+    title: 'Coordonnées protégées',
+    text: 'Aucun numéro de téléphone n’est affiché publiquement sur Téranga.',
+  },
+] as const;
 
-  return (
-    <div className="bg-background text-foreground min-h-screen flex flex-col overflow-x-hidden">
-      {/* Hero Illustration Section */}
-      <section className="relative w-full h-[55vh] md:h-[62vh] overflow-hidden">
-        <div className="absolute inset-0 w-full h-full">
-          <SafeImage
-            src="/images/hero-plombier.jpg"
-            fallback="/images/placeholder-cover.svg"
-            alt="Téranga Services Artisan"
-            className="w-full h-full object-cover object-top scale-105 transition-transform duration-[3s] ease-out hover:scale-100"
-          />
-          <div className="absolute inset-0 hero-gradient"></div>
+const STEPS = [
+  {
+    icon: <MessageSquareText aria-hidden className="w-5 h-5" />,
+    title: 'Décrivez votre besoin',
+    text: 'Notre assistant identifie le métier et estime un budget.',
+  },
+  {
+    icon: <Sparkles aria-hidden className="w-5 h-5" />,
+    title: 'Choisissez un artisan',
+    text: 'Comparez les profils vérifiés, leurs avis et leur distance.',
+  },
+  {
+    icon: <ReceiptText aria-hidden className="w-5 h-5" />,
+    title: 'Recevez un devis',
+    text: 'Acceptez-le dans l’application, puis notez l’intervention.',
+  },
+] as const;
+
+/**
+ * Accueil marketing (/). Première impression de la « confiance
+ * chaleureuse » : photo d'artisan, titre Fraunces, une seule action
+ * principale en or, et le badge Vérifié montré tel qu'il apparaît ensuite
+ * sur chaque carte.
+ */
+export const LandingScreen: React.FC = () => (
+  <div className="min-h-screen bg-background">
+    <section className="relative h-[46vh] min-h-72 max-h-[30rem] overflow-hidden rounded-b-sheet">
+      <SafeImage
+        src="/images/hero-plombier.jpg"
+        fallback="/images/placeholder-cover.svg"
+        alt="Un artisan plombier au travail"
+        loading="eager"
+        fetchPriority="high"
+        className="absolute inset-0 w-full h-full object-cover object-top"
+      />
+      {/* Voile dégradé : assure la lisibilité du logo et fond l'image dans la page. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-linear-to-b from-primary/35 via-transparent to-background"
+      />
+      <div className="absolute top-4 left-4 md:left-8 rounded-full bg-surface/90 backdrop-blur-sm px-3 py-1.5 shadow-card">
+        <Logo />
+      </div>
+    </section>
+
+    <main className="relative z-10 -mt-20 px-4 md:px-8 pb-12 max-w-3xl mx-auto space-y-10">
+      <Card padding="lg" className="text-center space-y-5">
+        <p className="text-caption font-semibold uppercase tracking-[0.14em] text-accent-foreground">
+          Artisans de confiance au Sénégal
+        </p>
+        <h1 className="font-display text-display-lg md:text-display-xl font-semibold text-primary max-w-lg mx-auto">
+          Un artisan de confiance, en quelques secondes
+        </h1>
+        <p className="text-base text-muted-foreground max-w-md mx-auto leading-relaxed">
+          Plomberie, électricité, climatisation… Décrivez votre besoin, nous vous mettons en
+          relation avec des artisans vérifiés près de chez vous.
+        </p>
+        <div className="flex flex-col items-center gap-2 pt-1 max-w-xs mx-auto">
+          <ButtonLink
+            to="/accueil"
+            variant="primary"
+            size="lg"
+            fullWidth
+            trailingIcon={<ArrowRight aria-hidden className="w-5 h-5" />}
+          >
+            Trouver un artisan
+          </ButtonLink>
+          <ButtonLink to="/connexion" variant="ghost" fullWidth>
+            Vous êtes artisan ? Rejoignez Téranga Pro
+          </ButtonLink>
         </div>
+      </Card>
 
-        {/* Branding Float Header */}
-        <div className="absolute top-6 left-0 w-full px-4 md:px-12 z-10 flex justify-between items-center">
-          <div className="font-bold text-xl md:text-2xl text-primary flex items-center gap-2">
-            <span className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white text-sm font-bold">
-              T
-            </span>
-            <span>Téranga Services</span>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm flex items-center gap-2 border border-border-strong/30">
-            <span className="w-2.5 h-2.5 rounded-full bg-accent-foreground animate-pulse"></span>
-            <span className="font-sora text-xs text-muted-foreground font-medium">250+ Artisans Pro</span>
-          </div>
-        </div>
+      <section aria-labelledby="confiance" className="space-y-4">
+        <h2 id="confiance" className="font-display text-display-sm font-semibold text-primary">
+          La confiance, avant tout
+        </h2>
+        <ul className="grid gap-3 md:grid-cols-3">
+          <li>
+            <Card className="h-full flex flex-col gap-3">
+              <VerifiedBadge size="md" className="self-start" />
+              <div className="space-y-1">
+                <h3 className="font-display text-title font-semibold text-foreground">
+                  Artisans vérifiés
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Identité et documents contrôlés par notre équipe avant toute mise en relation.
+                </p>
+              </div>
+            </Card>
+          </li>
+          {TRUST_POINTS.map((point) => (
+            <li key={point.title}>
+              <Card className="h-full flex flex-col gap-3">
+                <span className="inline-flex w-9 h-9 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald">
+                  {point.icon}
+                </span>
+                <div className="space-y-1">
+                  <h3 className="font-display text-title font-semibold text-foreground">
+                    {point.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">{point.text}</p>
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      {/* Main Content Card */}
-      <main className="flex-grow px-4 md:px-12 -mt-16 md:-mt-24 relative z-20 max-w-4xl mx-auto w-full flex flex-col items-center">
-        <div className="w-full bg-background p-6 md:p-10 rounded-[32px] shadow-[0px_4px_20px_rgba(14,90,60,0.06)] text-center border border-border">
-          <div className="mb-4 flex justify-center">
-            <span className="px-4 py-1.5 rounded-full bg-accent-soft/40 text-accent-foreground font-sora text-xs font-semibold uppercase tracking-wider">
-              L&apos;excellence au Sénégal
-            </span>
-          </div>
+      <section aria-labelledby="etapes" className="space-y-4">
+        <h2 id="etapes" className="font-display text-display-sm font-semibold text-primary">
+          Comment ça marche
+        </h2>
+        <ol className="space-y-3">
+          {STEPS.map((step, index) => (
+            <li key={step.title}>
+              <Card tone="tint" className="flex items-start gap-4">
+                <span className="relative inline-flex w-10 h-10 shrink-0 items-center justify-center rounded-full bg-surface text-primary-emerald shadow-card">
+                  {step.icon}
+                  <span className="absolute -top-1 -right-1 inline-flex w-5 h-5 items-center justify-center rounded-full bg-accent text-primary text-caption font-bold">
+                    {index + 1}
+                  </span>
+                </span>
+                <div className="space-y-0.5">
+                  <h3 className="font-display text-title font-semibold text-foreground">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">{step.text}</p>
+                </div>
+              </Card>
+            </li>
+          ))}
+        </ol>
+      </section>
 
-          <h1 className="font-headline-lg text-2xl md:text-4xl font-bold text-foreground mb-4 leading-tight max-w-lg mx-auto">
-            Un artisan de confiance, en quelques secondes
-          </h1>
-
-          <p className="text-base md:text-lg text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-            La première plateforme sénégalaise pour vos services à domicile. Qualité, ponctualité et
-            respect assurés.
-          </p>
-
-          <div className="flex flex-col gap-3 items-center w-full max-w-xs mx-auto">
-            <button
-              onClick={() => navigate('/accueil')}
-              className="w-full bg-primary-emerald text-white font-sora text-sm font-semibold py-4 rounded-full shadow-lg hover:brightness-110 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <span>Commencer</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-
-            <button
-              onClick={() => navigate('/connexion')}
-              className="w-full py-3 text-primary font-sora text-sm font-semibold hover:underline decoration-2 underline-offset-4 transition-all cursor-pointer"
-            >
-              Vous êtes artisan ?
-            </button>
-          </div>
-        </div>
-
-        {/* Trust Indicators */}
-        <div className="mt-8 w-full grid grid-cols-1 md:grid-cols-3 gap-4 pb-12">
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-border-strong/20 shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <BadgeCheck className="w-6 h-6" fill="currentColor" />
-            </div>
-            <div>
-              <h3 className="font-sora text-sm font-bold text-foreground">Vérifiés</h3>
-              <p className="font-sora text-xs text-muted-foreground">Profils authentifiés</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-border-strong/20 shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <HeartHandshake className="w-6 h-6" fill="currentColor" />
-            </div>
-            <div>
-              <h3 className="font-sora text-sm font-bold text-foreground">Sécurisé</h3>
-              <p className="font-sora text-xs text-muted-foreground">Paiement protégé</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/60 border border-border-strong/20 shadow-sm">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-              <Star className="w-6 h-6" fill="currentColor" />
-            </div>
-            <div>
-              <h3 className="font-sora text-sm font-bold text-foreground">Qualité 4.8/5</h3>
-              <p className="font-sora text-xs text-muted-foreground">Avis de nos clients</p>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-};
+      <footer className="pt-2 text-center text-sm text-muted-foreground space-y-1">
+        <p>© Téranga Services — Dakar</p>
+        <Link
+          to="/connexion"
+          className="font-semibold text-primary underline-offset-4 hover:underline"
+        >
+          Se connecter
+        </Link>
+      </footer>
+    </main>
+  </div>
+);
