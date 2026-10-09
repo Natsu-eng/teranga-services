@@ -62,6 +62,23 @@ class ArtisanProfileUpdateIn(BaseModel):
         return stripped
 
 
+class MediaUploadLimitsOut(BaseModel):
+    max_upload_bytes: int
+    max_side_px: int
+
+
+class ProfileMediaConstraintsOut(BaseModel):
+    """`GET /artisans/me/media-constraints` : les contraintes d'envoi des
+    photos de profil telles que le serveur les applique réellement -- seule
+    source de vérité pour le pré-contrôle du front (jamais de plafond
+    recopié en dur côté client)."""
+
+    accepted_mime_types: list[str]
+    max_pixels: int
+    avatar: MediaUploadLimitsOut
+    cover: MediaUploadLimitsOut
+
+
 class ArtisanTradeCreateIn(BaseModel):
     trade_code: str
     hourly_rate_fcfa: int = Field(ge=0)

@@ -32,8 +32,8 @@ from enum import StrEnum
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.schemas.artisans import ArtisanDetailOut
-from app.services.file_validation import EXTENSION_BY_TYPE, DetectedFileType
+from app.schemas.artisans import ArtisanDetailOut, MediaUploadLimitsOut, ProfileMediaConstraintsOut
+from app.services.file_validation import EXTENSION_BY_TYPE, MIME_BY_TYPE, DetectedFileType
 from app.services.image_processing import ImageTropGrandeError, ProcessedImage, reencode_image
 from app.services.storage import StorageBackend
 
@@ -76,6 +76,24 @@ class ImageDimensionsExcessivesError(AppError):
 
 def max_side_px(kind: MediaKind, settings: Settings) -> int:
     return settings.avatar_max_side_px if kind is MediaKind.AVATAR else settings.cover_max_side_px
+
+
+def media_constraints(settings: Settings) -> ProfileMediaConstraintsOut:
+    """Contraintes réellement appliquées par `upload_avatar`/`upload_cover`,
+    dérivées des mêmes réglages -- elles ne peuvent donc jamais diverger de
+    ce que le serveur accepte."""
+    return ProfileMediaConstraintsOut(
+        accepted_mime_types=sorted(MIME_BY_TYPE[t] for t in ALLOWED_MEDIA_TYPES),
+        max_pixels=settings.profile_media_max_pixels,
+        avatar=MediaUploadLimitsOut(
+            max_upload_bytes=settings.avatar_max_upload_bytes,
+            max_side_px=settings.avatar_max_side_px,
+        ),
+        cover=MediaUploadLimitsOut(
+            max_upload_bytes=settings.cover_max_upload_bytes,
+            max_side_px=settings.cover_max_side_px,
+        ),
+    )
 
 
 async def prepare_profile_image(

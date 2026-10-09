@@ -31,6 +31,7 @@ from app.schemas.artisans import (
     ArtisanStatsPublicOut,
     ArtisanTradeCreateIn,
     MyVerificationOut,
+    ProfileMediaConstraintsOut,
     VerificationDocumentOut,
 )
 from app.schemas.pagination import Page
@@ -41,7 +42,7 @@ from app.services import covers as covers_service
 from app.services import documents as documents_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
-from app.services.profile_media import discard_obsolete_media
+from app.services.profile_media import discard_obsolete_media, media_constraints
 from app.services.rate_limit import (
     RateLimiter,
     get_document_upload_rate_limiter,
@@ -130,6 +131,16 @@ async def _enforce_profile_media_budget(
     )
     if not allowed:
         raise TropDeDemandesMediaError()
+
+
+@router.get("/me/media-constraints", response_model=ProfileMediaConstraintsOut)
+async def get_my_media_constraints(
+    settings: Annotated[Settings, Depends(get_settings)],
+    _artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ProfileMediaConstraintsOut:
+    # Lu par l'onboarding avant tout envoi : le front n'a ainsi aucun
+    # plafond recopié en dur, modifier AVATAR_/COVER_MAX_UPLOAD_BYTES suffit.
+    return media_constraints(settings)
 
 
 @router.post("/me/avatar", response_model=ArtisanDetailOut)
