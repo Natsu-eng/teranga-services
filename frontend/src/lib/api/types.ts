@@ -77,7 +77,10 @@ export interface UpdateArtisanProfileInput {
   bio?: string | null;
   yearsExperience?: number | null;
   baseLocation?: { lat: number; lng: number };
+  // URL http(s) absolue uniquement (refusée en 422 sinon, côté serveur) ;
+  // `null` retire la photo.
   avatarUrl?: string | null;
+  coverUrl?: string | null;
   isAvailable?: boolean;
 }
 
@@ -108,6 +111,7 @@ export interface ApiClient {
   getMyArtisanProfile(artisanId: string): Promise<MyArtisanProfile>;
   updateMyArtisanProfile(input: UpdateArtisanProfileInput): Promise<MyArtisanProfile>;
   uploadAvatar(file: File): Promise<MyArtisanProfile>;
+  uploadCover(file: File): Promise<MyArtisanProfile>;
   addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile>;
   removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile>;
   listMyVerificationDocuments(): Promise<MyVerification>;

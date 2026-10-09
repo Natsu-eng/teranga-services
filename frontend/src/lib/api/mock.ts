@@ -327,6 +327,11 @@ export const mockApiClient: ApiClient = {
     throw new ApiError('validation', "L'envoi de la photo a échoué.");
   },
 
+  async uploadCover(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('validation', "L'envoi de la photo de couverture a échoué.");
+  },
+
   async addArtisanTrade(): Promise<MyArtisanProfile> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', 'Profil artisan introuvable.');

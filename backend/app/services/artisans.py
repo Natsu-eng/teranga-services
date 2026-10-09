@@ -385,6 +385,8 @@ async def update_profile(
         profile.years_experience = fields["years_experience"]
     if "avatar_url" in fields:
         profile.avatar_url = fields["avatar_url"]
+    if "cover_url" in fields:
+        profile.cover_url = fields["cover_url"]
     if "base_location" in fields:
         location = fields["base_location"]
         profile.base_location = to_point(lat=location["lat"], lng=location["lng"])

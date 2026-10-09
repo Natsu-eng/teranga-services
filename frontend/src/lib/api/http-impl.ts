@@ -360,6 +360,7 @@ function mapMyArtisanProfile(item: BackendArtisanDetail): MyArtisanProfile {
     bio: item.bio,
     yearsExperience: item.years_experience,
     avatarUrl: item.avatar_url,
+    coverUrl: item.cover_url,
     isAvailable: item.is_available,
     verifiedStatus: item.verified_status,
     trades: item.trades.map(mapArtisanTradeDetail),
@@ -470,6 +471,7 @@ export const httpApiClient: Pick<
   | 'getMyArtisanProfile'
   | 'updateMyArtisanProfile'
   | 'uploadAvatar'
+  | 'uploadCover'
   | 'addArtisanTrade'
   | 'removeArtisanTrade'
   | 'listMyVerificationDocuments'
@@ -525,6 +527,7 @@ export const httpApiClient: Pick<
     if (input.yearsExperience !== undefined) body.years_experience = input.yearsExperience;
     if (input.baseLocation !== undefined) body.base_location = input.baseLocation;
     if (input.avatarUrl !== undefined) body.avatar_url = input.avatarUrl;
+    if (input.coverUrl !== undefined) body.cover_url = input.coverUrl;
     if (input.isAvailable !== undefined) body.is_available = input.isAvailable;
 
     const detail = await apiRequest<BackendArtisanDetail>('/artisans/me', {
@@ -538,6 +541,19 @@ export const httpApiClient: Pick<
     const formData = new FormData();
     formData.set('file', file);
     const detail = await apiRequest<BackendArtisanDetail>('/artisans/me/avatar', {
+      method: 'POST',
+      formData,
+    });
+    return mapMyArtisanProfile(detail);
+  },
+
+  // Même contrat que uploadAvatar (multipart `file`, profil complet en
+  // retour) -- budget d'envois partagé avec l'avatar côté serveur : un 429
+  // remonte avec le message français du backend, affiché tel quel.
+  async uploadCover(file: File): Promise<MyArtisanProfile> {
+    const formData = new FormData();
+    formData.set('file', file);
+    const detail = await apiRequest<BackendArtisanDetail>('/artisans/me/cover', {
       method: 'POST',
       formData,
     });

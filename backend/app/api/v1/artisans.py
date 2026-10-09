@@ -37,10 +37,16 @@ from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
 from app.services import avatars as avatars_service
+from app.services import covers as covers_service
 from app.services import documents as documents_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
-from app.services.rate_limit import SlidingWindowRateLimiter, get_document_upload_rate_limiter
+from app.services.profile_media import discard_obsolete_media
+from app.services.rate_limit import (
+    SlidingWindowRateLimiter,
+    get_document_upload_rate_limiter,
+    get_profile_media_upload_rate_limiter,
+)
 from app.services.storage import get_avatar_storage_backend, get_storage_backend
 
 router = APIRouter(prefix="/artisans", tags=["artisans"])
@@ -51,6 +57,15 @@ class TropDeDemandesDocumentsError(AppError):
         super().__init__(
             code="TROP_DE_DEMANDES",
             message="Trop d'envois de documents, merci de réessayer plus tard.",
+            status_code=429,
+        )
+
+
+class TropDeDemandesMediaError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="TROP_DE_DEMANDES",
+            message="Trop d'envois de photo, merci de réessayer plus tard.",
             status_code=429,
         )
 
@@ -100,27 +115,82 @@ async def update_my_profile(
     return result
 
 
+async def _enforce_profile_media_budget(
+    rate_limiter: SlidingWindowRateLimiter, *, user: User, settings: Settings
+) -> None:
+    """Budget d'envois partagé entre l'avatar et la couverture (même
+    limiteur, même clé `user:{id}` -- voir RATE_LIMIT_PROFILE_MEDIA_UPLOAD_*).
+    Vérifié avant toute validation ou écriture : une fois la limite
+    atteinte, un client qui insiste ne fait plus écrire le moindre fichier
+    dans le stockage public."""
+    allowed = await rate_limiter.check(
+        f"user:{user.id}",
+        max_hits=settings.rate_limit_profile_media_upload_per_user_max,
+        window_seconds=settings.rate_limit_profile_media_upload_per_user_window_seconds,
+    )
+    if not allowed:
+        raise TropDeDemandesMediaError()
+
+
 @router.post("/me/avatar", response_model=ArtisanDetailOut)
 async def upload_my_avatar(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+    rate_limiter: Annotated[
+        SlidingWindowRateLimiter, Depends(get_profile_media_upload_rate_limiter)
+    ],
     file: Annotated[UploadFile, File()],
 ) -> ArtisanDetailOut:
     # Photo de profil : donnée PUBLIQUE, contrairement aux documents de
     # vérification -- stockage dédié (get_avatar_storage_backend), jamais
     # le stockage privé (get_storage_backend).
+    await _enforce_profile_media_budget(rate_limiter, user=artisan, settings=settings)
+
     content = await file.read(settings.avatar_max_upload_bytes + 1)
+    storage = get_avatar_storage_backend(settings)
 
     result = await avatars_service.upload_avatar(
         session,
         user=artisan,
         content=content,
         settings=settings,
-        storage=get_avatar_storage_backend(settings),
+        storage=storage,
     )
     await session.commit()
-    return result
+    # Seulement maintenant que la nouvelle URL est durablement enregistrée
+    # (app/services/profile_media.py, règle 2).
+    await discard_obsolete_media(storage, result.obsolete_key)
+    return result.detail
+
+
+@router.post("/me/cover", response_model=ArtisanDetailOut)
+async def upload_my_cover(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+    rate_limiter: Annotated[
+        SlidingWindowRateLimiter, Depends(get_profile_media_upload_rate_limiter)
+    ],
+    file: Annotated[UploadFile, File()],
+) -> ArtisanDetailOut:
+    # Photo de couverture : même régime PUBLIC que l'avatar ci-dessus, même
+    # stockage, même budget d'envois.
+    await _enforce_profile_media_budget(rate_limiter, user=artisan, settings=settings)
+
+    content = await file.read(settings.cover_max_upload_bytes + 1)
+    storage = get_avatar_storage_backend(settings)
+
+    result = await covers_service.upload_cover(
+        session,
+        user=artisan,
+        content=content,
+        settings=settings,
+        storage=storage,
+    )
+    await session.commit()
+    await discard_obsolete_media(storage, result.obsolete_key)
+    return result.detail
 
 
 @router.post("/me/trades", response_model=ArtisanDetailOut, status_code=201)

@@ -19,6 +19,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       getMyArtisanProfile: vi.fn(),
       updateMyArtisanProfile: vi.fn(),
       uploadAvatar: vi.fn(),
+      uploadCover: vi.fn(),
       addArtisanTrade: vi.fn(),
       removeArtisanTrade: vi.fn(),
       listMyVerificationDocuments: vi.fn(),
@@ -53,6 +54,7 @@ const profileFixture: MyArtisanProfile = {
   bio: 'Plombier expérimenté.',
   yearsExperience: 8,
   avatarUrl: null,
+  coverUrl: null,
   isAvailable: true,
   verifiedStatus: 'none',
   trades: [],
@@ -96,6 +98,7 @@ describe('ArtisanOnboardingScreen', () => {
     mockedApi.listTrades.mockReset().mockResolvedValue(tradesFixture);
     mockedApi.updateMyArtisanProfile.mockReset();
     mockedApi.uploadAvatar.mockReset();
+    mockedApi.uploadCover.mockReset();
     mockedApi.addArtisanTrade.mockReset();
     mockedApi.removeArtisanTrade.mockReset();
     mockedApi.uploadVerificationDocument.mockReset();
@@ -176,12 +179,9 @@ describe('ArtisanOnboardingScreen', () => {
       avatarUrl: 'http://localhost:8000/static/avatars/artisan-1/abc123.jpg',
     });
 
-    const { container } = renderScreen();
+    renderScreen();
 
-    await screen.findByText('Changer la photo');
-    const avatarInput = container.querySelector(
-      'input[type="file"][accept="image/png,image/jpeg"]',
-    ) as HTMLInputElement;
+    const avatarInput = await screen.findByLabelText('Photo de profil');
     const file = new File(['fake-bytes'], 'avatar.jpg', { type: 'image/jpeg' });
     fireEvent.change(avatarInput, { target: { files: [file] } });
 
@@ -196,18 +196,91 @@ describe('ArtisanOnboardingScreen', () => {
       new ApiError('validation', 'La photo de profil doit être une image JPEG ou PNG.'),
     );
 
-    const { container } = renderScreen();
+    renderScreen();
 
-    await screen.findByText('Changer la photo');
-    const avatarInput = container.querySelector(
-      'input[type="file"][accept="image/png,image/jpeg"]',
-    ) as HTMLInputElement;
+    const avatarInput = await screen.findByLabelText('Photo de profil');
     const file = new File(['fake-bytes'], 'avatar.jpg', { type: 'image/jpeg' });
     fireEvent.change(avatarInput, { target: { files: [file] } });
 
     expect(
       await screen.findByText('La photo de profil doit être une image JPEG ou PNG.'),
     ).toBeInTheDocument();
+  });
+
+  it('uploads a new cover and reflects the returned URL, without touching the avatar', async () => {
+    const coverUrl = 'http://localhost:8000/static/avatars/artisan-1/cover-abc123.jpg';
+    mockedApi.uploadCover.mockResolvedValue({ ...profileFixture, coverUrl });
+
+    renderScreen();
+
+    const coverInput = await screen.findByLabelText('Photo de couverture');
+    const file = new File(['fake-bytes'], 'cover.png', { type: 'image/png' });
+    fireEvent.change(coverInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(mockedApi.uploadCover).toHaveBeenCalledWith(file));
+    expect(await screen.findByDisplayValue(coverUrl)).toBeInTheDocument();
+    expect(mockedApi.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('shows the cover error inline, distinct from the avatar control', async () => {
+    mockedApi.uploadCover.mockRejectedValue(
+      new ApiError('validation', "Trop d'envois de photo, merci de réessayer plus tard."),
+    );
+
+    renderScreen();
+
+    const coverInput = await screen.findByLabelText('Photo de couverture');
+    const file = new File(['fake-bytes'], 'cover.png', { type: 'image/png' });
+    fireEvent.change(coverInput, { target: { files: [file] } });
+
+    expect(
+      await screen.findByText("Trop d'envois de photo, merci de réessayer plus tard."),
+    ).toBeInTheDocument();
+    // Le contrôle de l'avatar reste utilisable pendant/après l'échec de la couverture.
+    expect(screen.getByLabelText('Photo de profil')).not.toBeDisabled();
+  });
+
+  it('refuses an oversized or non-image file locally, without any request', async () => {
+    renderScreen();
+
+    const coverInput = await screen.findByLabelText('Photo de couverture');
+    const huge = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'cover.jpg', {
+      type: 'image/jpeg',
+    });
+    fireEvent.change(coverInput, { target: { files: [huge] } });
+
+    expect(
+      await screen.findByText(
+        'La photo de couverture dépasse la taille maximale autorisée (4 Mo).',
+      ),
+    ).toBeInTheDocument();
+
+    const avatarInput = screen.getByLabelText('Photo de profil');
+    const pdf = new File(['%PDF-1.4'], 'scan.pdf', { type: 'application/pdf' });
+    fireEvent.change(avatarInput, { target: { files: [pdf] } });
+
+    expect(
+      await screen.findByText('La photo de profil doit être une image JPEG ou PNG.'),
+    ).toBeInTheDocument();
+    expect(mockedApi.uploadCover).not.toHaveBeenCalled();
+    expect(mockedApi.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('saves a pasted cover URL with the rest of the profile', async () => {
+    const coverUrl = 'https://cdn.example.invalid/covers/atelier.jpg';
+    mockedApi.updateMyArtisanProfile.mockResolvedValue({ ...profileFixture, coverUrl });
+
+    renderScreen();
+
+    const coverUrlInput = await screen.findByLabelText('URL de la photo de couverture');
+    fireEvent.change(coverUrlInput, { target: { value: `  ${coverUrl}  ` } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer mon profil' }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateMyArtisanProfile).toHaveBeenCalledWith(
+        expect.objectContaining({ coverUrl, avatarUrl: null }),
+      ),
+    );
   });
 
   it('adds a declared trade and shows it in the list', async () => {

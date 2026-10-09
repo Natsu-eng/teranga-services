@@ -287,7 +287,55 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   profil", juste après la photo) et au profil client (icône crayon inline
   à côté du nom affiché).
 - **Reste hors périmètre** (exclu explicitement de ce lot) : avatar, photo
-  de couverture -- lot séparé.
+  de couverture -- lot séparé (traité par `feat/profile-media` ci-dessous).
+
+## Mise à jour — `feat/profile-media`
+
+- **Photo de couverture** : `POST /api/v1/artisans/me/cover`
+  (`app/services/covers.py`), même régime PUBLIC que l'avatar (même
+  stockage, magic bytes JPEG/PNG, taille `COVER_MAX_UPLOAD_BYTES`), et
+  `cover_url` accepté dans `PATCH /artisans/me`. La colonne existait déjà
+  (schéma initial) mais n'était alimentée par aucun endpoint.
+- **Rate limiting des médias publics** : l'avatar n'en avait aucun (le
+  BUILD_PLAN le justifiait par un risque moindre qu'un KYC). Ajouté sur les
+  deux uploads avec un budget unique par utilisateur
+  (`RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_*`, 20 / 10 min) : chaque
+  envoi écrit un fichier sur disque, un compte authentifié pouvait donc
+  remplir le stockage public sans limite.
+- **Défaut corrigé — suppression du média d'un autre artisan** (préexistant
+  sur l'avatar, reproduit tel quel par la première version de la
+  couverture) : l'ancien fichier était effacé dès que son URL commençait
+  par `/static/avatars/`. Or `avatar_url`/`cover_url` sont éditables à la
+  main via `PATCH /artisans/me` : coller l'URL publique (donc connue) du
+  média d'un autre artisan, puis uploader une photo, effaçait le fichier
+  de cet autre artisan -- sa fiche publique affichait alors une image
+  cassée. Même mécanisme entre les deux médias d'un même artisan (une
+  couverture pouvait faire effacer l'avatar). Correction :
+  `app/services/profile_media.py::owned_media_key` n'accepte qu'une clé au
+  format exact généré, sous le répertoire du profil courant et du bon type.
+  Verrouillé par `test_profile_media_ownership.py` (scénarios d'attaque
+  explicites, traversée `..`, extension inattendue, URL externe).
+- **Défaut corrigé — ordre suppression/commit** : l'ancien fichier était
+  effacé avant le commit. Un commit raté laissait le profil pointer vers un
+  fichier disparu. Le service renvoie désormais la clé obsolète
+  (`MediaUploadResult`), la route ne l'efface qu'après le commit.
+- **Validation des URL saisies à la main** : `avatar_url`/`cover_url` sont
+  rendues dans un `<img src>` sur la fiche publique ; seul le http(s)
+  absolu est accepté (`422` pour `javascript:`, `data:`, chemin relatif…),
+  une chaîne vide ou de blancs est ramenée à `null` (retirer la photo).
+- Front : bandeau de couverture dans l'onboarding artisan, avatar en
+  chevauchement (même composition que `ArtisanProfileScreen`), état
+  d'envoi et erreur distincts par photo, pré-contrôle local type/taille
+  (`features/artisans/profileMedia.ts`) qui évite une requête et un envoi
+  décompté du budget pour un fichier voué au refus. Inputs fichier passés
+  de `hidden` à `sr-only` + `aria-label` : atteignables au clavier et
+  nommés pour les lecteurs d'écran.
+- **Dettes restantes, documentées** : le plafond de 4 Mo est dupliqué côté
+  front (pré-contrôle seulement -- relever `COVER_MAX_UPLOAD_BYTES` sans
+  toucher `PROFILE_MEDIA_MAX_BYTES` ferait refuser localement des fichiers
+  que le serveur accepterait) ; le rate limiter reste en mémoire par
+  processus (même dette que l'OTP) ; aucun redimensionnement/recompression
+  serveur des images (une couverture de 4 Mo est servie telle quelle).
 
 ## Résumé exécutif
 

@@ -325,6 +325,20 @@ describe('httpApiClient', () => {
         base_location: { lat: 14.7, lng: -17.4 },
       });
     });
+
+    it('sends cover_url and maps it back onto the returned profile', async () => {
+      const coverUrl = 'https://cdn.example.invalid/covers/atelier.jpg';
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: coverUrl }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const profile = await httpApiClient.updateMyArtisanProfile!({ coverUrl });
+
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(options.body as string)).toEqual({ cover_url: coverUrl });
+      expect(profile.coverUrl).toBe(coverUrl);
+    });
   });
 
   describe('uploadAvatar', () => {
@@ -368,6 +382,49 @@ describe('httpApiClient', () => {
       await expect(promise).rejects.toBeInstanceOf(ApiError);
       await expect(promise).rejects.toMatchObject({
         message: 'La photo de profil doit être une image JPEG ou PNG.',
+      });
+    });
+  });
+
+  describe('uploadCover', () => {
+    it('sends a multipart POST to /artisans/me/cover and maps the new cover URL', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          ...backendArtisan,
+          cover_url: 'http://localhost:8000/static/avatars/a1/cover-abc.jpg',
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      const file = new File(['fake-image-bytes'], 'cover.jpg', { type: 'image/jpeg' });
+
+      const profile = await httpApiClient.uploadCover!(file);
+
+      expect(profile.coverUrl).toBe('http://localhost:8000/static/avatars/a1/cover-abc.jpg');
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain('/api/v1/artisans/me/cover');
+      expect(options.method).toBe('POST');
+      expect(options.body).toBeInstanceOf(FormData);
+      expect((options.body as FormData).get('file')).toBe(file);
+    });
+
+    it('propagates the shared rate-limit rejection (429) with its French message', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(429, {
+            error: {
+              code: 'TROP_DE_DEMANDES',
+              message: "Trop d'envois de photo, merci de réessayer plus tard.",
+            },
+          }),
+        ),
+      );
+      const file = new File(['fake-image-bytes'], 'cover.png', { type: 'image/png' });
+
+      const promise = httpApiClient.uploadCover!(file);
+      await expect(promise).rejects.toBeInstanceOf(ApiError);
+      await expect(promise).rejects.toMatchObject({
+        message: "Trop d'envois de photo, merci de réessayer plus tard.",
       });
     });
   });

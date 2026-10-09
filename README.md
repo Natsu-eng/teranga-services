@@ -8,7 +8,8 @@ Plateforme sénégalaise de mise en relation entre particuliers et artisans qual
 - **Diagnostic assisté par IA** — description d'un problème (texte, photo, vocal) analysée via Gemini, avec repli automatique sur une heuristique par mots-clés si aucune clé API n'est configurée.
 - **Messagerie & devis** — chat client ↔ artisan avec envoi et acceptation de devis.
 - **Tableau de bord artisan** — suivi des revenus, des demandes entrantes et des indicateurs de performance.
-- **Profils** — fiches artisan détaillées (avis, réalisations, statistiques) et profil client avec moyens de paiement locaux (Wave, Orange Money, carte).
+- **Profils** — fiches artisan détaillées (photo de profil et de couverture envoyées par l'artisan, avis, réalisations, statistiques) et profil client avec moyens de paiement locaux (Wave, Orange Money, carte).
+- **Onboarding & vérification artisan** — profil, métiers, photos et documents de vérification (CNI, selfie) en un seul parcours, revus par un espace admin dédié.
 
 ## Topologie
 
@@ -30,6 +31,7 @@ teranga-services/
 ├── README.md          # ce fichier : présentation, topologie
 ├── BUILD_PLAN.md       # document de référence Phase 2 (backend, données, API)
 ├── AUDIT.md             # audit historique
+├── AUDIT_PHASE2.md      # audit Phase 2, journal des lots livrés
 ├── frontend/             # application web — voir frontend/README.md
 └── backend/              # API FastAPI — voir backend/README.md
 ```

@@ -21,6 +21,7 @@ from app.db.session import get_session
 from app.main import app
 from app.models.artisan import ArtisanProfile
 from app.models.enums import Role
+from app.services.rate_limit import SlidingWindowRateLimiter, get_profile_media_upload_rate_limiter
 from tests.factories import make_artisan_profile, make_user
 
 _PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
@@ -32,7 +33,15 @@ def _override_session(db_session: AsyncSession) -> None:
     async def _get_test_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
 
+    # Une seule instance, réutilisée par le lambda (jamais reconstruite à
+    # chaque résolution de dépendance FastAPI) -- sinon chaque requête
+    # repartirait avec un compteur à zéro, désactivant la limite de fait.
+    # Fraîche à chaque TEST : le singleton de production est un état
+    # par-processus, partagé entre tests sinon (même raison que
+    # test_ai_analyze_endpoint.py).
+    fresh_rate_limiter = SlidingWindowRateLimiter()
     app.dependency_overrides[get_session] = _get_test_session
+    app.dependency_overrides[get_profile_media_upload_rate_limiter] = lambda: fresh_rate_limiter
 
 
 @pytest.fixture(autouse=True)
@@ -47,6 +56,7 @@ def _clear_overrides() -> Generator[None, None, None]:
     yield
     app.dependency_overrides.pop(get_session, None)
     app.dependency_overrides.pop(get_settings, None)
+    app.dependency_overrides.pop(get_profile_media_upload_rate_limiter, None)
 
 
 async def _client() -> AsyncClient:

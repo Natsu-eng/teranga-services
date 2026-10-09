@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.main import app
+from app.models.artisan import ArtisanProfile
 from app.models.enums import (
     InterventionStatus,
     QuoteStatus,
@@ -27,7 +28,6 @@ from app.models.enums import (
     VerificationDocType,
     VerificationStatus,
 )
-from app.models.artisan import ArtisanProfile
 from app.models.intervention import Intervention, Quote
 from app.models.request import ServiceRequest
 from app.models.review import Review
