@@ -1,15 +1,7 @@
 import type { ApiError } from '../../../lib/api';
 import type { CurrentUser } from '../../../types';
 import { useAuth } from '../../auth/hooks/useAuth';
-
-function initialsFrom(fullName: string): string {
-  return fullName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
+import { initialsFrom } from '../../../lib/initials';
 
 /**
  * The current user/role now comes from `AuthProvider` — the single source
