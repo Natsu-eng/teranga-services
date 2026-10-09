@@ -41,6 +41,7 @@ import type {
   CreateServiceRequestInput,
   UpdateArtisanProfileInput,
 } from './types';
+import { formatFcfa } from '../format';
 import { initialsFrom } from '../initials';
 
 interface BackendTrade {
@@ -308,6 +309,8 @@ function mapIntervention(intervention: BackendIntervention): Intervention {
 
 function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }, reviews: Review[]): Artisan {
   const primaryTrade = item.trades[0]?.trade.label_fr ?? '';
+  const lowestRate =
+    item.trades.length > 0 ? Math.min(...item.trades.map((t) => t.hourly_rate_fcfa)) : null;
   return {
     id: item.id,
     name: item.full_name,
@@ -327,10 +330,11 @@ function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }
     // No reverse-geocoding available from a geography point -> a neutral,
     // still-true-today constant rather than a fabricated address.
     location: 'Dakar, Sénégal',
-    // No public hourly/base price exposed by the backend (Lot 9 schemas) ->
-    // neutral copy instead of inventing a number.
-    priceBase: 'Tarif sur devis',
-    priceNumber: 0,
+    // Prix indicatif réel : le tarif horaire le plus bas parmi les métiers
+    // déclarés (`hourly_rate_fcfa`, exposé publiquement par ArtisanTradeOut).
+    // Sans métier déclaré, une mention neutre plutôt qu'un montant inventé.
+    priceBase: lowestRate != null ? `Dès ${formatFcfa(lowestRate)}/h` : 'Tarif sur devis',
+    priceNumber: lowestRate ?? 0,
     tags: item.trades.map((t) => t.trade.label_fr),
     bio: item.bio ?? '',
     stats: {

@@ -57,8 +57,9 @@ describe('httpApiClient', () => {
       expect(artisan.trade).toBe('Plomberie');
       expect(artisan.verified).toBe(true);
       expect(artisan.distance).toBe('1.2 km');
-      // No public price/contact/location exposed by the backend -> neutral copy, never invented data.
-      expect(artisan.priceBase).toBe('Tarif sur devis');
+      // Prix indicatif réel, issu du tarif horaire déclaré (jamais inventé).
+      expect(artisan.priceBase).toBe('Dès 15 000 FCFA/h');
+      expect(artisan.priceNumber).toBe(15000);
       expect(artisan.coverUrl).toBeNull();
       expect(artisan.realisations).toEqual([]);
     });
@@ -76,6 +77,50 @@ describe('httpApiClient', () => {
 
       const [artisan] = await httpApiClient.listArtisans!();
       expect(artisan.rating).toBe(0);
+    });
+
+    it('affiche le tarif horaire le plus bas quand l’artisan déclare plusieurs métiers', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [
+              {
+                ...backendArtisan,
+                trades: [
+                  { ...backendArtisan.trades[0], hourly_rate_fcfa: 20000 },
+                  {
+                    ...backendArtisan.trades[0],
+                    trade: { id: 't2', code: 'electricite', label_fr: 'Électricité' },
+                    hourly_rate_fcfa: 8000,
+                  },
+                ],
+              },
+            ],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const [artisan] = await httpApiClient.listArtisans!();
+      expect(artisan.priceBase).toBe('Dès 8 000 FCFA/h');
+      expect(artisan.priceNumber).toBe(8000);
+    });
+
+    it('n’invente aucun prix quand aucun métier n’est déclaré', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [{ ...backendArtisan, trades: [] }],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const [artisan] = await httpApiClient.listArtisans!();
+      expect(artisan.priceBase).toBe('Tarif sur devis');
+      expect(artisan.priceNumber).toBe(0);
     });
 
     it('leaves distance blank when distance_m is null (no `near` supplied)', async () => {
