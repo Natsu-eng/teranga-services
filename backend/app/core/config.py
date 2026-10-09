@@ -243,6 +243,25 @@ class Settings(BaseSettings):
     # document d'identité lisible.
     avatar_max_upload_bytes: int = 4 * 1024 * 1024
 
+    # Taille maximale d'une photo de couverture, en octets -- réglage
+    # indépendant d'AVATAR_MAX_UPLOAD_BYTES (même défaut aujourd'hui, mais
+    # une couverture est destinée à occuper plus de surface visuellement,
+    # donc pourrait légitimement tolérer une résolution plus haute plus
+    # tard sans changer la taille max des avatars). Même stockage PUBLIC
+    # que l'avatar (`get_avatar_storage_backend`, app/services/storage.py) :
+    # la distinction qui compte pour la confidentialité est publique/privé,
+    # pas avatar/couverture -- voir app/services/covers.py.
+    cover_max_upload_bytes: int = 4 * 1024 * 1024
+
+    # Rate limiting sur POST /api/v1/artisans/me/avatar et .../me/cover,
+    # même mécanisme (fenêtre glissante en mémoire) que
+    # RATE_LIMIT_DOCUMENT_UPLOAD_*. Budget partagé entre les deux endpoints
+    # (même limiteur, même clé `user:{id}`) : ce sont deux variantes du même
+    # geste ("changer une photo de mon profil public"), pas deux
+    # fonctionnalités distinctes à budgétiser séparément.
+    rate_limit_profile_media_upload_per_user_max: int = 20
+    rate_limit_profile_media_upload_per_user_window_seconds: int = 600
+
     # Origine publique du backend, utilisée pour construire l'URL absolue
     # d'un avatar (`{backend_public_base_url}/static/avatars/...`). Une URL
     # relative ne suffit pas : front (Vercel) et back (Railway) sont deux

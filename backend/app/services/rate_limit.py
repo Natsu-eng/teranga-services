@@ -44,6 +44,7 @@ class SlidingWindowRateLimiter:
 otp_rate_limiter = SlidingWindowRateLimiter()
 ai_analyze_rate_limiter = SlidingWindowRateLimiter()
 document_upload_rate_limiter = SlidingWindowRateLimiter()
+profile_media_upload_rate_limiter = SlidingWindowRateLimiter()
 
 
 def get_otp_rate_limiter() -> SlidingWindowRateLimiter:
@@ -67,3 +68,11 @@ def get_document_upload_rate_limiter() -> SlidingWindowRateLimiter:
     instance distincte, clé par utilisateur authentifié (pas par IP, voir
     app/api/v1/artisans.py)."""
     return document_upload_rate_limiter
+
+
+def get_profile_media_upload_rate_limiter() -> SlidingWindowRateLimiter:
+    """Dépendance FastAPI pour `POST /api/v1/artisans/me/avatar` et
+    `.../me/cover` -- un seul budget partagé entre les deux (même clé par
+    utilisateur authentifié), distinct de `document_upload_rate_limiter`
+    (documents de vérification, régime privé)."""
+    return profile_media_upload_rate_limiter

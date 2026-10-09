@@ -141,6 +141,13 @@ uv run uvicorn app.main:app --reload --port 8000
 | `STORAGE_MAX_UPLOAD_BYTES` | Non (`8388608`) | Taille maximale d'un document uploadé (octets, 8 Mo par défaut). |
 | `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_MAX` | Non (`10`) | Nombre max d'uploads de documents par utilisateur sur la fenêtre glissante. |
 | `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
+| `AVATAR_STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Stockage PUBLIC des médias de profil (avatar et couverture), distinct du stockage privé des documents. |
+| `AVATAR_STORAGE_LOCAL_DIR` | Non (`var/public/avatars`) | Répertoire servi en lecture publique sous `/static/avatars`, relatif à `backend/` ou chemin absolu. |
+| `AVATAR_MAX_UPLOAD_BYTES` | Non (`4194304`) | Taille maximale d'une photo de profil (octets, 4 Mo par défaut). |
+| `COVER_MAX_UPLOAD_BYTES` | Non (`4194304`) | Taille maximale d'une photo de couverture (octets, 4 Mo par défaut). Le front pré-contrôle à 4 Mo : à relever des deux côtés ensemble. |
+| `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_MAX` | Non (`20`) | Nombre max d'envois de photo (avatar + couverture, budget partagé) par utilisateur sur la fenêtre glissante. |
+| `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
+| `BACKEND_PUBLIC_BASE_URL` | Non (`http://localhost:8000`) | Origine publique du backend, préfixe des URL absolues d'avatar/couverture. **À renseigner en prod.** |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
 
@@ -191,12 +198,25 @@ réalignement recommandé dans un lot dédié séparé si souhaité).
 ## Onboarding artisan (profil, métiers, documents)
 
 `PATCH /api/v1/artisans/me` (artisan authentifié, mise à jour partielle --
-seuls les champs fournis sont appliqués) édite `bio`, `years_experience`,
-`base_location`, `avatar_url`, `is_available`. `verified_status` et le rôle
-n'y apparaissent jamais : le premier reste toujours dérivé, le second n'est
-modifiable par aucun endpoint. `POST /api/v1/artisans/me/trades` /
+seuls les champs fournis sont appliqués) édite `full_name`, `bio`,
+`years_experience`, `base_location`, `avatar_url`, `cover_url`,
+`is_available`. `verified_status` et le rôle n'y apparaissent jamais : le
+premier reste toujours dérivé, le second n'est modifiable par aucun
+endpoint. `POST /api/v1/artisans/me/trades` /
 `DELETE /api/v1/artisans/me/trades/{id}` déclarent/retirent un métier
 exercé (tarif indicatif, rayon ou polygone de zone d'intervention).
+
+**Photos du profil public** (avatar, couverture) : `POST
+/api/v1/artisans/me/avatar` et `POST /api/v1/artisans/me/cover`
+(`multipart/form-data`, champ `file`). Données PUBLIQUES, servies sous
+`/static/avatars` -- jamais le stockage privé des documents ci-dessous.
+JPEG/PNG vérifiés par magic bytes, taille plafonnée, budget d'envois
+**partagé** entre les deux routes (`429 TROP_DE_DEMANDES` au-delà). Au
+remplacement, l'ancien fichier n'est effacé qu'**après le commit** et
+seulement si sa clé appartient prouvablement au profil courant et au bon
+type de média (`app/services/profile_media.py`) -- une URL collée à la main
+via `PATCH` (http(s) absolu uniquement) ne fait jamais effacer le fichier
+de quelqu'un d'autre.
 
 **Documents de vérification** (CNI, selfie) : `POST /api/v1/artisans/me/documents`
 (`multipart/form-data`, `doc_type` + `file`), `GET .../documents` (métadonnées

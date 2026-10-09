@@ -10,7 +10,7 @@ booléen dérivé -- même principe de protection que pour `base_location`
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import (
     ArtisanVerifiedStatus,
@@ -42,6 +42,24 @@ class ArtisanProfileUpdateIn(BaseModel):
     years_experience: int | None = Field(default=None, ge=0, le=80)
     base_location: LocationIn | None = None
     avatar_url: str | None = Field(default=None, max_length=2000)
+    cover_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("avatar_url", "cover_url")
+    @classmethod
+    def _media_url_must_be_http(cls, value: str | None) -> str | None:
+        # Ces deux URL sont rendues telles quelles dans un `<img src>` sur la
+        # fiche PUBLIQUE : seul un schéma http(s) absolu est accepté, jamais
+        # `javascript:`, `data:` ou un chemin relatif ambigu. Chaîne vide ou
+        # blancs = « retirer la photo », ramené à `None` (même sens que
+        # l'onboarding, qui envoie déjà `null` pour un champ vidé).
+        if value is None:
+            return None
+        stripped = value.strip()
+        if stripped == "":
+            return None
+        if not stripped.lower().startswith(("https://", "http://")):
+            raise ValueError("L'URL de l'image doit commencer par https:// ou http://.")
+        return stripped
 
 
 class ArtisanTradeCreateIn(BaseModel):
