@@ -1,6 +1,0 @@
-{
-  "name": "Téranga Services",
-  "description": "Plateforme sénégalaise de mise en relation pour services à domicile et artisans qualifiés (plomberie, électricité, climatisation, etc.).",
-  "requestFramePermissions": ["camera", "microphone", "geolocation"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
