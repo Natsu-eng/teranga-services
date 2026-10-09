@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'fs';
 import path from 'path';
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
@@ -32,6 +33,25 @@ function resolveBackendUrl(raw: string | undefined): string {
   }
   // Origine seule : le chemin /api/v1 est conservé tel quel par le proxy.
   return parsed.origin;
+}
+
+interface VercelHeaderRule {
+  source: string;
+  headers: { key: string; value: string }[];
+}
+
+/**
+ * En-têtes de sécurité de production, relus depuis vercel.json (seule source
+ * de vérité) pour que `npm run preview` serve le build EXACTEMENT avec les
+ * mêmes en-têtes (CSP comprise) que la production : une CSP trop stricte se
+ * voit alors en local, pas après le déploiement.
+ */
+function productionSecurityHeaders(): Record<string, string> {
+  const config = JSON.parse(readFileSync(path.resolve(__dirname, 'vercel.json'), 'utf-8')) as {
+    headers?: VercelHeaderRule[];
+  };
+  const globalRule = config.headers?.find((rule) => rule.source === '/(.*)');
+  return Object.fromEntries((globalRule?.headers ?? []).map(({ key, value }) => [key, value]));
 }
 
 export default defineConfig(({ mode }) => {
@@ -74,6 +94,7 @@ export default defineConfig(({ mode }) => {
       port: DEV_PORT,
       strictPort: true,
       proxy: apiProxy,
+      headers: productionSecurityHeaders(),
     },
   };
 });
