@@ -119,6 +119,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
 | `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
 | `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
+| `RATE_LIMIT_BACKEND` | Non (`memory` en dev, `postgres` sinon) | Stockage des compteurs de rate limiting : `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors dev. |
 | `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
 | `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
@@ -143,8 +144,11 @@ uv run uvicorn app.main:app --reload --port 8000
 | `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
 | `AVATAR_STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Stockage PUBLIC des médias de profil (avatar et couverture), distinct du stockage privé des documents. |
 | `AVATAR_STORAGE_LOCAL_DIR` | Non (`var/public/avatars`) | Répertoire servi en lecture publique sous `/static/avatars`, relatif à `backend/` ou chemin absolu. |
-| `AVATAR_MAX_UPLOAD_BYTES` | Non (`4194304`) | Taille maximale d'une photo de profil (octets, 4 Mo par défaut). |
-| `COVER_MAX_UPLOAD_BYTES` | Non (`4194304`) | Taille maximale d'une photo de couverture (octets, 4 Mo par défaut). Le front pré-contrôle à 4 Mo : à relever des deux côtés ensemble. |
+| `AVATAR_MAX_UPLOAD_BYTES` | Non (`10485760`) | Taille maximale du fichier envoyé pour une photo de profil (octets, 10 Mo). Le front la lit via `GET /artisans/me/media-constraints`. |
+| `COVER_MAX_UPLOAD_BYTES` | Non (`10485760`) | Idem pour la photo de couverture. |
+| `AVATAR_MAX_SIDE_PX` | Non (`512`) | Côté le plus long de l'avatar servi (pixels), après réencodage. |
+| `COVER_MAX_SIDE_PX` | Non (`1600`) | Côté le plus long de la couverture servie (pixels), après réencodage. |
+| `PROFILE_MEDIA_MAX_PIXELS` | Non (`50000000`) | Plafond largeur × hauteur d'une image envoyée, vérifié avant décodage (anti-bombe de décompression). |
 | `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_MAX` | Non (`20`) | Nombre max d'envois de photo (avatar + couverture, budget partagé) par utilisateur sur la fenêtre glissante. |
 | `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
 | `BACKEND_PUBLIC_BASE_URL` | Non (`http://localhost:8000`) | Origine publique du backend, préfixe des URL absolues d'avatar/couverture. **À renseigner en prod.** |
@@ -169,12 +173,17 @@ commercial n'est branché à ce stade ; ce choix reste à trancher avant la
 mise en production (`SMS_PROVIDER=unconfigured` échoue explicitement en
 attendant).
 
-**Rate limiting** sur `request-otp` : fenêtre glissante **en mémoire**
-(`app/services/rate_limit.py`), par numéro et par IP. Dette technique
-documentée : cet état est local au processus, il ne survit ni à un
-redémarrage ni à plusieurs instances/workers -- à remplacer par un backend
-partagé (Redis, ou une table dédiée) si le trafic ou le nombre d'instances
-grandit.
+**Rate limiting** sur `request-otp` (par numéro et par IP), et de la même
+façon sur le triage IA, les documents et les photos de profil : fenêtre
+glissante (`app/services/rate_limit.py`). En staging/prod, les compteurs
+vivent dans la table `rate_limit_hit` (`RATE_LIMIT_BACKEND=postgres`, par
+défaut hors dev) : **partagés par toutes les instances et conservés au
+redémarrage**. Chaque vérification tourne dans sa propre transaction
+(un appel refusé ensuite reste décompté), un verrou consultatif par clé
+empêche N requêtes simultanées de dépasser la limite, et la clé (numéro,
+IP, utilisateur) n'est jamais stockée en clair -- seulement son empreinte
+SHA-256. Base indisponible = requête refusée (échec fermé). En dev, l'état
+reste en mémoire pour simplifier.
 
 ## Lecture des artisans (recherche géo, avis, stats)
 
@@ -211,7 +220,15 @@ exercé (tarif indicatif, rayon ou polygone de zone d'intervention).
 (`multipart/form-data`, champ `file`). Données PUBLIQUES, servies sous
 `/static/avatars` -- jamais le stockage privé des documents ci-dessous.
 JPEG/PNG vérifiés par magic bytes, taille plafonnée, budget d'envois
-**partagé** entre les deux routes (`429 TROP_DE_DEMANDES` au-delà). Au
+**partagé** entre les deux routes (`429 TROP_DE_DEMANDES` au-delà).
+**Jamais servies telles quelles** (`app/services/image_processing.py`) :
+chaque image est entièrement décodée (un fichier à signature valide mais
+non décodable est refusé), ses métadonnées EXIF -- dont la **position GPS**
+de la prise de vue -- sont retirées après application de l'orientation,
+elle est redimensionnée (`AVATAR_MAX_SIDE_PX` / `COVER_MAX_SIDE_PX`) puis
+recompressée (JPEG, ou PNG si transparence). Les dimensions sont plafonnées
+avant décodage (`PROFILE_MEDIA_MAX_PIXELS`, `422 IMAGE_DIMENSIONS_EXCESSIVES`).
+Les documents de vérification, eux, ne sont jamais retouchés. Au
 remplacement, l'ancien fichier n'est effacé qu'**après le commit** et
 seulement si sa clé appartient prouvablement au profil courant et au bon
 type de média (`app/services/profile_media.py`) -- une URL collée à la main

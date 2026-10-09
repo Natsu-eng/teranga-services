@@ -29,8 +29,9 @@ from app.models.enums import Role
 from app.services.rate_limit import SlidingWindowRateLimiter, get_profile_media_upload_rate_limiter
 from app.services.storage import resolve_local_dir
 from tests.factories import make_artisan_profile, make_user
+from tests.images import make_png
 
-_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_PNG_BYTES = make_png()
 # Clé de stockage : `{prefixe éventuel}{uuid4 hex, 32 caractères}.{extension}`
 # (le préfixe "cover-" distingue juste une couverture d'un avatar dans le
 # même répertoire public, voir app/services/covers.py) -- jamais un id
@@ -91,7 +92,10 @@ async def test_uploaded_avatar_is_publicly_reachable(db_session: AsyncSession) -
             public_response = await client.get(_path_from_public_url(avatar_url))
 
         assert public_response.status_code == 200
-        assert public_response.content == _PNG_BYTES
+        # Jamais les octets envoyés : l'image réencodée par le serveur
+        # (PNG opaque -> JPEG, métadonnées retirées).
+        assert public_response.content != _PNG_BYTES
+        assert public_response.content[:3] == b"\xff\xd8\xff"
     finally:
         if written_file is not None:
             written_file.unlink(missing_ok=True)
@@ -118,7 +122,10 @@ async def test_uploaded_cover_is_publicly_reachable(db_session: AsyncSession) ->
             public_response = await client.get(_path_from_public_url(cover_url))
 
         assert public_response.status_code == 200
-        assert public_response.content == _PNG_BYTES
+        # Jamais les octets envoyés : l'image réencodée par le serveur
+        # (PNG opaque -> JPEG, métadonnées retirées).
+        assert public_response.content != _PNG_BYTES
+        assert public_response.content[:3] == b"\xff\xd8\xff"
     finally:
         if written_file is not None:
             written_file.unlink(missing_ok=True)

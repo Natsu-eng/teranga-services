@@ -330,12 +330,59 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   décompté du budget pour un fichier voué au refus. Inputs fichier passés
   de `hidden` à `sr-only` + `aria-label` : atteignables au clavier et
   nommés pour les lecteurs d'écran.
-- **Dettes restantes, documentées** : le plafond de 4 Mo est dupliqué côté
+- **Dettes restantes, documentées** (✅ *toutes trois closes par
+  `feat/media-hardening`, ci-dessous*) : le plafond de 4 Mo est dupliqué côté
   front (pré-contrôle seulement -- relever `COVER_MAX_UPLOAD_BYTES` sans
   toucher `PROFILE_MEDIA_MAX_BYTES` ferait refuser localement des fichiers
   que le serveur accepterait) ; le rate limiter reste en mémoire par
   processus (même dette que l'OTP) ; aucun redimensionnement/recompression
   serveur des images (une couverture de 4 Mo est servie telle quelle).
+
+## Mise à jour — `feat/media-hardening`
+
+- **Correctif préalable** : `ruff check` échouait sur `main` (ligne de 110
+  caractères dans `profile_media.py`, produite par `ruff format` après le
+  dernier `ruff check` du lot précédent). Corrigé en premier commit.
+- **Rate limiting partagé et persistant.** L'état en mémoire par processus
+  (OTP, triage IA, documents, photos) ne survivait ni à un redémarrage ni à
+  plusieurs instances : derrière N workers, la limite réelle était
+  multipliée par N, et chaque déploiement remettait tous les compteurs à
+  zéro. Remplacé en staging/prod par `PostgresRateLimiter` (table
+  `rate_limit_hit`, migration `b5e65b93246d`, réversible) :
+  - chaque vérification tourne dans **sa propre transaction**, jamais celle
+    de la requête — un appel refusé ensuite (fichier invalide, code faux)
+    reste décompté, sinon échouer exprès suffirait à contourner la limite ;
+  - **verrou consultatif par clé** : sonde à l'appui, sans lui 20 requêtes
+    simultanées passaient toutes pour une limite de 5 ; avec lui, exactement
+    5 (test `test_concurrent_checks_never_exceed_the_limit`) ;
+  - **aucune clé en clair** : numéro, IP ou identifiant ne sont stockés que
+    sous forme d'empreinte SHA-256 (vérifié en base après le test live :
+    0 ligne en clair) ;
+  - purge des lignes expirées, échec fermé si la base est indisponible ;
+  - `RATE_LIMIT_BACKEND` : `memory` en dev, `postgres` par défaut ailleurs,
+    `memory` **refusé au démarrage** hors dev.
+- **Réencodage serveur des photos publiques** (Pillow 12.3,
+  `app/services/image_processing.py`) : décodage complet (fichier polyglotte
+  ou tronqué refusé, même avec une signature valide), plafond de pixels lu
+  dans l'en-tête avant décodage (anti-bombe de décompression, garde-fou de
+  Pillow conservé en seconde ligne), orientation appliquée puis **EXIF
+  retiré, dont la position GPS** — jusqu'ici publiée telle quelle sur la
+  fiche publique avec chaque photo prise au téléphone —, redimensionnement
+  (512 / 1600 px), recompression JPEG q85 (PNG si transparence). Décodage
+  JPEG réduit (`draft`) et hors boucle d'événements. Plafond d'envoi relevé
+  de 4 à 10 Mo (une photo de téléphone dépasse souvent 4 Mo ; le poids servi
+  ne dépend plus de l'envoi). Documents de vérification jamais retouchés.
+- **Source unique des limites** : `GET /artisans/me/media-constraints`,
+  dérivé des mêmes réglages que les routes d'upload (testé : un fichier d'un
+  octet au-delà de la limite annoncée est refusé). Le front en tire
+  pré-contrôle, `accept` et texte d'aide ; `PROFILE_MEDIA_MAX_BYTES`
+  supprimé ; contraintes indisponibles = aucune limite devinée.
+- **Vérification** : backend 453 tests + ruff + mypy, frontend `validate`
+  vert ; test live via le proxy du front avec `RATE_LIMIT_BACKEND=postgres` :
+  photo 3000×2000 avec GPS servie en 512×341 (avatar, 2 Ko) et 1600×1067
+  (couverture, 15 Ko) sans GPS ni fabricant, bombe refusée (422), budget
+  épuisé à la 21e tentative (429) et **toujours épuisé après redémarrage du
+  backend**.
 
 ## Résumé exécutif
 

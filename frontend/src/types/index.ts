@@ -212,6 +212,23 @@ export interface MyArtisanProfile {
   trades: ArtisanTradeDetail[];
 }
 
+/** Limites d'envoi d'une photo du profil, telles qu'appliquées par le serveur. */
+export interface MediaUploadLimits {
+  maxUploadBytes: number;
+  maxSidePx: number;
+}
+
+/**
+ * `GET /artisans/me/media-constraints` — seule source de vérité des
+ * contraintes de photo de profil/couverture (aucun plafond en dur côté front).
+ */
+export interface ProfileMediaConstraints {
+  acceptedMimeTypes: string[];
+  maxPixels: number;
+  avatar: MediaUploadLimits;
+  cover: MediaUploadLimits;
+}
+
 export type VerificationDocType = 'cni' | 'selfie' | 'accreditation' | 'address_proof';
 export type VerificationDocStatus = 'pending' | 'approved' | 'rejected';
 

@@ -31,6 +31,7 @@ from app.schemas.artisans import (
     ArtisanStatsPublicOut,
     ArtisanTradeCreateIn,
     MyVerificationOut,
+    ProfileMediaConstraintsOut,
     VerificationDocumentOut,
 )
 from app.schemas.pagination import Page
@@ -41,9 +42,9 @@ from app.services import covers as covers_service
 from app.services import documents as documents_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
-from app.services.profile_media import discard_obsolete_media
+from app.services.profile_media import discard_obsolete_media, media_constraints
 from app.services.rate_limit import (
-    SlidingWindowRateLimiter,
+    RateLimiter,
     get_document_upload_rate_limiter,
     get_profile_media_upload_rate_limiter,
 )
@@ -116,7 +117,7 @@ async def update_my_profile(
 
 
 async def _enforce_profile_media_budget(
-    rate_limiter: SlidingWindowRateLimiter, *, user: User, settings: Settings
+    rate_limiter: RateLimiter, *, user: User, settings: Settings
 ) -> None:
     """Budget d'envois partagé entre l'avatar et la couverture (même
     limiteur, même clé `user:{id}` -- voir RATE_LIMIT_PROFILE_MEDIA_UPLOAD_*).
@@ -132,14 +133,22 @@ async def _enforce_profile_media_budget(
         raise TropDeDemandesMediaError()
 
 
+@router.get("/me/media-constraints", response_model=ProfileMediaConstraintsOut)
+async def get_my_media_constraints(
+    settings: Annotated[Settings, Depends(get_settings)],
+    _artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ProfileMediaConstraintsOut:
+    # Lu par l'onboarding avant tout envoi : le front n'a ainsi aucun
+    # plafond recopié en dur, modifier AVATAR_/COVER_MAX_UPLOAD_BYTES suffit.
+    return media_constraints(settings)
+
+
 @router.post("/me/avatar", response_model=ArtisanDetailOut)
 async def upload_my_avatar(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
-    rate_limiter: Annotated[
-        SlidingWindowRateLimiter, Depends(get_profile_media_upload_rate_limiter)
-    ],
+    rate_limiter: Annotated[RateLimiter, Depends(get_profile_media_upload_rate_limiter)],
     file: Annotated[UploadFile, File()],
 ) -> ArtisanDetailOut:
     # Photo de profil : donnée PUBLIQUE, contrairement aux documents de
@@ -169,9 +178,7 @@ async def upload_my_cover(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
-    rate_limiter: Annotated[
-        SlidingWindowRateLimiter, Depends(get_profile_media_upload_rate_limiter)
-    ],
+    rate_limiter: Annotated[RateLimiter, Depends(get_profile_media_upload_rate_limiter)],
     file: Annotated[UploadFile, File()],
 ) -> ArtisanDetailOut:
     # Photo de couverture : même régime PUBLIC que l'avatar ci-dessus, même
@@ -226,7 +233,7 @@ async def upload_my_document(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
-    rate_limiter: Annotated[SlidingWindowRateLimiter, Depends(get_document_upload_rate_limiter)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_document_upload_rate_limiter)],
     doc_type: Annotated[VerificationDocType, Form()],
     file: Annotated[UploadFile, File()],
 ) -> VerificationDocumentOut:

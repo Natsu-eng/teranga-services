@@ -21,10 +21,11 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
-import { PROFILE_MEDIA_ACCEPT } from './profileMedia';
+import { acceptAttribute, constraintsHint } from './profileMedia';
 import { useArtisanProfileActions } from './hooks/useArtisanProfileActions';
 import { useDocumentUpload } from './hooks/useDocumentUpload';
 import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
+import { useProfileMediaConstraints } from './hooks/useProfileMediaConstraints';
 import { useMyVerification } from './hooks/useMyVerification';
 import { useTrades } from './hooks/useTrades';
 import type { VerificationDocType, VerificationDocument, VerificationDocStatus } from '../../types';
@@ -101,7 +102,9 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   } = useMyVerification(role === 'artisan' && artisanId != null);
   const { data: trades } = useTrades();
 
-  const actions = useArtisanProfileActions((next) => setProfile(() => next));
+  const mediaConstraints = useProfileMediaConstraints(role === 'artisan' && artisanId != null);
+  const actions = useArtisanProfileActions((next) => setProfile(() => next), mediaConstraints);
+  const mediaHint = constraintsHint(mediaConstraints);
   const documentUpload = useDocumentUpload(reloadVerification);
 
   const [fullName, setFullName] = useState('');
@@ -298,7 +301,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                     <span>{actions.isUploadingCover ? 'Envoi...' : 'Changer la couverture'}</span>
                     <input
                       type="file"
-                      accept={PROFILE_MEDIA_ACCEPT}
+                      accept={acceptAttribute(mediaConstraints)}
                       aria-label="Photo de couverture"
                       className="sr-only"
                       disabled={actions.isUploadingCover}
@@ -321,16 +324,16 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                     <span>{actions.isUploadingAvatar ? 'Envoi...' : 'Changer la photo'}</span>
                     <input
                       type="file"
-                      accept={PROFILE_MEDIA_ACCEPT}
+                      accept={acceptAttribute(mediaConstraints)}
                       aria-label="Photo de profil"
                       className="sr-only"
                       disabled={actions.isUploadingAvatar}
                       onChange={handleAvatarFileSelected}
                     />
                   </label>
-                  <p className="text-[11px] font-sora text-muted-foreground-soft">
-                    JPEG ou PNG, 4 Mo maximum
-                  </p>
+                  {mediaHint && (
+                    <p className="text-[11px] font-sora text-muted-foreground-soft">{mediaHint}</p>
+                  )}
                   {actions.coverError && (
                     <p role="alert" className="text-xs text-destructive text-center">
                       {actions.coverError}

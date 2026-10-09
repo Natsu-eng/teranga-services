@@ -23,8 +23,9 @@ from app.models.artisan import ArtisanProfile
 from app.models.enums import Role
 from app.services.rate_limit import SlidingWindowRateLimiter, get_profile_media_upload_rate_limiter
 from tests.factories import make_artisan_profile, make_user
+from tests.images import make_png
 
-_PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+_PNG_BYTES = make_png()
 _FAKE_JPEG_BYTES = b"ceci n'est pas une image, juste renomme en .jpg"
 
 
@@ -160,7 +161,7 @@ async def test_replacing_cover_deletes_the_previous_file(
         first_url = first.json()["cover_url"]
         first_key = first_url.rsplit("/static/avatars/", 1)[1]
 
-        second_bytes = b"\x89PNG\r\n\x1a\n" + b"\x11" * 32
+        second_bytes = make_png(color=(17, 17, 17))
         second = await client.post(
             "/api/v1/artisans/me/cover",
             headers={"Authorization": f"Bearer {token}"},

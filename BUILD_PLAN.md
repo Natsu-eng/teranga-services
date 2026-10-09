@@ -702,9 +702,10 @@ Railway (pas de disque persistant).
 3. **Clé de stockage aléatoire** (`uuid4().hex`), jamais le nom de fichier
    d'origine — non devinable, ne fuite aucune information. `verification.doc_url`
    stocke cette référence interne, jamais une URL publique.
-4. **Rate limité par utilisateur authentifié** (fenêtre glissante en
-   mémoire, même mécanisme que `RATE_LIMIT_OTP_*`,
-   `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_*`).
+4. **Rate limité par utilisateur authentifié** (fenêtre glissante, même
+   mécanisme que `RATE_LIMIT_OTP_*`, `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_*` ;
+   compteurs partagés entre instances et persistants en staging/prod,
+   table `rate_limit_hit`, voir `RATE_LIMIT_BACKEND`).
 5. Crée/actualise la ligne `verification` (`status=pending`) et **recalcule
    immédiatement** `artisan_profile.verified_status`
    (`compute_verified_status`, §2.2) — c'est le seul endroit, avec le futur
@@ -737,6 +738,19 @@ en texte libre (coller une URL externe, **http(s) absolue uniquement** —
 jamais `javascript:`/`data:`, ces URL étant rendues dans un `<img src>`
 public) : les deux chemins écrivent le même champ, sans que l'un n'exclue
 l'autre.
+
+**Une photo envoyée n'est jamais servie telle quelle** (lot
+`feat/media-hardening`, `app/services/image_processing.py`) : décodage
+complet (un fichier à signature valide mais non décodable est refusé),
+dimensions plafonnées AVANT décodage (`PROFILE_MEDIA_MAX_PIXELS`, anti-bombe
+de décompression), orientation EXIF appliquée puis **toutes les métadonnées
+retirées — dont la position GPS de la prise de vue**, redimensionnement
+(`AVATAR_MAX_SIDE_PX` 512, `COVER_MAX_SIDE_PX` 1600, jamais d'agrandissement)
+et recompression (JPEG q85, PNG si transparence). Le poids servi ne
+dépendant plus du fichier envoyé, le plafond d'envoi passe à 10 Mo. Les
+limites sont exposées par `GET /artisans/me/media-constraints` : le front
+n'en recopie aucune. Les documents de vérification, eux, ne sont jamais
+retouchés (preuve d'identité à examiner telle que déposée).
 
 **Remplacement d'un média — deux règles de fiabilité**
 (`app/services/profile_media.py`, communes aux deux médias) :
@@ -1187,6 +1201,20 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   pour un fichier voué au refus), champ URL de couverture à côté de celui
   de l'avatar. *But : l'artisan maîtrise toute l'image de sa fiche
   publique, sans qu'un autre compte puisse jamais y toucher.*
+- **Lot `feat/media-hardening` — Médias publics et rate limiting fiables.**
+  Clôt les trois dettes laissées par `feat/profile-media`. (1) **Rate
+  limiting partagé** : table `rate_limit_hit` + `PostgresRateLimiter`
+  (OTP, triage IA, documents, photos) — compteurs communs à toutes les
+  instances et conservés au redémarrage, transaction propre à chaque
+  vérification, verrou consultatif par clé contre les requêtes simultanées,
+  clés stockées en empreinte SHA-256 ; `RATE_LIMIT_BACKEND` : `memory` en
+  dev, `postgres` sinon, `memory` refusé hors dev. (2) **Réencodage
+  serveur** des photos (Pillow, §3.3) : EXIF/GPS retirés, redimensionnement,
+  recompression, anti-bombe de décompression. (3) **Source unique des
+  limites** : `GET /artisans/me/media-constraints`, lu par l'onboarding
+  (pré-contrôle, `accept`, texte d'aide) — plus aucun plafond en dur côté
+  front. *But : ce que la fiche publique affiche ne révèle rien de plus que
+  la photo, et les limites anti-abus tiennent en production réelle.*
 - **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
   et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,

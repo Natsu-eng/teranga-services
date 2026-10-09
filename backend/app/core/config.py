@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -121,11 +121,32 @@ class Settings(BaseSettings):
             )
         return v
 
-    # Rate limiting sur /auth/request-otp, fenêtre glissante en mémoire
-    # (voir app/services/rate_limit.py). Dette documentée pour Railway : un
-    # limiteur en mémoire ne survit ni à un redémarrage, ni à plusieurs
-    # instances -- acceptable pour le lancement, à remplacer par un backend
-    # partagé (Redis, ou la base) si le trafic ou le nombre d'instances grandit.
+    # Stockage des compteurs de TOUS les rate limitings (OTP, triage IA,
+    # documents, médias de profil) -- voir app/services/rate_limit.py.
+    # - "postgres" : table `rate_limit_hit`, partagée par toutes les
+    #   instances et persistante (survit à un redémarrage/déploiement).
+    # - "memory" : état local au processus, pour le dev et les tests.
+    # Non renseigné : "memory" en dev, "postgres" en staging/prod. "memory"
+    # explicitement demandé en staging/prod est REFUSÉ au démarrage
+    # (`validate_rate_limit_backend`) : derrière plusieurs instances, chacune
+    # appliquerait sa propre limite (limite réelle multipliée d'autant), et
+    # chaque redéploiement remettrait tous les compteurs à zéro.
+    rate_limit_backend: Literal["memory", "postgres"] | None = None
+
+    @model_validator(mode="after")
+    def validate_rate_limit_backend(self) -> "Settings":
+        if self.rate_limit_backend is None:
+            self.rate_limit_backend = "memory" if self.app_env == "dev" else "postgres"
+        elif self.rate_limit_backend == "memory" and self.app_env != "dev":
+            raise ValueError(
+                f"RATE_LIMIT_BACKEND=memory est interdit avec APP_ENV={self.app_env} : "
+                "les limites ne seraient ni partagées entre instances ni conservées au "
+                "redémarrage. Utilisez RATE_LIMIT_BACKEND=postgres (ou laissez-la vide)."
+            )
+        return self
+
+    # Rate limiting sur /auth/request-otp, fenêtre glissante (stockage selon
+    # RATE_LIMIT_BACKEND ci-dessus).
     rate_limit_otp_per_phone_max: int = 3
     rate_limit_otp_per_phone_window_seconds: int = 600
     rate_limit_otp_per_ip_max: int = 10
@@ -188,7 +209,7 @@ class Settings(BaseSettings):
     mistral_timeout_seconds: float = 10.0
 
     # Rate limiting sur POST /api/v1/ai/analyze, même mécanisme (fenêtre
-    # glissante en mémoire) que RATE_LIMIT_OTP_* -- voir
+    # glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_* -- voir
     # app/services/rate_limit.py. Par IP uniquement : l'endpoint est public,
     # non authentifié (l'écran /demande ne requiert pas de connexion), donc
     # aucune identité utilisateur fiable à clé dessus. Chaque appel coûte
@@ -219,7 +240,7 @@ class Settings(BaseSettings):
     storage_max_upload_bytes: int = 8 * 1024 * 1024
 
     # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
-    # (fenêtre glissante en mémoire) que RATE_LIMIT_OTP_*. Par utilisateur
+    # (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_*. Par utilisateur
     # authentifié (pas par IP : l'endpoint exige déjà un compte artisan) --
     # une écriture disque + un hachage de magic bytes par appel ne doivent
     # pas pouvoir être déclenchés en boucle.
@@ -237,24 +258,31 @@ class Settings(BaseSettings):
     # STORAGE_LOCAL_DIR (documents privés), pour ne jamais risquer de servir
     # publiquement un document de vérification par erreur de configuration.
     avatar_storage_local_dir: str = "var/public/avatars"
-    # Taille maximale d'une photo de profil, en octets. Défaut 4 Mo : large
-    # pour une photo prise au téléphone, plus bas que STORAGE_MAX_UPLOAD_BYTES
-    # (8 Mo) car un avatar n'a pas besoin de la même résolution qu'un
-    # document d'identité lisible.
-    avatar_max_upload_bytes: int = 4 * 1024 * 1024
+    # Taille maximale d'un FICHIER envoyé pour la photo de profil / de
+    # couverture, en octets. Défaut 10 Mo : une photo prise au téléphone
+    # dépasse couramment 4 Mo. Ce plafond ne concerne que l'envoi -- ce qui
+    # est servi publiquement est toujours réencodé et redimensionné
+    # (app/services/image_processing.py), donc pèse quelques centaines de Ko
+    # quelle que soit la taille d'origine. Deux réglages indépendants pour
+    # pouvoir les faire évoluer séparément. Exposés au front par
+    # GET /artisans/me/media-constraints : une seule source de vérité.
+    avatar_max_upload_bytes: int = 10 * 1024 * 1024
+    cover_max_upload_bytes: int = 10 * 1024 * 1024
 
-    # Taille maximale d'une photo de couverture, en octets -- réglage
-    # indépendant d'AVATAR_MAX_UPLOAD_BYTES (même défaut aujourd'hui, mais
-    # une couverture est destinée à occuper plus de surface visuellement,
-    # donc pourrait légitimement tolérer une résolution plus haute plus
-    # tard sans changer la taille max des avatars). Même stockage PUBLIC
-    # que l'avatar (`get_avatar_storage_backend`, app/services/storage.py) :
-    # la distinction qui compte pour la confidentialité est publique/privé,
-    # pas avatar/couverture -- voir app/services/covers.py.
-    cover_max_upload_bytes: int = 4 * 1024 * 1024
+    # Côté le plus long de l'image SERVIE, en pixels (jamais d'agrandissement).
+    # Avatar : affiché au plus en 144 px (fiche publique), 512 couvre les
+    # écrans haute densité. Couverture : bandeau pleine largeur, 1600 px.
+    avatar_max_side_px: int = 512
+    cover_max_side_px: int = 1600
+
+    # Plafond de pixels de l'image ENVOYÉE (largeur × hauteur lues dans
+    # l'en-tête, avant tout décodage) : protège de la bombe de décompression
+    # (un PNG de quelques Ko annonçant des milliards de pixels). 50 Mpx couvre
+    # les capteurs de téléphone actuels (jusqu'à 50 Mpx en sortie standard).
+    profile_media_max_pixels: int = 50_000_000
 
     # Rate limiting sur POST /api/v1/artisans/me/avatar et .../me/cover,
-    # même mécanisme (fenêtre glissante en mémoire) que
+    # même mécanisme (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que
     # RATE_LIMIT_DOCUMENT_UPLOAD_*. Budget partagé entre les deux endpoints
     # (même limiteur, même clé `user:{id}`) : ce sont deux variantes du même
     # geste ("changer une photo de mon profil public"), pas deux
