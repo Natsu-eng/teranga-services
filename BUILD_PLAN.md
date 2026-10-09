@@ -42,9 +42,25 @@ la migration complète.
 | Base en dev | **Postgres local (pgAdmin)** | Gratuit, rapide, jetable ; `DATABASE_URL` unique |
 | Base en prod | **Railway** (managé) | Bascule = 1 variable d'env, zéro code |
 | Topologie | **2 services séparés** : front (Vite) + API (FastAPI) | Standard SaaS, déploiement propre, front délocalisable (Vercel) |
-| Sort d'Express | **Condamné, en douceur** | FastAPI monte à côté, on migre l'IA, puis Express dégage |
+| Sort d'Express | **Retiré (Lot 13)** ✅ | FastAPI a pris l'IA (Lot 11) puis tout le reste ; le front est un projet Vite pur |
 | Auth | **Téléphone + OTP** (SMS) | Standard Sénégal ; corrige le `userRole` auto-déclarable |
 | Secrets | **Jamais en dur** | Tout via variables d'environnement (`.env`, jamais commité) |
+
+### Service du front (depuis le Lot 13)
+
+- **Dev** : deux process — `uvicorn` (backend, port 8000) et `vite` (front,
+  port 3000 fixe). Le front appelle `/api/v1` en relatif ; le proxy natif de
+  Vite (`frontend/vite.config.ts`, cible `BACKEND_URL`) le route vers FastAPI.
+- **Production** : `vite build` → fichiers statiques (`dist/`) servis par
+  l'hébergeur, fallback SPA compris (`frontend/vercel.json`). Le navigateur
+  appelle le backend via `VITE_API_BASE_URL` (URL absolue, figée au build),
+  l'origine du front étant autorisée par `CORS_ORIGINS` côté backend — ou,
+  variante, `/api/v1` même-origine derrière un reverse proxy.
+- **En-têtes de sécurité** du front (CSP, `X-Frame-Options: DENY`,
+  `nosniff`, `Referrer-Policy`, `Permissions-Policy`) définis une seule fois
+  dans `vercel.json` et rejoués par `vite preview` pour les tester en local.
+- **Aucun secret côté front** : la seule configuration IA est celle du
+  backend (`AI_TRIAGE_PROVIDER`, `MISTRAL_API_KEY`).
 
 ### Règle d'or config
 
@@ -1215,8 +1231,24 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   (pré-contrôle, `accept`, texte d'aide) — plus aucun plafond en dur côté
   front. *But : ce que la fiche publique affiche ne révèle rien de plus que
   la photo, et les limites anti-abus tiennent en production réelle.*
-- **Lot 13 — Retrait d'Express.** Une fois l'IA et tout le reste migrés, Express
-  et `server.ts` sont supprimés (preuve grep). *But : un seul backend.*
+- **Lot 13 — Retrait d'Express.** ✅ (branche `chore/remove-express`) Proxy
+  `/api/v1` d'abord recréé dans Vite (`vite.config.ts`, `BACKEND_URL` validée
+  au démarrage, port 3000 strict) et testé seul, Express encore présent ;
+  puis `server.ts` supprimé avec `express`, `http-proxy-middleware`,
+  `@google/genai`, `dotenv`, `tsx`, `esbuild` (preuve grep : importés par
+  `server.ts` seul). Scripts `dev = vite`, `build = vite build` (statique
+  seul), `preview`. Production : §1 « Service du front ». Dette IA close :
+  l'endpoint Gemini `/api/analyze-problem`, `GEMINI_API_KEY`, `APP_URL` et
+  `metadata.json` (AI Studio) supprimés — le triage FastAPI est la seule
+  implémentation. Fallback mock silencieux supprimé : `api = httpApiClient`,
+  qui implémente tout `ApiClient` (compilation), quatre méthodes servies par
+  le seul mock et jamais appelées retirées du contrat (preuve grep),
+  `notImplemented()` / code `not_implemented` pour toute fonctionnalité
+  future sans backend, mock réservé aux tests (règle ESLint). Au passage :
+  `npm audit` 16 → 0 (dont react-router 7.18.4, seule dépendance concernée
+  embarquée dans le bundle). Parcours vérifié bout en bout via le proxy
+  Vite (recherche, OTP, triage IA, uploads, dashboard, refresh/logout).
+  *But : un seul backend.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
   payout) + **Lot 15 — Déploiement Railway** (2 services + Postgres managé,
   bascule `DATABASE_URL`). *À séquencer selon priorités.*

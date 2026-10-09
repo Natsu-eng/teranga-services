@@ -3,5 +3,4 @@
 *.local
 .env*
 !.env.example
-!.env.local.example
 .claude/

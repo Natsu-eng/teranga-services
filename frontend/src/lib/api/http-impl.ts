@@ -1,8 +1,7 @@
 /**
- * HTTP implementation of `ApiClient`, backed by the FastAPI backend
- * (Lots 6-9). Only the methods the backend actually covers are implemented
- * here — `index.ts` is the single place that decides, per method, whether
- * to use this or `mockApiClient` (see its top-of-file comment).
+ * Implémentation HTTP — et seule implémentation de production — de
+ * `ApiClient`, adossée au backend FastAPI. Couvre le contrat EN ENTIER
+ * (typé `ApiClient`, pas un sous-ensemble) : voir index.ts.
  *
  * Schema adaptation: the backend's artisan schemas (`app/schemas/artisans.py`)
  * intentionally omit any contact field (phone/email — anti-disintermediation,
@@ -31,6 +30,7 @@ import type {
   VerificationDocument,
 } from '../../types';
 import { apiRequest, apiRequestBlob } from './http';
+import { ApiError } from './types';
 import type {
   AddArtisanTradeInput,
   AdminVerificationFilters,
@@ -475,39 +475,19 @@ async function fetchArtisanReviews(artisanId: string): Promise<Review[]> {
   return page.items.map(mapReview);
 }
 
-export const httpApiClient: Pick<
-  ApiClient,
-  | 'listArtisans'
-  | 'getArtisanById'
-  | 'listTrades'
-  | 'analyzeProblem'
-  | 'createServiceRequest'
-  | 'listMyServiceRequests'
-  | 'listMyInterventions'
-  | 'getInterventionById'
-  | 'acceptIntervention'
-  | 'declineIntervention'
-  | 'createQuote'
-  | 'acceptQuote'
-  | 'refuseQuote'
-  | 'completeIntervention'
-  | 'createReview'
-  | 'getArtisanStats'
-  | 'updateArtisanAvailability'
-  | 'getMyArtisanProfile'
-  | 'updateMyArtisanProfile'
-  | 'uploadAvatar'
-  | 'uploadCover'
-  | 'getProfileMediaConstraints'
-  | 'addArtisanTrade'
-  | 'removeArtisanTrade'
-  | 'listMyVerificationDocuments'
-  | 'uploadVerificationDocument'
-  | 'listAdminVerifications'
-  | 'getAdminVerificationDocumentBlob'
-  | 'approveVerification'
-  | 'rejectVerification'
-> = {
+/**
+ * À utiliser pour toute méthode d'`ApiClient` déclarée avant que le backend
+ * ne la serve : échoue explicitement avec un code dédié (`not_implemented`)
+ * et un message affichable, au lieu de renvoyer des données inventées.
+ */
+export function notImplemented(feature: string): never {
+  throw new ApiError(
+    'not_implemented',
+    `${feature} n'est pas encore disponible. Merci de réessayer plus tard.`,
+  );
+}
+
+export const httpApiClient: ApiClient = {
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
       `/artisans${buildArtisanQuery(filters)}`,

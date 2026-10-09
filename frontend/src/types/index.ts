@@ -47,39 +47,6 @@ export interface Artisan {
   available: boolean;
 }
 
-export interface DevisProposal {
-  id: string;
-  title: string;
-  laborPrice: number; // e.g. 8000
-  materialsPrice: number; // e.g. 4000
-  totalPrice: number; // e.g. 12000
-  currency: string; // "FCFA"
-  status: 'pending' | 'accepted' | 'declined';
-  date: string;
-}
-
-export interface ChatMessage {
-  id: string;
-  sender: 'client' | 'artisan' | 'system';
-  text?: string;
-  timestamp: string;
-  devis?: DevisProposal;
-  photoUrl?: string;
-}
-
-export interface JobRequest {
-  id: string;
-  clientName: string;
-  clientAvatar: string;
-  title: string;
-  trade: string;
-  location: string;
-  timeAgo: string;
-  estimatedPrice: string;
-  status: 'new' | 'accepted' | 'completed';
-  description?: string;
-}
-
 export interface AIAnalysisResult {
   trade: string;
   // Backend trade code (e.g. "plomberie") backing `trade` (its French label) —

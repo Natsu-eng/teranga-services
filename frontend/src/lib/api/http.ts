@@ -1,7 +1,10 @@
 import { ApiError, type ApiErrorCode } from './types';
 import { authStore, type TokenPair } from './auth-store';
+import { resolveApiBaseUrl } from './base-url';
 
-const API_BASE = '/api/v1';
+// Résolue une seule fois au chargement (valeur figée au build par Vite) --
+// voir base-url.ts pour les deux modes de déploiement.
+const API_BASE = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 const NETWORK_ERROR_MESSAGE = "Impossible de contacter le serveur. Vérifiez votre connexion.";

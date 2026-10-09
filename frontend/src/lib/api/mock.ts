@@ -1,16 +1,21 @@
-import {
-  INITIAL_ARTISANS,
-  INITIAL_JOB_REQUESTS,
-  INITIAL_CHAT_MESSAGES,
-  ARTISAN_STATS_BY_ID,
-  CURRENT_USER,
-} from '../../data/mockData';
+/**
+ * Implémentation EN MÉMOIRE d'`ApiClient`, réservée aux TESTS (smoke tests
+ * de routage d'App.test.tsx, et mock.test.ts). Jamais importée par le code
+ * de production : `index.ts` ne sert que `httpApiClient`, et la règle ESLint
+ * `no-restricted-imports` (eslint.config.js) interdit tout import de ce
+ * module hors fichiers de test -- il ne peut donc pas réapparaître en
+ * silence dans le bundle.
+ *
+ * Aucune requête réseau ici : l'ancien `analyzeProblem`, qui appelait
+ * l'endpoint Express `/api/analyze-problem` (Gemini), est supprimé avec
+ * Express (Lot 13) ; il renvoie désormais un résultat fixe et déterministe.
+ */
+import { INITIAL_ARTISANS, ARTISAN_STATS_BY_ID } from '../../data/mockData';
 import type {
   AdminVerificationListItem,
   AdminVerificationReview,
   AIAnalysisResult,
   Artisan,
-  ChatMessage,
   Intervention,
   MyArtisanProfile,
   MyVerification,
@@ -27,12 +32,9 @@ import {
   type CreateQuoteInput,
   type CreateReviewInput,
   type CreateServiceRequestInput,
-  type JobRequestFilters,
 } from './types';
 
-// Matches the trade codes seeded server-side (backend/scripts/seed.py) —
-// this mock reference list only backs mockApiClient.listTrades, unused in
-// production once index.ts routes listTrades to the HTTP implementation.
+// Mêmes codes que le seed backend (backend/scripts/seed.py).
 const MOCK_TRADES: Trade[] = [
   { id: 'trade-plomberie', code: 'plomberie', labelFr: 'Plomberie' },
   { id: 'trade-electricite', code: 'electricite', labelFr: 'Électricité' },
@@ -42,8 +44,8 @@ const MOCK_TRADES: Trade[] = [
   { id: 'trade-peinture', code: 'peinture', labelFr: 'Peinture' },
 ];
 
-// Simulated network latency, in milliseconds. Screens must learn to handle
-// loading/error states from day one, since Phase 2 swaps this for real HTTP.
+// Latence simulée : les écrans testés traversent ainsi un vrai état de
+// chargement, comme avec le backend.
 const MIN_LATENCY_MS = 150;
 const MAX_LATENCY_MS = 400;
 
@@ -56,40 +58,25 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
-const DEFAULT_CONVERSATION_ID = INITIAL_ARTISANS[0]?.id ?? '';
-
-// In-memory per-conversation store, keyed by conversationId (an artisan id today).
-const conversations = new Map<string, ChatMessage[]>([
-  [DEFAULT_CONVERSATION_ID, [...INITIAL_CHAT_MESSAGES]],
-]);
-
-function createMessageId(prefix: string): string {
+function createId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.round(Math.random() * 1000)}`;
 }
 
-interface RawAnalysisResponse {
-  trade?: string;
-  priceEstimate?: string;
-  recommendedCount?: number;
-  explanation?: string;
-  urgency?: string;
-  suggestedDevis?: {
-    title?: string;
-    labor?: number;
-    materials?: number;
-    total?: number;
-  };
-}
-
-// This mock impl of analyzeProblem delegates to the legacy Express endpoint
-// (see comment below) — dead in production (index.ts always routes
-// analyzeProblem to httpApiClient) and its response shape never carries a
-// trade_code/urgency enum, so tradeCode/urgencyCode/priceMin/MaxFcfa fall
-// back to fixed defaults consistent with this function's other fallbacks.
-const FALLBACK_TRADE_CODE = 'plomberie';
-const FALLBACK_URGENCY_CODE: AIAnalysisResult['urgencyCode'] = 'normal';
-const FALLBACK_PRICE_MIN_FCFA = 8_000;
-const FALLBACK_PRICE_MAX_FCFA = 15_000;
+// Résultat de triage fixe, de même forme que celui de httpApiClient
+// (POST /api/v1/ai/analyze) -- jamais présenté à un utilisateur réel.
+const FIXTURE_ANALYSIS: AIAnalysisResult = {
+  trade: 'Plomberie',
+  tradeCode: 'plomberie',
+  priceEstimate: '8 000 – 15 000 FCFA',
+  priceMinFcfa: 8_000,
+  priceMaxFcfa: 15_000,
+  recommendedCount: 3,
+  explanation:
+    "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+  urgency: 'normale',
+  urgencyCode: 'normal',
+  suggestedDevis: { title: 'Plomberie', labor: 8_000, materials: 4_000, total: 12_000 },
+};
 
 export const mockApiClient: ApiClient = {
   async listArtisans(filters?: ArtisanFilters) {
@@ -126,93 +113,12 @@ export const mockApiClient: ApiClient = {
     return artisan;
   },
 
-  async listJobRequests(filters?: JobRequestFilters) {
-    await simulateNetworkLatency();
-    let results = [...INITIAL_JOB_REQUESTS];
-    if (filters?.status) {
-      const status = filters.status;
-      results = results.filter((job) => job.status === status);
-    }
-    return results;
-  },
-
-  async getChatMessages(conversationId: string) {
-    await simulateNetworkLatency();
-    return [...(conversations.get(conversationId) ?? [])];
-  },
-
-  async sendChatMessage(conversationId: string, text: string) {
-    await simulateNetworkLatency();
-    const trimmed = text.trim();
-    if (!trimmed) {
-      throw new ApiError('validation', 'Le message ne peut pas être vide.');
-    }
-
-    const message: ChatMessage = {
-      id: createMessageId('msg'),
-      sender: 'client',
-      text: trimmed,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-
-    const existing = conversations.get(conversationId) ?? [];
-    conversations.set(conversationId, [...existing, message]);
-
-    // Simulate the artisan reading and replying shortly after, as a real
-    // backend (or websocket) would — callers can re-fetch to observe it.
-    setTimeout(() => {
-      const reply: ChatMessage = {
-        id: createMessageId('msg-artisan'),
-        sender: 'artisan',
-        text: 'Parfait ! Je peux intervenir dès cet après-midi vers 14h à votre adresse. Merci pour votre confiance.',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      const current = conversations.get(conversationId) ?? [];
-      conversations.set(conversationId, [...current, reply]);
-    }, 1800);
-
-    return message;
-  },
-
-  // Delegates to the existing /api/analyze-problem endpoint rather than mockData:
-  // it's already a real, working integration (Gemini + heuristic fallback), so
-  // routing it through this single entry point avoids a functional regression.
   async analyzeProblem(description: string): Promise<AIAnalysisResult> {
-    let response: Response;
-    try {
-      response = await fetch('/api/analyze-problem', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description }),
-      });
-    } catch {
-      throw new ApiError('network', "Impossible de contacter le service d'analyse IA.");
+    await simulateNetworkLatency();
+    if (!description.trim()) {
+      throw new ApiError('validation', 'La description est requise.');
     }
-
-    if (!response.ok) {
-      throw new ApiError('network', "L'analyse IA a échoué. Merci de réessayer.");
-    }
-
-    const data = (await response.json()) as RawAnalysisResponse;
-    return {
-      trade: data.trade ?? 'Plomberie — fuite',
-      tradeCode: FALLBACK_TRADE_CODE,
-      priceEstimate: data.priceEstimate ?? '8 000 – 15 000 FCFA',
-      priceMinFcfa: FALLBACK_PRICE_MIN_FCFA,
-      priceMaxFcfa: FALLBACK_PRICE_MAX_FCFA,
-      recommendedCount: data.recommendedCount ?? 3,
-      explanation:
-        data.explanation ??
-        "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
-      urgency: data.urgency ?? 'moyenne',
-      urgencyCode: FALLBACK_URGENCY_CODE,
-      suggestedDevis: {
-        title: data.suggestedDevis?.title ?? "Réparation de fuite d'eau",
-        labor: data.suggestedDevis?.labor ?? 8000,
-        materials: data.suggestedDevis?.materials ?? 4000,
-        total: data.suggestedDevis?.total ?? 12000,
-      },
-    };
+    return { ...FIXTURE_ANALYSIS, suggestedDevis: { ...FIXTURE_ANALYSIS.suggestedDevis } };
   },
 
   async getArtisanStats(artisanId: string) {
@@ -222,11 +128,6 @@ export const mockApiClient: ApiClient = {
       throw new ApiError('not_found', 'Statistiques indisponibles pour cet artisan.');
     }
     return stats;
-  },
-
-  async getCurrentUser() {
-    await simulateNetworkLatency();
-    return CURRENT_USER;
   },
 
   async listTrades() {
@@ -240,7 +141,7 @@ export const mockApiClient: ApiClient = {
     await simulateNetworkLatency();
     const trade = MOCK_TRADES.find((item) => item.code === input.tradeCode);
     return {
-      id: createMessageId('request'),
+      id: createId('request'),
       tradeCode: input.tradeCode,
       tradeLabel: trade?.labelFr ?? input.tradeCode,
       description: input.description,
