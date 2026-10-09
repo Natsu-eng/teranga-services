@@ -26,6 +26,17 @@ import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { ComingSoon } from './components/ui/ComingSoon';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 
+/*
+ * Rôles autorisés par espace, alignés sur les gardes du backend
+ * (require_role) : /requests/me est réservé aux clients, /interventions/me
+ * aux clients et artisans, tout /pro aux artisans. Les routes sans `roles`
+ * (profil, messagerie) acceptent tout compte connecté. L'espace admin a sa
+ * propre garde (RequireAdminRoute, indétectable pour un non-admin).
+ */
+const ARTISAN_ONLY = ['artisan'] as const;
+const CLIENT_ONLY = ['client'] as const;
+const CLIENT_OR_ARTISAN = ['client', 'artisan'] as const;
+
 export function AppRoutes() {
   const [location, setLocation] = useState<string>('Dakar Plateau');
 
@@ -71,7 +82,7 @@ export function AppRoutes() {
           <Route
             path="pro"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={ARTISAN_ONLY}>
                 <ArtisanDashboardScreen />
               </ProtectedRoute>
             }
@@ -79,7 +90,7 @@ export function AppRoutes() {
           <Route
             path="pro/onboarding"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={ARTISAN_ONLY}>
                 <ArtisanOnboardingScreen />
               </ProtectedRoute>
             }
@@ -87,7 +98,7 @@ export function AppRoutes() {
           <Route
             path="bienvenue-artisan"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={ARTISAN_ONLY}>
                 <ArtisanWelcomeScreen />
               </ProtectedRoute>
             }
@@ -95,7 +106,7 @@ export function AppRoutes() {
           <Route
             path="mes-demandes"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={CLIENT_ONLY}>
                 <MyRequestsScreen />
               </ProtectedRoute>
             }
@@ -103,7 +114,7 @@ export function AppRoutes() {
           <Route
             path="mes-interventions"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
                 <InterventionsScreen />
               </ProtectedRoute>
             }

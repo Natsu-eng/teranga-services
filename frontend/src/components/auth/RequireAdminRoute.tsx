@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import { NotFoundScreen } from '../../features/not-found/NotFoundScreen';
+import { PageLoader } from '../ui/Spinner';
 
 interface RequireAdminRouteProps {
   children: ReactNode;
@@ -19,11 +20,7 @@ export function RequireAdminRoute({ children }: RequireAdminRouteProps) {
   const { role, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (role !== 'admin') {
