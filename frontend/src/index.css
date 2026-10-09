@@ -32,6 +32,19 @@
  *   brand-wave                   #1dc8f0
  */
 @theme {
+  /*
+   * Familles de police (auto-hébergées, voir src/main.tsx).
+   * Chaque pile se termine par un repli système réel, au cas où le woff2
+   * ne serait pas encore chargé (font-display: swap) ou serait bloqué.
+   * - font-display : Fraunces, serif chaleureux pour titres et salutations.
+   * - font-sans    : Figtree, sans-serif lisible pour le corps et l'UI
+   *                  (remplace la pile par défaut de Tailwind).
+   */
+  --font-display: 'Fraunces Variable', 'Fraunces', ui-serif, Georgia, Cambria, 'Times New Roman', serif;
+  --font-sans:
+    'Figtree Variable', 'Figtree', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
   --color-primary: #004129;
   --color-primary-emerald: #0e5a3c;
   --color-primary-emerald-foreground: #8acfa9;
@@ -94,15 +107,16 @@
 }
 
 body {
-  font-family:
-    'Plus Jakarta Sans',
-    system-ui,
-    -apple-system,
-    sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--color-background);
   color: var(--color-foreground);
 }
 
+/*
+ * Transitoire : Sora n'est plus chargée (retrait du CDN Google Fonts).
+ * Les écrans encore marqués `font-sora` retombent sur Figtree le temps de
+ * leur refonte ; la classe est supprimée une fois plus aucun usage (grep).
+ */
 .font-sora {
-  font-family: 'Sora', sans-serif;
+  font-family: var(--font-sans);
 }
