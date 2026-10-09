@@ -1,40 +1,68 @@
 import React from 'react';
-import { PartyPopper } from 'lucide-react';
+import { ArrowRight, FileCheck2, UserRound, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { Button } from '../../components/ui/Button';
+import { Logo } from '../../components/ui/Logo';
+
+const NEXT_STEPS = [
+  { icon: UserRound, label: 'Complétez votre profil (photo, présentation, expérience)' },
+  { icon: Wrench, label: 'Déclarez vos métiers, vos tarifs et votre zone' },
+  { icon: FileCheck2, label: "Envoyez vos documents d'identité pour être vérifié" },
+] as const;
 
 /**
  * Accroche affichée une fois, juste après une inscription artisan
- * (BUILD_PLAN.md §4) : mène directement à l'onboarding (profil, métiers,
- * documents — BUILD_PLAN.md, onboarding artisan). Même langage visuel
- * `bg-primary` que `ArtisanDashboardScreen` pour prolonger l'identité
- * "Espace Pro" déjà amorcée sur `RoleSelectScreen`.
+ * (BUILD_PLAN.md §4) : plein écran vert profond — la couleur de l'espace
+ * Pro — et une seule action, mener à l'onboarding.
  */
 export const ArtisanWelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
 
   return (
-    <main className="pb-28">
-      <section className="bg-primary text-white px-4 md:px-8 pt-16 pb-12 rounded-b-3xl">
-        <div className="max-w-md mx-auto text-center space-y-4">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-white/15 flex items-center justify-center">
-            <PartyPopper className="w-8 h-8" />
-          </div>
-          <h1 className="font-headline-md text-2xl font-bold">Bienvenue chez Téranga Pro !</h1>
-          <p className="text-sm text-primary-emerald-foreground">
-            Votre compte artisan est créé. Complétez votre profil et envoyez vos documents pour
-            être vérifié et commencer à recevoir des demandes.
+    <main data-tone="dark" className="min-h-screen bg-primary text-white flex flex-col">
+      <div className="max-w-md w-full mx-auto px-4 pt-6 pb-10 flex-1 flex flex-col">
+        <Logo variant="pro" tone="on-dark" />
+
+        <div className="pt-14 space-y-4">
+          <p className="text-caption font-semibold uppercase tracking-[0.14em] text-accent">
+            Compte artisan créé
+          </p>
+          <h1 className="font-display text-display-lg font-semibold">
+            Bienvenue chez Téranga Pro !
+          </h1>
+          <p className="text-base text-primary-emerald-foreground">
+            Votre compte artisan est créé. Complétez votre profil et envoyez vos documents pour être
+            vérifié et commencer à recevoir des demandes.
           </p>
         </div>
-      </section>
 
-      <div className="max-w-md mx-auto px-4 pt-8">
-        <button
-          type="button"
+        <ol className="mt-10 space-y-3">
+          {NEXT_STEPS.map(({ icon: Icon, label }, index) => (
+            <li key={label} className="flex items-center gap-3 rounded-card bg-white/10 p-4">
+              <span
+                aria-hidden
+                className="shrink-0 inline-flex w-9 h-9 items-center justify-center rounded-full bg-accent text-primary"
+              >
+                <Icon className="w-5 h-5" />
+              </span>
+              <span className="text-sm">
+                <span className="sr-only">Étape {index + 1} : </span>
+                {label}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        <Button
+          variant="primary"
+          size="lg"
+          fullWidth
+          className="mt-auto"
+          trailingIcon={<ArrowRight aria-hidden className="w-5 h-5" />}
           onClick={() => navigate('/pro/onboarding', { replace: true })}
-          className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
         >
           Compléter mon profil
-        </button>
+        </Button>
       </div>
     </main>
   );

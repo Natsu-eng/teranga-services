@@ -51,7 +51,9 @@ describe('PhoneScreen', () => {
   it('rejects an obviously malformed phone number without calling the backend', () => {
     renderPhoneScreen();
 
-    fireEvent.change(screen.getByPlaceholderText('+221771234567'), { target: { value: '0771234567' } });
+    fireEvent.change(screen.getByPlaceholderText('+221771234567'), {
+      target: { value: '0771234567' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Recevoir le code' }));
 
     expect(screen.getByText(/Numéro invalide/)).toBeInTheDocument();
@@ -62,7 +64,9 @@ describe('PhoneScreen', () => {
     requestOtp.mockResolvedValue(undefined);
     renderPhoneScreen({ intent: 'login' });
 
-    fireEvent.change(screen.getByPlaceholderText('+221771234567'), { target: { value: '+221771234501' } });
+    fireEvent.change(screen.getByPlaceholderText('+221771234567'), {
+      target: { value: '+221771234501' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Recevoir le code' }));
 
     expect(await screen.findByText('OTP screen')).toBeInTheDocument();
@@ -75,19 +79,27 @@ describe('PhoneScreen', () => {
 
     expect(screen.getByText('Créer votre compte')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText('+221771234567'), { target: { value: '+221771234501' } });
+    fireEvent.change(screen.getByPlaceholderText('+221771234567'), {
+      target: { value: '+221771234501' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Recevoir le code' }));
 
     expect(await screen.findByText('OTP screen')).toBeInTheDocument();
   });
 
   it("shows the backend's error message as-is when request-otp fails", async () => {
-    requestOtp.mockRejectedValue(new ApiError('validation', 'Trop de demandes, merci de réessayer plus tard.'));
+    requestOtp.mockRejectedValue(
+      new ApiError('validation', 'Trop de demandes, merci de réessayer plus tard.'),
+    );
     renderPhoneScreen();
 
-    fireEvent.change(screen.getByPlaceholderText('+221771234567'), { target: { value: '+221771234501' } });
+    fireEvent.change(screen.getByPlaceholderText('+221771234567'), {
+      target: { value: '+221771234501' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Recevoir le code' }));
 
-    expect(await screen.findByText('Trop de demandes, merci de réessayer plus tard.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Trop de demandes, merci de réessayer plus tard.'),
+    ).toBeInTheDocument();
   });
 });

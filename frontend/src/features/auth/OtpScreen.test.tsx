@@ -155,13 +155,17 @@ describe('OtpScreen', () => {
   });
 
   it("shows the backend's error message as-is when logging in on a nonexistent phone", async () => {
-    login.mockRejectedValue(new ApiError('not_found', 'Aucun compte pour ce numéro. Inscrivez-vous.'));
+    login.mockRejectedValue(
+      new ApiError('not_found', 'Aucun compte pour ce numéro. Inscrivez-vous.'),
+    );
     renderOtpScreen({ phone: '+221771234501', intent: 'login' });
 
     fireEvent.change(screen.getByPlaceholderText('123456'), { target: { value: '123456' } });
     fireEvent.click(screen.getByRole('button', { name: 'Valider' }));
 
-    expect(await screen.findByText('Aucun compte pour ce numéro. Inscrivez-vous.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Aucun compte pour ce numéro. Inscrivez-vous.'),
+    ).toBeInTheDocument();
   });
 
   it('disables resend until the delay elapses, then allows requesting a new code', () => {

@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { ApiError } from '../../lib/api';
 import type { AuthIntent, SignupRole } from '../../lib/api/auth-client';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/Field';
+import { AuthShell } from './components/AuthShell';
 import { useAuth } from './hooks/useAuth';
 
 // Basic international format check (E.164-ish): '+' followed by 8 to 15
@@ -53,46 +56,53 @@ export const PhoneScreen: React.FC = () => {
       await auth.requestOtp(phone);
       navigate('/connexion/code', { state: { phone, intent, role, fullName, from } });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
+      setError(
+        err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Retour vers l'étape précédente du parcours, état de navigation compris.
+  const handleBack = () => {
+    if (intent === 'signup') {
+      navigate('/connexion/nom', { state: { intent, role, from } });
+    } else {
+      navigate('/connexion', { state: { from } });
+    }
+  };
+
   return (
-    <main className="max-w-md mx-auto px-4 pt-20 pb-28 space-y-6">
-      <div className="space-y-2">
-        <h1 className="font-bold text-2xl text-primary">
-          {intent === 'signup' ? 'Créer votre compte' : 'Connexion'}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Entrez votre numéro de téléphone pour recevoir un code de vérification par SMS.
-        </p>
-      </div>
+    <AuthShell
+      title={intent === 'signup' ? 'Créer votre compte' : 'Connexion'}
+      description="Entrez votre numéro de téléphone pour recevoir un code de vérification par SMS."
+      onBack={handleBack}
+    >
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-6" noValidate>
+        <TextField
+          label="Numéro de téléphone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="+221771234567"
+          hint="Format international, sans espaces : +221 suivi de votre numéro."
+          error={error}
+        />
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-sora font-semibold text-muted-foreground">Numéro de téléphone</span>
-          <input
-            type="tel"
-            autoComplete="tel"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="+221771234567"
-            className="w-full h-14 px-4 rounded-full bg-surface-muted text-base text-foreground outline-none focus:ring-2 focus:ring-primary"
-          />
-        </label>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <button
+        <Button
           type="submit"
-          disabled={isSubmitting}
-          className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 disabled:active:scale-100 cursor-pointer"
+          variant="brand"
+          size="lg"
+          fullWidth
+          isLoading={isSubmitting}
+          className="mt-auto"
         >
           {isSubmitting ? 'Envoi en cours...' : 'Recevoir le code'}
-        </button>
+        </Button>
       </form>
-    </main>
+    </AuthShell>
   );
 };
