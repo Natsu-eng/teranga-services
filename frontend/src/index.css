@@ -70,6 +70,132 @@
   --color-success-foreground: #002113;
   --color-brand-orange-money: #ff6600;
   --color-brand-wave: #1dc8f0;
+
+  /* ------------------------------------------------------------------
+   * Ajouts de la refonte visuelle (feat/design-refonte).
+   * Aucun token existant n'est renommé ni modifié : uniquement des ajouts,
+   * documentés un par un. Référence : DESIGN_SYSTEM.md à la racine.
+   * ------------------------------------------------------------------ */
+
+  /* Surfaces */
+  /* Blanc des cartes, champs et barres posés sur le fond chaud (#fcf9f8). */
+  --color-surface: #ffffff;
+  /* Vert très clair : surface douce des zones IA et des encarts d'information. */
+  --color-emerald-tint: #e8f3ec;
+  /* Variante un cran plus soutenue : survol / bord discret sur emerald-tint. */
+  --color-emerald-tint-strong: #d2e8da;
+
+  /*
+   * Échelle typographique.
+   * display-* : titres en Fraunces (font-display), interlignage serré.
+   * title     : titre de carte (nom d'artisan, intitulé de demande).
+   * caption   : sur-titres, libellés de navigation, mentions (11 px),
+   *             remplace les tailles arbitraires text-[11px].
+   * Le corps de texte garde l'échelle Tailwind standard (text-sm / text-base).
+   */
+  --text-display-xl: 2.25rem;
+  --text-display-xl--line-height: 1.1;
+  --text-display-xl--letter-spacing: -0.02em;
+  --text-display-lg: 1.875rem;
+  --text-display-lg--line-height: 1.15;
+  --text-display-lg--letter-spacing: -0.015em;
+  --text-display-md: 1.5rem;
+  --text-display-md--line-height: 1.2;
+  --text-display-md--letter-spacing: -0.01em;
+  --text-display-sm: 1.25rem;
+  --text-display-sm--line-height: 1.25;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.35;
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 1.4;
+
+  /*
+   * Rayons.
+   * card  : toutes les cartes (~20 px, direction validée).
+   * field : champs de saisie et blocs internes d'une carte.
+   * sheet : bas arrondi des bandeaux (en-tête Pro, héros).
+   */
+  --radius-card: 1.25rem;
+  --radius-field: 0.875rem;
+  --radius-sheet: 1.75rem;
+
+  /*
+   * Ombres douces et diffuses, teintées émeraude (jamais de bordure dure).
+   * card       : repos d'une carte.
+   * card-hover : carte interactive survolée.
+   * bar        : barres fixées en bas (navigation, actions).
+   * cta        : halo or sous le bouton d'action principal.
+   */
+  --shadow-card:
+    0 1px 2px color-mix(in srgb, var(--color-primary-emerald) 6%, transparent),
+    0 8px 24px -6px color-mix(in srgb, var(--color-primary-emerald) 12%, transparent);
+  --shadow-card-hover:
+    0 2px 4px color-mix(in srgb, var(--color-primary-emerald) 8%, transparent),
+    0 16px 32px -8px color-mix(in srgb, var(--color-primary-emerald) 18%, transparent);
+  --shadow-bar: 0 -6px 24px -10px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  --shadow-cta: 0 10px 24px -8px color-mix(in srgb, var(--color-accent) 70%, transparent);
+}
+
+/*
+ * Socle global (couche base : surchargeable par les utilitaires).
+ */
+@layer base {
+  html {
+    /* Thème clair unique : contrôles natifs (date, scrollbar...) en clair. */
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    /* Filet de sécurité « aucun scroll horizontal » à 360 px. `clip` (et non
+       `hidden`) ne crée pas de conteneur de défilement : les en-têtes
+       `sticky` continuent de fonctionner. */
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Focus visible sur TOUT élément interactif, au clavier uniquement
+     (:focus-visible ne s'affiche pas au clic souris/tactile). Émeraude sur
+     fond clair : contraste > 7:1 avec le fond. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-emerald);
+    outline-offset: 2px;
+  }
+
+  /* Sur les surfaces vert profond (bandeau Pro, carte résultat IA), le
+     contour émeraude serait invisible : on passe à l'or (contraste ~5,5:1). */
+  [data-tone='dark'] :focus-visible,
+  [data-tone='dark']:focus-visible {
+    outline-color: var(--color-accent);
+  }
+
+  ::selection {
+    background-color: var(--color-primary-emerald);
+    color: var(--color-primary-emerald-foreground);
+  }
+}
+
+/*
+ * Respect de prefers-reduced-motion : neutralise globalement animations,
+ * transitions et défilement doux (pulsations de squelette comprises), sans
+ * dépendre de chaque composant.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Marge basse qui respecte l'encoche des téléphones (barres fixées en bas). */
+@utility pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
 @layer utilities {
