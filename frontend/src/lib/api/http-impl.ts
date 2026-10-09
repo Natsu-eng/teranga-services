@@ -22,6 +22,7 @@ import type {
   Intervention,
   MyArtisanProfile,
   MyVerification,
+  ProfileMediaConstraints,
   Quote,
   Review,
   ServiceRequest,
@@ -73,6 +74,18 @@ interface BackendArtisanListItem {
 
 interface BackendArtisanDetail extends BackendArtisanListItem {
   cover_url: string | null;
+}
+
+interface BackendMediaUploadLimits {
+  max_upload_bytes: number;
+  max_side_px: number;
+}
+
+interface BackendProfileMediaConstraints {
+  accepted_mime_types: string[];
+  max_pixels: number;
+  avatar: BackendMediaUploadLimits;
+  cover: BackendMediaUploadLimits;
 }
 
 interface BackendVerificationDocument {
@@ -367,6 +380,19 @@ function mapMyArtisanProfile(item: BackendArtisanDetail): MyArtisanProfile {
   };
 }
 
+function mapMediaUploadLimits(limits: BackendMediaUploadLimits) {
+  return { maxUploadBytes: limits.max_upload_bytes, maxSidePx: limits.max_side_px };
+}
+
+function mapProfileMediaConstraints(item: BackendProfileMediaConstraints): ProfileMediaConstraints {
+  return {
+    acceptedMimeTypes: item.accepted_mime_types,
+    maxPixels: item.max_pixels,
+    avatar: mapMediaUploadLimits(item.avatar),
+    cover: mapMediaUploadLimits(item.cover),
+  };
+}
+
 function mapVerificationDocument(item: BackendVerificationDocument): VerificationDocument {
   return {
     id: item.id,
@@ -472,6 +498,7 @@ export const httpApiClient: Pick<
   | 'updateMyArtisanProfile'
   | 'uploadAvatar'
   | 'uploadCover'
+  | 'getProfileMediaConstraints'
   | 'addArtisanTrade'
   | 'removeArtisanTrade'
   | 'listMyVerificationDocuments'
@@ -558,6 +585,11 @@ export const httpApiClient: Pick<
       formData,
     });
     return mapMyArtisanProfile(detail);
+  },
+
+  async getProfileMediaConstraints(): Promise<ProfileMediaConstraints> {
+    const body = await apiRequest<BackendProfileMediaConstraints>('/artisans/me/media-constraints');
+    return mapProfileMediaConstraints(body);
   },
 
   async addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile> {

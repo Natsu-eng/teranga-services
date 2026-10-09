@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ApiError, api } from '../../../lib/api';
 import type { AddArtisanTradeInput, UpdateArtisanProfileInput } from '../../../lib/api/types';
-import type { MyArtisanProfile } from '../../../types';
+import type { MyArtisanProfile, ProfileMediaConstraints } from '../../../types';
 import { validateProfileMediaFile, type ProfileMediaKind } from '../profileMedia';
 
 function toMessage(err: unknown): string {
@@ -21,9 +21,13 @@ const IDLE_MEDIA_STATE: MediaUploadState = { isUploading: false, error: null };
  * envoi de l'avatar ou de la couverture) — `onUpdated` est censé alimenter
  * le `useMyArtisanProfile().setData` de l'appelant, pour que toutes restent
  * synchronisées sur une seule source de vérité plutôt que plusieurs copies
- * indépendantes du profil.
+ * indépendantes du profil. `mediaConstraints` (serveur, `null` tant que non
+ * chargées) alimente le pré-contrôle local des photos.
  */
-export function useArtisanProfileActions(onUpdated: (profile: MyArtisanProfile) => void) {
+export function useArtisanProfileActions(
+  onUpdated: (profile: MyArtisanProfile) => void,
+  mediaConstraints: ProfileMediaConstraints | null = null,
+) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Un état par média, distinct de isSaving/error ci-dessus : chaque upload
@@ -63,7 +67,7 @@ export function useArtisanProfileActions(onUpdated: (profile: MyArtisanProfile) 
   async function uploadMedia(kind: ProfileMediaKind, file: File): Promise<MyArtisanProfile | null> {
     // Refus local immédiat d'un fichier que le serveur rejetterait de toute
     // façon (voir profileMedia.ts) -- aucune requête, aucun budget consommé.
-    const localError = validateProfileMediaFile(file, kind);
+    const localError = validateProfileMediaFile(file, kind, mediaConstraints);
     if (localError) {
       setMediaState(kind, { isUploading: false, error: localError });
       return null;

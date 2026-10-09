@@ -14,6 +14,7 @@ import type {
   Intervention,
   MyArtisanProfile,
   MyVerification,
+  ProfileMediaConstraints,
   Review,
   ServiceRequest,
   Trade,
@@ -330,6 +331,13 @@ export const mockApiClient: ApiClient = {
   async uploadCover(): Promise<MyArtisanProfile> {
     await simulateNetworkLatency();
     throw new ApiError('validation', "L'envoi de la photo de couverture a échoué.");
+  },
+
+  // Aucune contrainte inventée côté mock : le pré-contrôle se désactive et
+  // c'est le serveur qui tranche (voir useProfileMediaConstraints).
+  async getProfileMediaConstraints(): Promise<ProfileMediaConstraints> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Contraintes des photos indisponibles.');
   },
 
   async addArtisanTrade(): Promise<MyArtisanProfile> {

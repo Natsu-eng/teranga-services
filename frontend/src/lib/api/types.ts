@@ -10,6 +10,7 @@ import type {
   CurrentUser,
   MyArtisanProfile,
   MyVerification,
+  ProfileMediaConstraints,
   Review,
   ServiceRequest,
   Trade,
@@ -112,6 +113,7 @@ export interface ApiClient {
   updateMyArtisanProfile(input: UpdateArtisanProfileInput): Promise<MyArtisanProfile>;
   uploadAvatar(file: File): Promise<MyArtisanProfile>;
   uploadCover(file: File): Promise<MyArtisanProfile>;
+  getProfileMediaConstraints(): Promise<ProfileMediaConstraints>;
   addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile>;
   removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile>;
   listMyVerificationDocuments(): Promise<MyVerification>;

@@ -6,7 +6,7 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { ApiError, api } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
-import type { MyArtisanProfile, MyVerification, Trade } from '../../types';
+import type { MyArtisanProfile, MyVerification, ProfileMediaConstraints, Trade } from '../../types';
 
 vi.mock('../auth/hooks/useAuth');
 vi.mock('../profile/hooks/useCurrentUser');
@@ -20,6 +20,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       updateMyArtisanProfile: vi.fn(),
       uploadAvatar: vi.fn(),
       uploadCover: vi.fn(),
+      getProfileMediaConstraints: vi.fn(),
       addArtisanTrade: vi.fn(),
       removeArtisanTrade: vi.fn(),
       listMyVerificationDocuments: vi.fn(),
@@ -58,6 +59,15 @@ const profileFixture: MyArtisanProfile = {
   isAvailable: true,
   verifiedStatus: 'none',
   trades: [],
+};
+
+// Contraintes telles que renvoyées par GET /artisans/me/media-constraints
+// (4 Mo ici, pour exercer le pré-contrôle avec des fichiers légers).
+const mediaConstraintsFixture: ProfileMediaConstraints = {
+  acceptedMimeTypes: ['image/jpeg', 'image/png'],
+  maxPixels: 50_000_000,
+  avatar: { maxUploadBytes: 4 * 1024 * 1024, maxSidePx: 512 },
+  cover: { maxUploadBytes: 4 * 1024 * 1024, maxSidePx: 1600 },
 };
 
 const verificationFixture: MyVerification = {
@@ -99,6 +109,7 @@ describe('ArtisanOnboardingScreen', () => {
     mockedApi.updateMyArtisanProfile.mockReset();
     mockedApi.uploadAvatar.mockReset();
     mockedApi.uploadCover.mockReset();
+    mockedApi.getProfileMediaConstraints.mockReset().mockResolvedValue(mediaConstraintsFixture);
     mockedApi.addArtisanTrade.mockReset();
     mockedApi.removeArtisanTrade.mockReset();
     mockedApi.uploadVerificationDocument.mockReset();
@@ -243,6 +254,8 @@ describe('ArtisanOnboardingScreen', () => {
   it('refuses an oversized or non-image file locally, without any request', async () => {
     renderScreen();
 
+    // Le pré-contrôle n'est actif qu'une fois les contraintes du serveur reçues.
+    expect(await screen.findByText('JPEG ou PNG, 4 Mo maximum')).toBeInTheDocument();
     const coverInput = await screen.findByLabelText('Photo de couverture');
     const huge = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'cover.jpg', {
       type: 'image/jpeg',
@@ -264,6 +277,34 @@ describe('ArtisanOnboardingScreen', () => {
     ).toBeInTheDocument();
     expect(mockedApi.uploadCover).not.toHaveBeenCalled();
     expect(mockedApi.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it('shows the limits announced by the server, never a hard-coded value', async () => {
+    mockedApi.getProfileMediaConstraints.mockResolvedValue({
+      ...mediaConstraintsFixture,
+      avatar: { maxUploadBytes: 10 * 1024 * 1024, maxSidePx: 512 },
+      cover: { maxUploadBytes: 10 * 1024 * 1024, maxSidePx: 1600 },
+    });
+
+    renderScreen();
+
+    expect(await screen.findByText('JPEG ou PNG, 10 Mo maximum')).toBeInTheDocument();
+    expect(screen.getByLabelText('Photo de profil')).toHaveAttribute('accept', 'image/jpeg,image/png');
+  });
+
+  it('lets the server decide when the constraints could not be loaded', async () => {
+    mockedApi.getProfileMediaConstraints.mockRejectedValue(new ApiError('network', 'Hors ligne'));
+    mockedApi.uploadCover.mockResolvedValue({ ...profileFixture, coverUrl: 'http://x/cover.jpg' });
+
+    renderScreen();
+
+    const coverInput = await screen.findByLabelText('Photo de couverture');
+    // Aucune limite devinée : un gros fichier part quand même, le serveur tranchera.
+    const big = new File([new Uint8Array(5 * 1024 * 1024)], 'cover.jpg', { type: 'image/jpeg' });
+    fireEvent.change(coverInput, { target: { files: [big] } });
+
+    await waitFor(() => expect(mockedApi.uploadCover).toHaveBeenCalledWith(big));
+    expect(screen.queryByText(/maximum/)).not.toBeInTheDocument();
   });
 
   it('saves a pasted cover URL with the rest of the profile', async () => {

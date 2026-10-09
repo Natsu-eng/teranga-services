@@ -429,6 +429,30 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('getProfileMediaConstraints', () => {
+    it('maps the server constraints (single source of truth)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          accepted_mime_types: ['image/jpeg', 'image/png'],
+          max_pixels: 50_000_000,
+          avatar: { max_upload_bytes: 10_485_760, max_side_px: 512 },
+          cover: { max_upload_bytes: 10_485_760, max_side_px: 1600 },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const constraints = await httpApiClient.getProfileMediaConstraints!();
+
+      expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/artisans/me/media-constraints');
+      expect(constraints).toEqual({
+        acceptedMimeTypes: ['image/jpeg', 'image/png'],
+        maxPixels: 50_000_000,
+        avatar: { maxUploadBytes: 10_485_760, maxSidePx: 512 },
+        cover: { maxUploadBytes: 10_485_760, maxSidePx: 1600 },
+      });
+    });
+  });
+
   describe('addArtisanTrade', () => {
     it('sends a POST to /artisans/me/trades and maps the updated profile', async () => {
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { ...backendArtisan, cover_url: null }));
