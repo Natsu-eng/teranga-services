@@ -1,4 +1,4 @@
-import { Artisan, JobRequest, ChatMessage, ArtisanStats, CurrentUser } from '../types';
+import { Artisan, ArtisanStats } from '../types';
 
 export const INITIAL_ARTISANS: Artisan[] = [
   {
@@ -122,76 +122,6 @@ export const INITIAL_ARTISANS: Artisan[] = [
   },
 ];
 
-export const INITIAL_JOB_REQUESTS: JobRequest[] = [
-  {
-    id: 'req-1',
-    clientName: 'Moussa F.',
-    clientAvatar: '/images/client-moussa-f-avatar.jpg',
-    title: 'Fuite robinet cuisine',
-    trade: 'Plomberie',
-    location: 'Ouakam, Dakar',
-    timeAgo: 'Il y a 5 min',
-    estimatedPrice: '8 000 – 15 000 FCFA',
-    status: 'new',
-    description:
-      "Le robinet sous l'évier fuit fortement depuis ce matin. Besoin d'intervention rapide.",
-  },
-  {
-    id: 'req-2',
-    clientName: 'Fatou D.',
-    clientAvatar: '/images/client-fatou-d-avatar.jpg',
-    title: 'Installation chauffe-eau',
-    trade: 'Plomberie',
-    location: 'Almadies, Dakar',
-    timeAgo: 'Il y a 12 min',
-    estimatedPrice: '25 000 – 40 000 FCFA',
-    status: 'new',
-    description: 'Pose d un chauffe-eau électrique 50L neuf dans la salle de bain principale.',
-  },
-  {
-    id: 'req-3',
-    clientName: 'Ousmane T.',
-    clientAvatar: '/images/client-ousmane-t-avatar.jpg',
-    title: 'Réparation canalisation',
-    trade: 'Plomberie',
-    location: 'Plateau, Dakar',
-    timeAgo: 'Il y a 1h',
-    estimatedPrice: '15 000 – 30 000 FCFA',
-    status: 'new',
-    description: "Engorgement au niveau de l'évacuation générale du sous-sol.",
-  },
-];
-
-export const INITIAL_CHAT_MESSAGES: ChatMessage[] = [
-  {
-    id: 'msg-1',
-    sender: 'artisan',
-    text: "Bonjour, j'ai bien reçu votre photo. C'est une fuite standard au niveau du siphon.",
-    timestamp: '10:45',
-  },
-  {
-    id: 'msg-2',
-    sender: 'artisan',
-    timestamp: '10:46',
-    devis: {
-      id: 'devis-101',
-      title: "Réparation de fuite d'évier",
-      laborPrice: 8000,
-      materialsPrice: 4000,
-      totalPrice: 12000,
-      currency: 'FCFA',
-      status: 'pending',
-      date: "Aujourd'hui",
-    },
-  },
-  {
-    id: 'msg-3',
-    sender: 'client',
-    text: "Merci Idrissa, c'est parfait pour moi. Je valide le montant.",
-    timestamp: '10:48',
-  },
-];
-
 export const ARTISAN_STATS_BY_ID: Record<string, ArtisanStats> = {
   'idrissa-diop': {
     ratingAvg: 4.9,
@@ -200,12 +130,4 @@ export const ARTISAN_STATS_BY_ID: Record<string, ArtisanStats> = {
     responseRate: null,
     revenueFcfa: 245000,
   },
-};
-
-export const CURRENT_USER: CurrentUser = {
-  id: 'user-diande-diallo',
-  name: 'Diandé Diallo',
-  initials: 'DD',
-  verified: true,
-  artisanId: 'idrissa-diop',
 };

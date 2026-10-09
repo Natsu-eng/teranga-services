@@ -3,11 +3,8 @@ import type {
   AdminVerificationReview,
   Artisan,
   ArtisanStats,
-  ChatMessage,
   Intervention,
-  JobRequest,
   AIAnalysisResult,
-  CurrentUser,
   MyArtisanProfile,
   MyVerification,
   Review,
@@ -18,7 +15,10 @@ import type {
   VerificationDocument,
 } from '../../types';
 
-export type ApiErrorCode = 'not_found' | 'validation' | 'network' | 'unknown';
+// `not_implemented` : fonctionnalité déclarée côté front mais pas encore
+// servie par le backend -- levée explicitement (`notImplemented`,
+// http-impl.ts), jamais remplacée en silence par des données fictives.
+export type ApiErrorCode = 'not_found' | 'validation' | 'network' | 'not_implemented' | 'unknown';
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
@@ -41,10 +41,6 @@ export interface ArtisanFilters {
   sort?: 'distance' | 'rating' | 'recent';
   page?: number;
   pageSize?: number;
-}
-
-export interface JobRequestFilters {
-  status?: JobRequest['status'];
 }
 
 export interface CreateServiceRequestInput {
@@ -96,15 +92,15 @@ export interface AdminVerificationFilters {
 }
 
 /**
- * Contract for all data access, independent of implementation. `src/lib/api/index.ts`
- * is the only place that picks which implementation (mock today, HTTP later) satisfies it.
+ * Contrat de tout l'accès aux données. Implémenté EN ENTIER par
+ * `httpApiClient` (http-impl.ts) : ajouter une méthode ici sans l'implémenter
+ * côté HTTP est une erreur de compilation, plus jamais un repli silencieux
+ * sur des données fictives. Une fonctionnalité sans backend encore doit
+ * passer explicitement par `notImplemented()` (http-impl.ts).
  */
 export interface ApiClient {
   listArtisans(filters?: ArtisanFilters): Promise<Artisan[]>;
   getArtisanById(id: string): Promise<Artisan>;
-  listJobRequests(filters?: JobRequestFilters): Promise<JobRequest[]>;
-  getChatMessages(conversationId: string): Promise<ChatMessage[]>;
-  sendChatMessage(conversationId: string, text: string): Promise<ChatMessage>;
   analyzeProblem(description: string): Promise<AIAnalysisResult>;
   getArtisanStats(artisanId: string): Promise<ArtisanStats>;
   updateArtisanAvailability(isAvailable: boolean): Promise<Artisan>;
@@ -119,7 +115,6 @@ export interface ApiClient {
     docType: VerificationDocType,
     file: File,
   ): Promise<VerificationDocument>;
-  getCurrentUser(): Promise<CurrentUser>;
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   listMyServiceRequests(): Promise<ServiceRequest[]>;

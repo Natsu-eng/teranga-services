@@ -53,6 +53,29 @@ export default tseslint.config(
     },
   },
   {
+    // Le mock en mémoire et ses données fictives sont réservés aux tests :
+    // aucun code de production ne peut les importer (ils ne doivent jamais
+    // pouvoir remplacer en silence une réponse du backend -- voir
+    // src/lib/api/index.ts). mock.ts lui-même peut lire mockData.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}', 'src/lib/api/mock.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              // Tout chemin (relatif ou non) qui se termine par /mock ou /mockData.
+              regex: '(^|/)(mock|mockData)(\\.ts)?$',
+              message:
+                'Mock et données fictives réservés aux tests : le code de production passe par `api` (src/lib/api/index.ts).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ['vite.config.ts', 'vitest.config.ts', 'vitest.setup.ts'],
     languageOptions: {
       ecmaVersion: 2022,
