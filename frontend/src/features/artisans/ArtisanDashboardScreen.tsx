@@ -1,10 +1,17 @@
 import React from 'react';
-import { Briefcase, Clock, ClipboardCheck, Star, Wallet } from 'lucide-react';
+import { Briefcase, ClipboardCheck, Clock, Star, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router';
+import { RoleRestricted } from '../../components/auth/RoleRestricted';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { SectionHeader } from '../../components/ui/SectionHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { StatTile } from '../../components/ui/StatTile';
+import { Switch } from '../../components/ui/Switch';
 import { formatFcfa } from '../../lib/format';
+import { firstNameOf } from '../../lib/identity';
 import { InterventionsList } from '../interventions/InterventionsList';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -14,27 +21,23 @@ import { useArtisanStats } from './hooks/useArtisanStats';
 import { useAvailabilityToggle } from './hooks/useAvailabilityToggle';
 import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
 
-interface StatCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
+/** Note au format français (4.8 -> « 4,8 »). */
+function formatRating(value: number): string {
+  return value.toFixed(1).replace('.', ',');
 }
 
-const StatCard: React.FC<StatCardProps> = ({ icon, label, value }) => (
-  <div className="bg-white p-4 rounded-2xl artisan-shadow border border-border-subtle flex flex-col gap-1">
-    <div className="text-primary">{icon}</div>
-    <span className="font-bold text-lg text-primary leading-tight">{value}</span>
-    <span className="text-[11px] font-sora text-muted-foreground-soft uppercase tracking-wider font-semibold">
-      {label}
-    </span>
-  </div>
-);
-
-// The first screen where the client/artisan spaces must read as visibly
-// distinct (AUDIT_PHASE2.md §3, §6): a dark `bg-primary` hero (vs. every
-// client screen's light `bg-background`) carries the availability toggle,
-// echoing the "Téranga Pro" identity already established in Header/BottomNav
-// rather than inventing a new one.
+/**
+ * Tableau de bord de l'espace Pro (/pro).
+ *
+ * Signature visuelle de l'espace artisan : le BANDEAU vert profond de
+ * l'en-tête se prolonge ici (salutation, disponibilité), puis les
+ * indicateurs chevauchent son bas arrondi. Mêmes composants que l'espace
+ * client (cartes, tuiles, pastilles), identité nettement distincte.
+ *
+ * Un artisan non vérifié ne voit ni statistiques ni demandes (toujours
+ * vides, aucune mise en relation possible avant vérification) mais l'état
+ * de son onboarding : jamais les deux mélangés.
+ */
 export const ArtisanDashboardScreen: React.FC = () => {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -50,9 +53,8 @@ export const ArtisanDashboardScreen: React.FC = () => {
     setData: setProArtisan,
   } = useMyArtisanProfile(role === 'artisan' ? artisanId : null);
   const isVerified = proArtisan?.verifiedStatus === 'verified';
-  // Les stats ne sont affichées que pour un artisan vérifié (voir plus bas)
-  // -- inutile de récupérer revenus/note pour un profil qui affiche l'état
-  // d'onboarding à la place.
+  // Statistiques demandées seulement pour un artisan vérifié : appel réseau
+  // évité, pas seulement masqué.
   const {
     data: stats,
     isLoading: isStatsLoading,
@@ -61,27 +63,23 @@ export const ArtisanDashboardScreen: React.FC = () => {
   } = useArtisanStats(role === 'artisan' && isVerified ? artisanId : null);
   const { isSaving, error: toggleError, toggle } = useAvailabilityToggle();
 
-  // A client landing on /pro (no route-level role guard exists today,
-  // AUDIT_PHASE2.md §1) has no artisan_profile at all -- never the artisan
-  // toggle/stats/actions, just an honest "not for you" message instead of
-  // hooks stuck forever pending on a `null` id.
+  // Défense en profondeur : la route est déjà réservée aux artisans
+  // (ProtectedRoute roles=['artisan']) ; l'écran ne s'affiche jamais pour
+  // un autre rôle même monté directement.
   if (role !== 'artisan') {
-    return (
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-28">
-        <EmptyState title="Cet espace est réservé aux artisans." />
-      </main>
-    );
+    return <RoleRestricted reservedFor="artisan" currentRole={auth.role} />;
   }
 
   if (!isUserLoading && !artisanId) {
     return (
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-28">
+      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6">
         <EmptyState title="Aucun profil artisan n'est associé à ce compte." />
       </main>
     );
   }
 
   const isAvailable = proArtisan?.isAvailable ?? false;
+  const greetingName = firstNameOf(proArtisan?.fullName);
 
   const handleToggle = () => {
     if (!proArtisan) return;
@@ -91,133 +89,128 @@ export const ArtisanDashboardScreen: React.FC = () => {
   };
 
   return (
-    <main className="pb-28">
-      <section className="bg-primary text-white px-4 md:px-8 pt-6 pb-8 rounded-b-3xl">
-        <div className="max-w-3xl mx-auto space-y-4">
-          <div>
-            <p className="font-sora text-xs uppercase tracking-wider text-primary-emerald-foreground">
+    <main>
+      <section
+        data-tone="dark"
+        className="bg-primary text-white px-4 md:px-8 pt-2 pb-16 rounded-b-sheet"
+      >
+        <div className="max-w-3xl mx-auto space-y-5">
+          <div className="space-y-1">
+            <p className="text-caption font-semibold uppercase tracking-[0.14em] text-accent">
               Espace Pro
             </p>
             {isProfileLoading && !proArtisan ? (
-              <div className="h-7 w-48 mt-1 rounded-xl bg-white/15 animate-pulse" />
+              <div className="h-8 w-48 rounded-field bg-white/15 animate-pulse" />
             ) : (
-              <h1 className="font-headline-md text-2xl font-bold">
-                {proArtisan?.fullName ?? 'Mon activité'}
+              <h1 className="font-display text-display-md font-semibold">
+                {greetingName ? `Bonjour, ${greetingName}` : 'Mon activité'}
               </h1>
             )}
           </div>
 
           {proArtisan && (
-            <div className="bg-white/10 rounded-2xl p-4 flex items-center justify-between gap-4 border border-white/10">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                    isAvailable ? 'bg-success' : 'bg-accent-soft'
-                  }`}
-                />
-                <div>
-                  <p
-                    className={`font-sora text-sm font-bold px-2 py-0.5 rounded-full inline-block ${
+            <div className="rounded-card bg-white/10 p-4 flex items-center justify-between gap-4">
+              <div className="min-w-0 space-y-0.5">
+                <p className="flex items-center gap-2 font-semibold">
+                  <span
+                    aria-hidden
+                    className={
                       isAvailable
-                        ? 'bg-success text-success-foreground'
-                        : 'bg-accent-soft text-accent-foreground-strong'
-                    }`}
-                  >
-                    {isAvailable ? 'Disponible' : 'Indisponible'}
-                  </p>
-                  <p className="text-xs text-primary-emerald-foreground mt-1">
-                    {isAvailable
-                      ? 'Vous recevez de nouvelles demandes.'
-                      : "Vous n'apparaissez plus dans les recherches."}
-                  </p>
-                </div>
+                        ? 'w-2.5 h-2.5 rounded-full bg-primary-emerald-foreground'
+                        : 'w-2.5 h-2.5 rounded-full bg-accent'
+                    }
+                  />
+                  {isAvailable ? 'Disponible' : 'Indisponible'}
+                </p>
+                <p className="text-sm text-primary-emerald-foreground">
+                  {isAvailable
+                    ? 'Vous recevez de nouvelles demandes.'
+                    : "Vous n'apparaissez plus dans les recherches."}
+                </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={isAvailable}
-                aria-label="Basculer ma disponibilité"
+              <Switch
+                checked={isAvailable}
+                onChange={handleToggle}
+                label="Basculer ma disponibilité"
                 disabled={isSaving}
-                onClick={handleToggle}
-                className={`relative w-14 h-8 rounded-full transition-colors shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
-                  isAvailable ? 'bg-success' : 'bg-white/25'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-                    isAvailable ? 'translate-x-6' : 'translate-x-0'
-                  }`}
-                />
-              </button>
+                tone="on-dark"
+              />
             </div>
           )}
-          {toggleError && <p className="text-xs font-sora text-destructive-soft">{toggleError}</p>}
+          {toggleError && (
+            <p role="alert" className="text-sm text-destructive-soft">
+              {toggleError}
+            </p>
+          )}
         </div>
       </section>
 
-      <div className="max-w-3xl mx-auto px-4 md:px-8 pt-6 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 md:px-8 -mt-10 space-y-7">
         {profileError && !proArtisan && (
           <ErrorState message={profileError.message} onRetry={reloadProfile} />
         )}
 
         {proArtisan && !isVerified ? (
-          // Tant que l'artisan n'est pas vérifié, un dashboard de stats/
-          // demandes vides serait trompeur (toujours à zéro, aucune mise en
-          // relation possible avant vérification -- ARTISAN_NON_VERIFIE,
-          // BUILD_PLAN.md, onboarding artisan) : on affiche l'état
-          // d'onboarding à la place, jamais les deux mélangés.
-          <section className="bg-white rounded-2xl p-5 border border-border-subtle space-y-4">
+          <Card padding="lg" className="space-y-4">
             <VerificationStatusBanner status={proArtisan.verifiedStatus} />
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              leadingIcon={<ClipboardCheck aria-hidden className="w-5 h-5" />}
               onClick={() => navigate('/pro/onboarding')}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
             >
-              <ClipboardCheck className="w-5 h-5" />
               Compléter mon profil
-            </button>
-          </section>
+            </Button>
+          </Card>
         ) : (
           <>
-            {isStatsLoading && !stats ? (
-              <div className="grid grid-cols-2 gap-3">
-                {[0, 1, 2, 3].map((key) => (
-                  <Skeleton key={key} className="h-24 rounded-2xl" />
-                ))}
-              </div>
-            ) : statsError && !stats ? (
-              <ErrorState message={statsError.message} onRetry={reloadStats} />
-            ) : stats ? (
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  icon={<Wallet className="w-6 h-6" />}
-                  label="Revenus"
-                  value={stats.revenueFcfa != null ? formatFcfa(stats.revenueFcfa) : 'Non disponible'}
-                />
-                <StatCard
-                  icon={<Briefcase className="w-6 h-6" />}
-                  label="Interventions terminées"
-                  value={String(stats.interventionsCount)}
-                />
-                <StatCard
-                  icon={<Star className="w-6 h-6" />}
-                  label="Note moyenne"
-                  value={
-                    stats.ratingAvg != null
-                      ? `${stats.ratingAvg.toFixed(1)} (${stats.reviewCount})`
-                      : 'Pas encore noté'
-                  }
-                />
-                <StatCard
-                  icon={<Clock className="w-6 h-6" />}
-                  label="Taux de réponse"
-                  value={stats.responseRate != null ? `${Math.round(stats.responseRate * 100)}%` : 'Non communiqué'}
-                />
-              </div>
-            ) : null}
+            <section aria-label="Mes indicateurs">
+              {isStatsLoading && !stats ? (
+                <div className="grid grid-cols-2 gap-3" aria-busy="true">
+                  {[0, 1, 2, 3].map((key) => (
+                    <Skeleton key={key} className="h-28 rounded-card" />
+                  ))}
+                </div>
+              ) : statsError && !stats ? (
+                <ErrorState message={statsError.message} onRetry={reloadStats} />
+              ) : stats ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <StatTile
+                    icon={<Wallet className="w-5 h-5" />}
+                    label="Revenus"
+                    value={
+                      stats.revenueFcfa != null ? formatFcfa(stats.revenueFcfa) : 'Non disponible'
+                    }
+                  />
+                  <StatTile
+                    icon={<Briefcase className="w-5 h-5" />}
+                    label="Interventions terminées"
+                    value={String(stats.interventionsCount)}
+                  />
+                  <StatTile
+                    icon={<Star className="w-5 h-5" />}
+                    label="Note moyenne"
+                    value={
+                      stats.ratingAvg != null ? formatRating(stats.ratingAvg) : 'Pas encore noté'
+                    }
+                    hint={stats.reviewCount > 0 ? `${stats.reviewCount} avis` : undefined}
+                  />
+                  <StatTile
+                    icon={<Clock className="w-5 h-5" />}
+                    label="Taux de réponse"
+                    value={
+                      stats.responseRate != null
+                        ? `${Math.round(stats.responseRate * 100)} %`
+                        : 'Non communiqué'
+                    }
+                  />
+                </div>
+              ) : null}
+            </section>
 
-            <section className="space-y-3">
-              <h2 className="font-bold text-xl text-primary">Mes demandes</h2>
+            <section aria-labelledby="demandes-recues" className="space-y-4">
+              <SectionHeader id="demandes-recues" title="Demandes reçues" />
               <InterventionsList groupByStatus emptyTitle="Aucune demande pour le moment." />
             </section>
           </>
