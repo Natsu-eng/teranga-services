@@ -1,31 +1,50 @@
 import React from 'react';
+import { AppBar } from '../../components/ui/AppBar';
+import { ButtonLink } from '../../components/ui/Button';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { InterventionsList } from './InterventionsList';
-import { AppBar } from '../../components/ui/AppBar';
 
-// Client-facing entry point (`/mes-interventions`). GET /interventions/me
-// still adapts server-side to the caller's role (Lot 12a), so this stays
-// role-aware for wording, but the artisan's own workspace now has its
-// dedicated dashboard (ArtisanDashboardScreen, `/pro`, BUILD_PLAN.md §3.2)
-// rather than being routed here.
+/**
+ * Suivi des interventions (/mes-interventions). GET /interventions/me
+ * s'adapte au rôle côté serveur : l'écran reste donc lisible pour les deux,
+ * mais l'artisan dispose de son propre espace (tableau de bord /pro) ; ici,
+ * il garde le bandeau vert profond de l'espace Pro.
+ */
 export const InterventionsScreen: React.FC = () => {
   const auth = useAuth();
   const role = toDisplayRole(auth.role);
+  const isPro = role === 'artisan';
 
   return (
     <>
       <AppBar
-        title={role === 'artisan' ? 'Mes demandes reçues' : 'Mes interventions'}
-        backTo={role === 'artisan' ? '/pro' : '/profil'}
-        tone={role === 'artisan' ? 'pro' : 'light'}
+        title={isPro ? 'Mes demandes reçues' : 'Mes interventions'}
+        backTo={isPro ? '/pro' : '/profil'}
+        tone={isPro ? 'pro' : 'light'}
       />
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
+      <main className="w-full max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-10 space-y-4">
+        {!isPro && (
+          <p className="text-sm text-muted-foreground">
+            Suivez vos mises en relation, acceptez les devis et notez les artisans une fois les
+            travaux terminés.
+          </p>
+        )}
         <InterventionsList
           emptyTitle={
-            role === 'artisan'
-              ? "Aucune demande reçue pour l'instant."
-              : 'Aucune intervention en cours.'
+            isPro ? "Aucune demande reçue pour l'instant." : 'Aucune intervention en cours.'
+          }
+          emptyDescription={
+            isPro
+              ? undefined
+              : 'Choisissez un artisan et demandez-lui un devis : le suivi apparaîtra ici.'
+          }
+          emptyAction={
+            isPro ? undefined : (
+              <ButtonLink to="/demande" variant="primary" size="sm">
+                Décrire mon besoin
+              </ButtonLink>
+            )
           }
         />
       </main>
