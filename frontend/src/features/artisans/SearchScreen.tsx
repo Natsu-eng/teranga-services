@@ -137,7 +137,7 @@ export const SearchScreen: React.FC = () => {
           enterKeyHint="search"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          placeholder="Nom, spécialité (plombier, électricien...)"
+          placeholder="Nom ou spécialité…"
           className={fieldClasses({ className: 'h-14 pl-12 rounded-full shadow-card' })}
         />
       </form>

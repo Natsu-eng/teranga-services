@@ -18,10 +18,18 @@ import { cn } from '../../lib/cn';
  * - ghost          : action tertiaire, sans fond.
  * - danger         : action destructive confirmée (fond rouge).
  * - danger-outline : action destructive de premier niveau (contour rouge).
+ * - danger-ghost   : action destructive discrète, sans fond (déconnexion).
  * - on-dark        : action posée sur un bandeau vert profond (espace Pro).
  */
 export type ButtonVariant =
-  'primary' | 'brand' | 'outline' | 'ghost' | 'danger' | 'danger-outline' | 'on-dark';
+  | 'primary'
+  | 'brand'
+  | 'outline'
+  | 'ghost'
+  | 'danger'
+  | 'danger-outline'
+  | 'danger-ghost'
+  | 'on-dark';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -39,6 +47,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   danger: 'bg-destructive text-white hover:bg-destructive/90',
   'danger-outline':
     'bg-surface text-destructive ring-1 ring-inset ring-destructive/45 hover:bg-destructive-soft',
+  'danger-ghost': 'text-destructive hover:bg-destructive-soft',
   'on-dark': 'bg-white/10 text-white ring-1 ring-inset ring-white/30 hover:bg-white/20',
 };
 
@@ -75,14 +84,16 @@ export function buttonClasses({
 /**
  * - default : surface blanche, ombre diffuse, aucun bord dur.
  * - tint    : vert très clair (zones IA, encarts d'information), sans ombre.
+ * Les tonalités claires n'imposent pas de couleur de texte (héritée) : une
+ * couleur passée en `className` s'applique alors sans conflit.
  * - dark    : vert profond (résultat IA, cartes Pro) — poser data-tone="dark".
  */
 export type CardTone = 'default' | 'tint' | 'dark';
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
 
 const CARD_TONES: Record<CardTone, string> = {
-  default: 'bg-surface text-foreground shadow-card',
-  tint: 'bg-emerald-tint text-foreground',
+  default: 'bg-surface shadow-card',
+  tint: 'bg-emerald-tint',
   dark: 'bg-primary text-white shadow-card',
 };
 

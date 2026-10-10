@@ -526,7 +526,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                         label={`Retirer ${trade.tradeLabel}`}
                         onClick={() => actions.removeTrade(trade.id)}
                         disabled={actions.isSaving}
-                        className="text-destructive hover:bg-destructive-soft"
+                        tone="danger"
                       >
                         <Trash2 aria-hidden className="w-4 h-4" />
                       </IconButton>

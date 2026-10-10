@@ -58,7 +58,7 @@ export const ClientHomeScreen: React.FC = () => {
           enterKeyHint="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Décrivez votre besoin (ex : fuite, clim, électricité)"
+          placeholder="Décrivez votre besoin…"
           className={fieldClasses({ className: 'h-14 pl-12 rounded-full shadow-card' })}
         />
       </form>

@@ -319,19 +319,19 @@ export const ArtisanProfileScreen: React.FC = () => {
                 <ButtonLink
                   to={`/messages/${artisanId}`}
                   variant="outline"
-                  size="lg"
-                  className="flex-1"
+                  size="md"
                   leadingIcon={<MessageCircle aria-hidden className="w-5 h-5" />}
                 >
                   Message
                 </ButtonLink>
+                {/* Taille md et sans icône : les deux libellés tiennent sur une
+                    ligne dès 360 px de large (vérifié en capture). */}
                 <Button
                   variant="primary"
-                  size="lg"
-                  className="flex-[1.6]"
+                  size="md"
+                  className="flex-1"
                   disabled={!artisan.verified}
                   onClick={handleRequestQuote}
-                  leadingIcon={<ReceiptText aria-hidden className="w-5 h-5" />}
                 >
                   Demander un devis
                 </Button>

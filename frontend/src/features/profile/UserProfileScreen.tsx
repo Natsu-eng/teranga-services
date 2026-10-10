@@ -63,9 +63,8 @@ const LogoutCard: React.FC = () => {
   return (
     <Card padding="sm">
       <Button
-        variant="ghost"
+        variant="danger-ghost"
         fullWidth
-        className="justify-start text-destructive hover:bg-destructive-soft"
         leadingIcon={<LogOut aria-hidden className="w-5 h-5" />}
         onClick={async () => {
           await auth.logout();
