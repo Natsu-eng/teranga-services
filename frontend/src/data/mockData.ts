@@ -1,5 +1,13 @@
 import { Artisan, ArtisanStats } from '../types';
 
+/*
+ * Données fictives RÉSERVÉES AUX TESTS (ESLint interdit leur import depuis le
+ * code de production). Les chemins d'images ci-dessous sont volontairement
+ * fictifs : les photos de démonstration ont été retirées de public/ (elles
+ * étaient servies en production sans y être utilisées). Les tests ne
+ * chargent jamais ces fichiers ; ne pas les réintroduire.
+ */
+
 export const INITIAL_ARTISANS: Artisan[] = [
   {
     id: 'idrissa-diop',
