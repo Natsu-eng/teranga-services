@@ -83,12 +83,12 @@ const QuoteRequestContent: React.FC<{ artisan: Artisan }> = ({ artisan }) => {
             Demande envoyée à {name}
           </p>
           <p className="text-sm text-muted-foreground">
-            {name} va l&apos;étudier puis vous proposer un devis. Vous suivrez chaque étape dans vos
-            interventions.
+            {name} va l&apos;étudier puis vous proposer un devis. Vous suivrez chaque étape dans «
+            Devis et travaux ».
           </p>
         </div>
         <ButtonLink to="/mes-interventions" variant="brand" fullWidth>
-          Suivre mes interventions
+          Suivre mes devis et travaux
         </ButtonLink>
       </div>
     );

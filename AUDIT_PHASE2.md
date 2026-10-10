@@ -459,7 +459,9 @@ concernés :
 - **§3, « tout se ressemble » : close.** En-tête clair et navigation 4
   entrées côté client ; bandeau vert profond, navigation verte et or à 3
   entrées côté Pro ; profil scindé (client orienté besoins, artisan orienté
-  activité, plus de moyens de paiement côté artisan).
+  activité, plus de moyens de paiement côté artisan). Vocabulaire séparé :
+  « Devis et travaux » côté client, « Demandes reçues » côté Pro (le mot
+  « interventions », terme d'artisan, n'est plus montré au client).
 - **§6, filtrage en mémoire : close.** Accueil et recherche n'utilisent plus
   que les filtres serveur (`q`, `trade`, `min_rating`, `near`), état dans
   l'URL, saisie avec debounce.

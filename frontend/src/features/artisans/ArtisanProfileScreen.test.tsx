@@ -235,7 +235,7 @@ describe('ArtisanProfileScreen', () => {
       });
       expect(await within(dialog).findByText('Demande envoyée à Aissatou')).toBeInTheDocument();
       expect(
-        within(dialog).getByRole('link', { name: 'Suivre mes interventions' }),
+        within(dialog).getByRole('link', { name: 'Suivre mes devis et travaux' }),
       ).toHaveAttribute('href', '/mes-interventions');
     });
 

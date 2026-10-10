@@ -178,8 +178,12 @@ dépendrait de l'ordre du CSS généré).
 | Navigation basse | 4 entrées (Accueil, Recherche, Messages, Profil), surface blanche, indicateur vert clair | 3 entrées (Tableau de bord, Messages, Profil), **fond vert profond, indicateur or** | Aucune (outil interne) |
 | Héros d'écran | Fond chaud, beaucoup d'air | Le bandeau se **prolonge** dans le héros (`rounded-b-sheet`), indicateurs qui le chevauchent | — |
 | AppBar de sous-page | `tone="light"` | `tone="pro"` | — |
-| Profil | Orienté **besoins** : nouvelle demande, mes demandes, mes interventions | Orienté **activité** : vérification, tableau de bord, profil Pro, fiche publique | — |
+| Profil | Orienté **besoins** : nouvelle demande, mes demandes, devis et travaux | Orienté **activité** : vérification, tableau de bord, profil Pro, fiche publique | — |
 
+- **Vocabulaire** : chaque espace parle sa langue. Côté client, la mise en
+  relation et son suivi s'appellent « **Devis et travaux** » (jamais
+  « interventions », terme d'artisan) ; côté Pro, « **Demandes reçues** ».
+  La route reste `/mes-interventions` (URL technique, inchangée).
 - L'habillage dépend **toujours** du rôle renvoyé par le serveur
   (`auth.role`), jamais d'un choix de l'utilisateur.
 - **Contrôle d'accès** : `ProtectedRoute roles={[...]}` refuse proprement un

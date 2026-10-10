@@ -19,7 +19,7 @@ export const InterventionsScreen: React.FC = () => {
   return (
     <>
       <AppBar
-        title={isPro ? 'Mes demandes reçues' : 'Mes interventions'}
+        title={isPro ? 'Mes demandes reçues' : 'Devis et travaux'}
         backTo={isPro ? '/pro' : '/profil'}
         tone={isPro ? 'pro' : 'light'}
       />
@@ -32,7 +32,7 @@ export const InterventionsScreen: React.FC = () => {
         )}
         <InterventionsList
           emptyTitle={
-            isPro ? "Aucune demande reçue pour l'instant." : 'Aucune intervention en cours.'
+            isPro ? "Aucune demande reçue pour l'instant." : 'Aucun devis ni travaux en cours.'
           }
           emptyDescription={
             isPro

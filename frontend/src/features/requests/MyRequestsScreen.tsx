@@ -14,7 +14,7 @@ import { useMyRequests } from './hooks/useMyRequests';
 const STATUS: Record<ServiceRequestStatus, { label: string; tone: StatusTone }> = {
   ouverte: { label: "En attente d'un artisan", tone: 'warning' },
   en_relation: { label: 'Mise en relation en cours', tone: 'info' },
-  convertie: { label: 'Intervention en cours', tone: 'success' },
+  convertie: { label: 'Travaux en cours', tone: 'success' },
   annulee: { label: 'Annulée', tone: 'danger' },
   expiree: { label: 'Expirée', tone: 'neutral' },
 };
@@ -108,7 +108,7 @@ export const MyRequestsScreen: React.FC = () => {
                   )}
                   {(request.status === 'en_relation' || request.status === 'convertie') && (
                     <ButtonLink to="/mes-interventions" variant="outline" fullWidth>
-                      Suivre l&apos;intervention
+                      Voir le devis et le suivi
                     </ButtonLink>
                   )}
                 </Card>

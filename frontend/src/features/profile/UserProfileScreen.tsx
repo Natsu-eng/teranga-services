@@ -126,8 +126,8 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
           <MenuLink
             to="/mes-interventions"
             icon={Wrench}
-            label="Mes interventions"
-            description="Devis reçus, travaux en cours, avis à laisser."
+            label="Devis et travaux"
+            description="Devis des artisans à accepter, travaux en cours, avis à laisser."
           />
         </ul>
       </Card>

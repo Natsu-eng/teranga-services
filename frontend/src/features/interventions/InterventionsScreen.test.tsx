@@ -83,7 +83,7 @@ describe('InterventionsScreen', () => {
 
     renderScreen();
 
-    expect(screen.getByText('Mes interventions')).toBeInTheDocument();
+    expect(screen.getByText('Devis et travaux')).toBeInTheDocument();
   });
 
   it('shows the artisan-facing title for an artisan', () => {

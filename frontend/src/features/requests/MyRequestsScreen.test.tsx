@@ -84,7 +84,7 @@ describe('MyRequestsScreen', () => {
     renderScreen();
 
     expect(screen.queryByRole('link', { name: 'Choisir un artisan' })).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Suivre l.intervention/ })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Voir le devis et le suivi' })).toHaveAttribute(
       'href',
       '/mes-interventions',
     );

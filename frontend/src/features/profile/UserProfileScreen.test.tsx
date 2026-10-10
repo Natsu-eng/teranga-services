@@ -130,7 +130,7 @@ describe('UserProfileScreen', () => {
         'href',
         '/mes-demandes',
       );
-      expect(screen.getByRole('link', { name: /Mes interventions/ })).toHaveAttribute(
+      expect(screen.getByRole('link', { name: /Devis et travaux/ })).toHaveAttribute(
         'href',
         '/mes-interventions',
       );
