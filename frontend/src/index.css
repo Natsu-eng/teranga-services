@@ -198,6 +198,8 @@
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
+/* Masque la barre de défilement des rangées horizontales (pastilles métier),
+   le défilement restant possible au doigt, à la molette et au clavier. */
 @layer utilities {
   .hide-scrollbar::-webkit-scrollbar {
     display: none;
@@ -206,43 +208,10 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-
-  .hero-gradient {
-    background: linear-gradient(180deg, rgba(252, 249, 248, 0) 0%, var(--color-background) 90%);
-  }
-
-  .glass-card {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-  }
-
-  .artisan-shadow {
-    box-shadow: 0px 4px 20px rgba(14, 90, 60, 0.04);
-  }
-
-  .magic-card-glow {
-    box-shadow: 0px 4px 20px rgba(14, 90, 60, 0.08);
-    border: 1px solid rgba(14, 90, 60, 0.1);
-  }
-
-  .devis-card {
-    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.08);
-    border: 1px solid var(--color-accent-soft);
-  }
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-background);
   color: var(--color-foreground);
-}
-
-/*
- * Transitoire : Sora n'est plus chargée (retrait du CDN Google Fonts).
- * Les écrans encore marqués `font-sora` retombent sur Figtree le temps de
- * leur refonte ; la classe est supprimée une fois plus aucun usage (grep).
- */
-.font-sora {
-  font-family: var(--font-sans);
 }
