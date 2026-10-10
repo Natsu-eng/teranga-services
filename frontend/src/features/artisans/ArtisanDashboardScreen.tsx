@@ -199,11 +199,12 @@ export const ArtisanDashboardScreen: React.FC = () => {
                   <StatTile
                     icon={<Clock className="w-5 h-5" />}
                     label="Taux de réponse"
+                    // Valeur courte (la tuile est étroite à 360 px), explication en
+                    // précision : jamais un mot coupé en deux.
                     value={
-                      stats.responseRate != null
-                        ? `${Math.round(stats.responseRate * 100)} %`
-                        : 'Non communiqué'
+                      stats.responseRate != null ? `${Math.round(stats.responseRate * 100)} %` : '—'
                     }
+                    hint={stats.responseRate != null ? undefined : 'Non communiqué'}
                   />
                 </div>
               ) : null}

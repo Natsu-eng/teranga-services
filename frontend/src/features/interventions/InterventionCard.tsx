@@ -259,7 +259,7 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
         ) : role === 'artisan' ? (
           <div className="space-y-3">
             <p className="text-sm font-semibold text-foreground">Proposer un devis</p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <TextField
                 label="Main d'œuvre"
                 type="number"
