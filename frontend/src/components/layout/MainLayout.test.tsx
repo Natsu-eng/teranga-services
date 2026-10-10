@@ -102,6 +102,21 @@ describe('MainLayout — espace client', () => {
     expect(screen.queryByRole('link', { name: 'Se connecter' })).not.toBeInTheDocument();
   });
 
+  it('n’affiche jamais un numéro de téléphone en guise de prénom (compte hérité)', () => {
+    mockedUseAuth.mockReturnValue(
+      authValue({
+        isAuthenticated: true,
+        role: 'client',
+        user: userFixture('client', '+221777278808'),
+      }),
+    );
+
+    renderLayout();
+
+    expect(screen.getByText('Bonjour')).toBeInTheDocument();
+    expect(screen.queryByText(/\+221/)).not.toBeInTheDocument();
+  });
+
   it('propose un lien d’évitement vers le contenu', () => {
     mockedUseAuth.mockReturnValue(authValue({}));
 

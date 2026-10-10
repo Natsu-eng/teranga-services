@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { UserRound } from 'lucide-react';
 import { cn } from '../../lib/cn';
+import { hasRealName } from '../../lib/identity';
 import { initialsFrom } from '../../lib/initials';
 import { SafeImage } from './SafeImage';
 
@@ -61,6 +63,10 @@ export const Avatar: React.FC<AvatarProps> = ({
 }) => {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showImage = Boolean(src) && src !== failedSrc;
+  // Compte hérité dont le « nom » est resté son numéro : jamais de numéro
+  // lu à voix haute ni de « + » en guise d'initiales (lib/identity.ts).
+  const knownName = hasRealName(name);
+  const label = knownName ? name : 'Membre Téranga';
   const radius = shape === 'circle' ? 'rounded-full' : 'rounded-2xl';
 
   if (showImage) {
@@ -68,7 +74,7 @@ export const Avatar: React.FC<AvatarProps> = ({
       <SafeImage
         src={src}
         fallback="/images/placeholder-avatar.svg"
-        alt={decorative ? '' : name}
+        alt={decorative ? '' : label}
         // Une URL qui échoue bascule sur les initiales (plus parlantes
         // qu'une silhouette), et seulement pour CETTE URL : une nouvelle
         // photo est retentée normalement.
@@ -80,7 +86,7 @@ export const Avatar: React.FC<AvatarProps> = ({
 
   return (
     <span
-      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': name })}
+      {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label })}
       className={cn(
         'shrink-0 inline-flex items-center justify-center font-display font-semibold select-none',
         INITIALS_TONES[avatarToneIndex(name)],
@@ -89,7 +95,7 @@ export const Avatar: React.FC<AvatarProps> = ({
         className,
       )}
     >
-      {initialsFrom(name) || '?'}
+      {knownName ? initialsFrom(name) : <UserRound aria-hidden className="w-[55%] h-[55%]" />}
     </span>
   );
 };

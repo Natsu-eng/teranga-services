@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { firstNameOf } from '../../lib/identity';
 import { Avatar } from '../ui/Avatar';
 import { ButtonLink } from '../ui/Button';
 import { LocationPicker } from './LocationPicker';
@@ -8,12 +9,6 @@ import { LocationPicker } from './LocationPicker';
 interface ClientHeaderProps {
   location: string;
   setLocation: (location: string) => void;
-}
-
-/** Premier mot du nom complet, pour une salutation chaleureuse (« Bonjour, Awa »). */
-function firstName(fullName: string | undefined): string | null {
-  const first = fullName?.trim().split(/\s+/)[0];
-  return first ? first : null;
 }
 
 /**
@@ -25,7 +20,8 @@ function firstName(fullName: string | undefined): string | null {
  */
 export const ClientHeader: React.FC<ClientHeaderProps> = ({ location, setLocation }) => {
   const auth = useAuth();
-  const name = firstName(auth.user?.fullName);
+  // Jamais de numéro de téléphone dans la salutation (comptes hérités).
+  const name = firstNameOf(auth.user?.fullName);
 
   return (
     <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md">

@@ -66,6 +66,14 @@ describe('Avatar', () => {
     expect(screen.getByRole('img', { name: 'Moussa Fall' }).className).toBe(first);
   });
 
+  it('n’affiche ni ne lit un numéro de téléphone resté comme nom (compte hérité)', () => {
+    render(<Avatar name="+221777278808" />);
+
+    const avatar = screen.getByRole('img', { name: 'Membre Téranga' });
+    expect(avatar).not.toHaveTextContent('+');
+    expect(screen.queryByRole('img', { name: /221/ })).not.toBeInTheDocument();
+  });
+
   it('se masque des lecteurs d’écran quand il est décoratif', () => {
     render(<Avatar name="Awa Diop" decorative />);
 
