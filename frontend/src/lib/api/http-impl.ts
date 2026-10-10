@@ -36,6 +36,7 @@ import type {
   AdminVerificationFilters,
   ApiClient,
   ArtisanFilters,
+  CreateInterventionInput,
   CreateQuoteInput,
   CreateReviewInput,
   CreateServiceRequestInput,
@@ -336,6 +337,7 @@ function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }
     priceBase: lowestRate != null ? `Dès ${formatFcfa(lowestRate)}/h` : 'Tarif sur devis',
     priceNumber: lowestRate ?? 0,
     tags: item.trades.map((t) => t.trade.label_fr),
+    tradeCodes: item.trades.map((t) => t.trade.code),
     bio: item.bio ?? '',
     stats: {
       // review_count is the closest public proxy for "chantiers réalisés" the
@@ -712,6 +714,20 @@ export const httpApiClient: ApiClient = {
   async listMyInterventions(): Promise<Intervention[]> {
     const page = await apiRequest<BackendPage<BackendIntervention>>('/interventions/me');
     return page.items.map(mapIntervention);
+  },
+
+  /**
+   * Mise en relation : propose une demande ouverte du client à un artisan
+   * (`POST /interventions`). Le serveur vérifie tout — demande ouverte et
+   * appartenant au client, artisan vérifié, métier exercé, zone couverte —
+   * et renvoie un message affichable en cas de refus.
+   */
+  async createIntervention(input: CreateInterventionInput): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>('/interventions', {
+      method: 'POST',
+      body: { service_request_id: input.serviceRequestId, artisan_id: input.artisanId },
+    });
+    return mapIntervention(intervention);
   },
 
   async getInterventionById(id: string): Promise<Intervention> {

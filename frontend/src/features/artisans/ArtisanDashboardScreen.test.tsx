@@ -198,6 +198,7 @@ describe('ArtisanDashboardScreen', () => {
       priceBase: 'Tarif sur devis',
       priceNumber: 0,
       tags: ['Plomberie'],
+      tradeCodes: ['plomberie'],
       bio: '',
       stats: { chantiers: '12', responseTime: 'Non communiqué', experience: 'Non communiqué' },
       realisations: [],

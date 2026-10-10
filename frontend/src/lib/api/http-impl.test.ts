@@ -60,6 +60,9 @@ describe('httpApiClient', () => {
       // Prix indicatif réel, issu du tarif horaire déclaré (jamais inventé).
       expect(artisan.priceBase).toBe('Dès 15 000 FCFA/h');
       expect(artisan.priceNumber).toBe(15000);
+      // Codes métier conservés à côté des libellés (nécessaires à la demande de devis).
+      expect(artisan.tags).toEqual(['Plomberie']);
+      expect(artisan.tradeCodes).toEqual(['plomberie']);
       expect(artisan.coverUrl).toBeNull();
       expect(artisan.realisations).toEqual([]);
     });
@@ -141,7 +144,12 @@ describe('httpApiClient', () => {
     it('builds the query string from filters (trade code, near, sort, pagination)', async () => {
       const fetchMock = vi
         .fn()
-        .mockResolvedValue(jsonResponse(200, { items: [], pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 } }));
+        .mockResolvedValue(
+          jsonResponse(200, {
+            items: [],
+            pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
+          }),
+        );
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.listArtisans!({
@@ -183,7 +191,9 @@ describe('httpApiClient', () => {
             }),
           );
         }
-        return Promise.resolve(jsonResponse(200, { ...backendArtisan, cover_url: '/images/cover.jpg' }));
+        return Promise.resolve(
+          jsonResponse(200, { ...backendArtisan, cover_url: '/images/cover.jpg' }),
+        );
       });
       vi.stubGlobal('fetch', fetchMock);
 
@@ -191,18 +201,31 @@ describe('httpApiClient', () => {
 
       expect(artisan.coverUrl).toBe('/images/cover.jpg');
       expect(artisan.reviews).toHaveLength(1);
-      expect(artisan.reviews[0]).toMatchObject({ author: 'Fatou Kane', rating: 5, avatarInitials: 'FK' });
+      expect(artisan.reviews[0]).toMatchObject({
+        author: 'Fatou Kane',
+        rating: 5,
+        avatarInitials: 'FK',
+      });
     });
 
     it('propagates the backend 404 message as-is (already French, display-ready)', async () => {
       vi.stubGlobal(
         'fetch',
-        vi.fn().mockResolvedValue(jsonResponse(404, { error: { code: 'ARTISAN_NOT_FOUND', message: 'Artisan introuvable.' } })),
+        vi
+          .fn()
+          .mockResolvedValue(
+            jsonResponse(404, {
+              error: { code: 'ARTISAN_NOT_FOUND', message: 'Artisan introuvable.' },
+            }),
+          ),
       );
 
       const promise = httpApiClient.getArtisanById!('does-not-exist');
       await expect(promise).rejects.toBeInstanceOf(ApiError);
-      await expect(promise).rejects.toMatchObject({ code: 'not_found', message: 'Artisan introuvable.' });
+      await expect(promise).rejects.toMatchObject({
+        code: 'not_found',
+        message: 'Artisan introuvable.',
+      });
     });
   });
 
@@ -342,7 +365,9 @@ describe('httpApiClient', () => {
 
   describe('updateMyArtisanProfile', () => {
     it('only sends the fields actually provided (partial update)', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.updateMyArtisanProfile!({ bio: 'Nouvelle bio.' });
@@ -354,7 +379,9 @@ describe('httpApiClient', () => {
     });
 
     it('forwards baseLocation and null-clearing fields verbatim', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.updateMyArtisanProfile!({
@@ -500,7 +527,9 @@ describe('httpApiClient', () => {
 
   describe('addArtisanTrade', () => {
     it('sends a POST to /artisans/me/trades and maps the updated profile', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, { ...backendArtisan, cover_url: null }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(201, { ...backendArtisan, cover_url: null }));
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.addArtisanTrade!({
@@ -540,7 +569,9 @@ describe('httpApiClient', () => {
 
   describe('removeArtisanTrade', () => {
     it('sends a DELETE to /artisans/me/trades/{id}', async () => {
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { ...backendArtisan, trades: [], cover_url: null }));
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, trades: [], cover_url: null }));
       vi.stubGlobal('fetch', fetchMock);
 
       const profile = await httpApiClient.removeArtisanTrade!('at-1');
@@ -670,9 +701,11 @@ describe('httpApiClient', () => {
     it('maps the backend trade reference list', async () => {
       vi.stubGlobal(
         'fetch',
-        vi.fn().mockResolvedValue(
-          jsonResponse(200, [{ id: 't1', code: 'plomberie', label_fr: 'Plomberie' }]),
-        ),
+        vi
+          .fn()
+          .mockResolvedValue(
+            jsonResponse(200, [{ id: 't1', code: 'plomberie', label_fr: 'Plomberie' }]),
+          ),
       );
 
       const trades = await httpApiClient.listTrades!();
@@ -695,7 +728,8 @@ describe('httpApiClient', () => {
 
     it('posts the description to /ai/analyze and maps the TriageResult into an AIAnalysisResult', async () => {
       const fetchMock = vi.fn().mockImplementation((url: string) => {
-        if (url.includes('/ai/analyze')) return Promise.resolve(jsonResponse(200, backendTriageResult));
+        if (url.includes('/ai/analyze'))
+          return Promise.resolve(jsonResponse(200, backendTriageResult));
         return Promise.resolve(jsonResponse(200, backendTrades));
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -731,7 +765,9 @@ describe('httpApiClient', () => {
         'fetch',
         vi.fn().mockImplementation((url: string) => {
           if (url.includes('/ai/analyze')) {
-            return Promise.resolve(jsonResponse(200, { ...backendTriageResult, urgency: 'immediat' }));
+            return Promise.resolve(
+              jsonResponse(200, { ...backendTriageResult, urgency: 'immediat' }),
+            );
           }
           return Promise.resolve(jsonResponse(200, backendTrades));
         }),
@@ -746,7 +782,9 @@ describe('httpApiClient', () => {
         'fetch',
         vi.fn().mockImplementation((url: string) => {
           if (url.includes('/ai/analyze')) {
-            return Promise.resolve(jsonResponse(200, { ...backendTriageResult, trade_code: 'peinture' }));
+            return Promise.resolve(
+              jsonResponse(200, { ...backendTriageResult, trade_code: 'peinture' }),
+            );
           }
           return Promise.resolve(jsonResponse(200, backendTrades));
         }),
@@ -763,7 +801,10 @@ describe('httpApiClient', () => {
           if (url.includes('/ai/analyze')) {
             return Promise.resolve(
               jsonResponse(429, {
-                error: { code: 'TROP_DE_DEMANDES', message: "Trop de demandes d'analyse IA, merci de réessayer plus tard." },
+                error: {
+                  code: 'TROP_DE_DEMANDES',
+                  message: "Trop de demandes d'analyse IA, merci de réessayer plus tard.",
+                },
               }),
             );
           }
@@ -842,7 +883,10 @@ describe('httpApiClient', () => {
         'fetch',
         vi.fn().mockResolvedValue(
           jsonResponse(422, {
-            error: { code: 'METIER_INCONNU', message: 'Le métier demandé est introuvable ou inactif.' },
+            error: {
+              code: 'METIER_INCONNU',
+              message: 'Le métier demandé est introuvable ou inactif.',
+            },
           }),
         ),
       );
@@ -889,7 +933,11 @@ describe('httpApiClient', () => {
       const requests = await httpApiClient.listMyServiceRequests!();
 
       expect(requests).toHaveLength(1);
-      expect(requests[0]).toMatchObject({ id: 'req-1', tradeLabel: 'Plomberie', status: 'ouverte' });
+      expect(requests[0]).toMatchObject({
+        id: 'req-1',
+        tradeLabel: 'Plomberie',
+        status: 'ouverte',
+      });
     });
   });
 
@@ -964,6 +1012,47 @@ describe('httpApiClient', () => {
       expect(intervention.quote?.totalFcfa).toBe(20000);
     });
 
+    it('createIntervention propose la demande à l’artisan (POST /interventions, snake_case)', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(201, { ...backendIntervention, status: 'proposee', quote: null }),
+        );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const intervention = await httpApiClient.createIntervention!({
+        serviceRequestId: 'req-1',
+        artisanId: 'a1',
+      });
+
+      expect(intervention).toMatchObject({ id: 'int-1', status: 'proposee', quote: null });
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/interventions$/);
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        service_request_id: 'req-1',
+        artisan_id: 'a1',
+      });
+    });
+
+    it('createIntervention relaie tel quel le refus du serveur (ex. artisan hors zone)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(422, {
+            error: {
+              code: 'ARTISAN_HORS_ZONE',
+              message: "Cet artisan n'intervient pas dans votre zone.",
+            },
+          }),
+        ),
+      );
+
+      await expect(
+        httpApiClient.createIntervention!({ serviceRequestId: 'req-1', artisanId: 'a1' }),
+      ).rejects.toThrow("Cet artisan n'intervient pas dans votre zone.");
+    });
+
     it('acceptIntervention posts to /accept and maps the response', async () => {
       const fetchMock = vi
         .fn()
@@ -982,7 +1071,11 @@ describe('httpApiClient', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValue(
-          jsonResponse(200, { ...backendIntervention, status: 'annulee', decline_reason: 'Trop loin.' }),
+          jsonResponse(200, {
+            ...backendIntervention,
+            status: 'annulee',
+            decline_reason: 'Trop loin.',
+          }),
         );
       vi.stubGlobal('fetch', fetchMock);
 

@@ -39,6 +39,7 @@ const artisanFixture: Artisan = {
   priceBase: 'Tarif sur devis',
   priceNumber: 0,
   tags: ['Électricité'],
+  tradeCodes: ['electricite'],
   bio: '',
   stats: { chantiers: '5', responseTime: 'Non communiqué', experience: '6 ans' },
   realisations: [],

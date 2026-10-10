@@ -54,6 +54,12 @@ export interface CreateServiceRequestInput {
   aiEstimateMaxFcfa?: number | null;
 }
 
+/** `POST /interventions` : propose une demande ouverte du client à un artisan. */
+export interface CreateInterventionInput {
+  serviceRequestId: string;
+  artisanId: string;
+}
+
 export interface CreateQuoteInput {
   laborFcfa: number;
   materialsFcfa: number;
@@ -121,6 +127,7 @@ export interface ApiClient {
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   listMyServiceRequests(): Promise<ServiceRequest[]>;
   listMyInterventions(): Promise<Intervention[]>;
+  createIntervention(input: CreateInterventionInput): Promise<Intervention>;
   getInterventionById(id: string): Promise<Intervention>;
   acceptIntervention(id: string): Promise<Intervention>;
   declineIntervention(id: string, reason?: string | null): Promise<Intervention>;

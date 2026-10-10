@@ -15,6 +15,7 @@ export const INITIAL_ARTISANS: Artisan[] = [
     priceBase: '15.000 CFA',
     priceNumber: 15000,
     tags: ['Plomberie', 'Chauffe-eau', 'Dépannage'],
+    tradeCodes: ['plomberie'],
     bio: "Artisan passionné avec plus de 8 ans d'expérience dans la plomberie sanitaire et le dépannage d'urgence à Dakar. Travail soigné et garanti. Spécialisé dans les installations résidentielles haut de gamme et la maintenance préventive.",
     stats: {
       chantiers: '150+',
@@ -77,6 +78,7 @@ export const INITIAL_ARTISANS: Artisan[] = [
     priceBase: '20.000 CFA',
     priceNumber: 20000,
     tags: ['Électricité', 'Tableau électrique', 'Dépannage'],
+    tradeCodes: ['electricite'],
     bio: "Électricienne diplômée avec 6 ans d'expérience. Installation complète, mise aux normes NFC 15-100 et dépannages d'urgence à Dakar.",
     stats: {
       chantiers: '95+',
@@ -110,6 +112,7 @@ export const INITIAL_ARTISANS: Artisan[] = [
     priceBase: '18.000 CFA',
     priceNumber: 18000,
     tags: ['Climatisation', 'Entretien', 'Recharge Gaz'],
+    tradeCodes: ['climatisation'],
     bio: 'Spécialiste de la climatisation résidentielle et tertiaire. Nettoyage antibactérien, recharge de gaz R410/R32 et installation Inverter.',
     stats: {
       chantiers: '210+',

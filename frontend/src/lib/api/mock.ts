@@ -165,6 +165,11 @@ export const mockApiClient: ApiClient = {
     return [];
   },
 
+  async createIntervention(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette demande n'existe pas.");
+  },
+
   async getInterventionById(): Promise<Intervention> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', "Cette intervention n'existe pas.");

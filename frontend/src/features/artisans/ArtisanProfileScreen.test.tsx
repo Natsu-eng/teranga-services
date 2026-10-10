@@ -24,6 +24,7 @@ const artisanFixture: Artisan = {
   priceBase: '10.000 CFA',
   priceNumber: 10000,
   tags: ['Plomberie'],
+  tradeCodes: ['plomberie'],
   bio: 'Bio de test pour la fiche artisan.',
   stats: { chantiers: '10+', responseTime: '< 1h', experience: '2 ans' },
   realisations: [],
