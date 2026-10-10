@@ -1,21 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import {
   Camera,
-  CheckCircle2,
-  Circle,
+  Check,
   FileText,
   MapPin,
   Plus,
   Trash2,
   UploadCloud,
-  User,
+  UserRound,
   Wrench,
 } from 'lucide-react';
+import { RoleRestricted } from '../../components/auth/RoleRestricted';
 import { AppBar } from '../../components/ui/AppBar';
+import { Avatar } from '../../components/ui/Avatar';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { SelectField, TextAreaField, TextField } from '../../components/ui/Field';
+import { IconButton } from '../../components/ui/IconButton';
 import { SafeImage } from '../../components/ui/SafeImage';
+import { SectionHeader } from '../../components/ui/SectionHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
+import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
+import { buttonClasses } from '../../components/ui/styles';
+import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
 import { getCurrentPosition, type Coordinates } from '../../lib/geo';
 import { useAuth } from '../auth/hooks/useAuth';
@@ -36,16 +45,10 @@ const REQUIRED_DOCS: { type: VerificationDocType; label: string; hint: string }[
   { type: 'selfie', label: 'Selfie', hint: 'Votre visage bien visible — image uniquement' },
 ];
 
-const DOC_STATUS_LABEL: Record<VerificationDocStatus, string> = {
-  pending: 'En attente de revue',
-  approved: 'Validé',
-  rejected: 'Refusé',
-};
-
-const DOC_STATUS_PILL: Record<VerificationDocStatus, string> = {
-  pending: 'bg-accent-soft text-accent-foreground-strong',
-  approved: 'bg-success text-success-foreground',
-  rejected: 'bg-destructive-soft text-destructive',
+const DOC_STATUS: Record<VerificationDocStatus, { label: string; tone: StatusTone }> = {
+  pending: { label: 'En attente de revue', tone: 'warning' },
+  approved: { label: 'Validé', tone: 'success' },
+  rejected: { label: 'Refusé', tone: 'danger' },
 };
 
 function latestDocumentsByType(
@@ -61,28 +64,37 @@ function latestDocumentsByType(
   return result;
 }
 
+/** Une étape de la checklist, posée sur le bandeau vert profond. */
 const ChecklistItem: React.FC<{ done: boolean; label: string }> = ({ done, label }) => (
-  <div className="flex items-center gap-2">
-    {done ? (
-      <CheckCircle2 className="w-5 h-5 text-success shrink-0" />
-    ) : (
-      <Circle className="w-5 h-5 text-white/40 shrink-0" />
-    )}
+  <li className="flex items-center gap-3">
     <span
-      className={`text-sm font-sora ${done ? 'text-white' : 'text-primary-emerald-foreground'}`}
+      aria-hidden
+      className={cn(
+        'inline-flex w-6 h-6 shrink-0 items-center justify-center rounded-full',
+        done ? 'bg-accent text-primary' : 'ring-2 ring-inset ring-white/35',
+      )}
+    >
+      {done && <Check className="w-4 h-4" strokeWidth={3} />}
+    </span>
+    <span
+      className={cn(
+        'text-sm',
+        done ? 'text-white font-semibold' : 'text-primary-emerald-foreground',
+      )}
     >
       {label}
+      <span className="sr-only">{done ? ' : fait' : ' : à faire'}</span>
     </span>
-  </div>
+  </li>
 );
 
 /**
- * Onboarding artisan (BUILD_PLAN.md, onboarding artisan §6) : profil,
- * métiers et documents de vérification en un seul parcours, avec une
- * checklist de progression et le bandeau de statut explicite (jamais un
- * artisan laissé à deviner pourquoi il ne reçoit pas de demandes).
- * Accessible depuis `/bienvenue-artisan` (première visite) et depuis `/pro`
- * (retour) tant que le compte n'est pas vérifié.
+ * Onboarding artisan (/pro/onboarding) : profil, métiers et documents de
+ * vérification en un seul parcours, avec une checklist de progression sur
+ * le bandeau vert profond de l'espace Pro et le statut de vérification
+ * toujours visible (jamais un artisan laissé à deviner pourquoi il ne
+ * reçoit pas de demandes). C'est aussi l'écran d'édition complète du
+ * profil Pro, accessible depuis le profil et la fiche publique.
  */
 export const ArtisanOnboardingScreen: React.FC = () => {
   const auth = useAuth();
@@ -147,18 +159,19 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   );
   const hasTrades = Boolean(profile?.trades.length);
   const hasAllRequiredDocs = REQUIRED_DOCS.every(({ type }) => latestByType[type] != null);
+  const isVerified = profile?.verifiedStatus === 'verified';
+  const doneCount = [hasProfileBasics, hasTrades, hasAllRequiredDocs, isVerified].filter(
+    Boolean,
+  ).length;
 
+  // Défense en profondeur : la route est déjà réservée aux artisans.
   if (role !== 'artisan') {
-    return (
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-28">
-        <EmptyState title="Cet espace est réservé aux artisans." />
-      </main>
-    );
+    return <RoleRestricted reservedFor="artisan" currentRole={auth.role} />;
   }
 
   if (!isUserLoading && !artisanId) {
     return (
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-28">
+      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6">
         <EmptyState title="Aucun profil artisan n'est associé à ce compte." />
       </main>
     );
@@ -243,69 +256,100 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   return (
     <>
       <AppBar title="Mon profil Pro" backTo="/pro" tone="pro" />
-      <main className="pb-28">
-        <section className="bg-primary text-white px-4 md:px-8 pt-6 pb-8 rounded-b-3xl">
-          <div className="max-w-3xl mx-auto space-y-5">
-            <div>
-              <p className="font-sora text-xs uppercase tracking-wider text-primary-emerald-foreground">
-                Espace Pro
-              </p>
-              <h1 className="font-headline-md text-2xl font-bold">Complétez votre profil</h1>
-            </div>
 
-            <div className="space-y-2">
-              <ChecklistItem done={hasProfileBasics} label="Profil complété" />
-              <ChecklistItem done={hasTrades} label="Métiers déclarés" />
-              <ChecklistItem done={hasAllRequiredDocs} label="Documents envoyés" />
-              <ChecklistItem
-                done={profile?.verifiedStatus === 'verified'}
-                label={
-                  profile?.verifiedStatus === 'verified'
-                    ? 'Compte vérifié'
-                    : 'Vérification en attente'
-                }
+      <section
+        data-tone="dark"
+        className="bg-primary text-white px-4 md:px-8 pt-2 pb-8 rounded-b-sheet"
+      >
+        <div className="max-w-3xl mx-auto space-y-5">
+          <SectionHeader
+            tone="on-dark"
+            title="Complétez votre profil"
+            description="Un profil complet et vérifié inspire confiance et vous rend visible des clients."
+          />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-primary-emerald-foreground">Progression</span>
+              <span className="font-semibold">{doneCount} / 4</span>
+            </div>
+            <div
+              role="progressbar"
+              aria-label="Progression du profil"
+              aria-valuemin={0}
+              aria-valuemax={4}
+              aria-valuenow={doneCount}
+              className="h-2 rounded-full bg-white/15 overflow-hidden"
+            >
+              <div
+                className="h-full rounded-full bg-accent transition-[width] duration-300"
+                style={{ width: `${(doneCount / 4) * 100}%` }}
               />
             </div>
-
-            {profile && <VerificationStatusBanner status={profile.verifiedStatus} />}
           </div>
-        </section>
 
-        <div className="max-w-3xl mx-auto px-4 md:px-8 pt-6 space-y-6">
-          {isProfileLoading && !profile ? (
-            <div className="space-y-4">
-              <Skeleton className="h-40 rounded-2xl" />
-              <Skeleton className="h-40 rounded-2xl" />
-            </div>
-          ) : profileError && !profile ? (
-            <ErrorState message={profileError.message} onRetry={reloadProfile} />
-          ) : profile ? (
-            <>
-              <form
-                onSubmit={handleSaveProfile}
-                className="bg-white rounded-2xl p-5 border border-border-subtle space-y-4"
+          <ul className="space-y-2.5">
+            <ChecklistItem done={hasProfileBasics} label="Profil complété" />
+            <ChecklistItem done={hasTrades} label="Métiers déclarés" />
+            <ChecklistItem done={hasAllRequiredDocs} label="Documents envoyés" />
+            <ChecklistItem
+              done={isVerified}
+              label={isVerified ? 'Compte vérifié' : 'Vérification en attente'}
+            />
+          </ul>
+
+          {profile && <VerificationStatusBanner status={profile.verifiedStatus} />}
+        </div>
+      </section>
+
+      <main className="w-full max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-12 space-y-6">
+        {isProfileLoading && !profile ? (
+          <div className="space-y-4" aria-busy="true">
+            <Skeleton className="h-64 rounded-card" />
+            <Skeleton className="h-40 rounded-card" />
+          </div>
+        ) : profileError && !profile ? (
+          <ErrorState message={profileError.message} onRetry={reloadProfile} />
+        ) : profile ? (
+          <>
+            <Card
+              as="section"
+              padding="lg"
+              aria-labelledby="onboarding-profil"
+              className="space-y-5"
+            >
+              <h2
+                id="onboarding-profil"
+                className="font-display text-display-sm font-semibold text-primary flex items-center gap-2"
               >
-                <h2 className="font-bold text-lg text-primary flex items-center gap-2">
-                  <User className="w-5 h-5" /> Mon profil
-                </h2>
+                <UserRound aria-hidden className="w-5 h-5" /> Mon profil
+              </h2>
 
-                {/* Aperçu fidèle à la fiche publique (ArtisanProfileScreen) :
-                  bandeau de couverture, avatar en chevauchement. Chaque
-                  photo a son propre bouton, son propre état d'envoi et son
-                  propre message d'erreur. */}
-                <div className="space-y-3 pt-1 pb-2">
+              <form onSubmit={handleSaveProfile} className="space-y-5">
+                {/* Aperçu fidèle à la fiche publique : couverture, avatar en
+                    chevauchement. Chaque photo a son bouton, son état d'envoi
+                    et son message d'erreur. */}
+                <div className="space-y-3">
                   <div className="relative">
-                    <div className="h-32 md:h-40 rounded-xl overflow-hidden bg-surface-muted border border-border-subtle">
+                    <div className="h-32 md:h-40 rounded-field overflow-hidden bg-surface-muted">
                       <SafeImage
                         src={coverUrl || null}
                         fallback="/images/placeholder-cover.svg"
                         alt="Photo de couverture"
-                        className={`w-full h-full object-cover transition-opacity ${actions.isUploadingCover ? 'opacity-50' : ''}`}
+                        className={cn(
+                          'w-full h-full object-cover transition-opacity',
+                          actions.isUploadingCover && 'opacity-50',
+                        )}
                       />
                     </div>
-                    <label className="absolute top-2 right-2 inline-flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-white/90 backdrop-blur text-primary font-sora text-[11px] font-bold cursor-pointer shadow-sm hover:bg-white active:scale-95 transition-all focus-within:ring-2 focus-within:ring-primary">
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>{actions.isUploadingCover ? 'Envoi...' : 'Changer la couverture'}</span>
+                    <label
+                      className={cn(
+                        buttonClasses({ variant: 'outline', size: 'sm' }),
+                        'absolute top-2 right-2 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-emerald',
+                      )}
+                    >
+                      <Camera aria-hidden className="w-4 h-4" />
+                      <span>{actions.isUploadingCover ? 'Envoi...' : 'Couverture'}</span>
                       <input
                         type="file"
                         accept={acceptAttribute(mediaConstraints)}
@@ -315,19 +359,25 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                         onChange={handleCoverFileSelected}
                       />
                     </label>
-                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 w-24 h-24 rounded-full overflow-hidden ring-4 ring-white bg-surface-muted">
-                      <SafeImage
+                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 rounded-full ring-4 ring-surface">
+                      <Avatar
+                        name={fullName}
                         src={avatarUrl || null}
-                        fallback="/images/placeholder-avatar.svg"
-                        alt="Photo de profil"
-                        className={`w-full h-full object-cover transition-opacity ${actions.isUploadingAvatar ? 'opacity-50' : ''}`}
+                        size="xl"
+                        decorative
+                        className={actions.isUploadingAvatar ? 'opacity-50' : undefined}
                       />
                     </div>
                   </div>
 
                   <div className="flex flex-col items-center gap-2 pt-11">
-                    <label className="inline-flex items-center gap-2 py-2 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold cursor-pointer hover:bg-primary/5 active:scale-95 transition-all focus-within:ring-2 focus-within:ring-primary">
-                      <UploadCloud className="w-4 h-4" />
+                    <label
+                      className={cn(
+                        buttonClasses({ variant: 'outline', size: 'sm' }),
+                        'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-emerald',
+                      )}
+                    >
+                      <UploadCloud aria-hidden className="w-4 h-4" />
                       <span>{actions.isUploadingAvatar ? 'Envoi...' : 'Changer la photo'}</span>
                       <input
                         type="file"
@@ -338,259 +388,261 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                         onChange={handleAvatarFileSelected}
                       />
                     </label>
-                    {mediaHint && (
-                      <p className="text-[11px] font-sora text-muted-foreground-soft">
-                        {mediaHint}
-                      </p>
-                    )}
+                    {mediaHint && <p className="text-xs text-muted-foreground">{mediaHint}</p>}
                     {actions.coverError && (
-                      <p role="alert" className="text-xs text-destructive text-center">
+                      <p role="alert" className="text-sm text-destructive text-center">
                         {actions.coverError}
                       </p>
                     )}
                     {actions.avatarError && (
-                      <p role="alert" className="text-xs text-destructive text-center">
+                      <p role="alert" className="text-sm text-destructive text-center">
                         {actions.avatarError}
                       </p>
                     )}
                   </div>
 
-                  <details className="w-full">
-                    <summary className="text-[11px] font-sora text-muted-foreground-soft cursor-pointer text-center">
+                  <details className="w-full rounded-field bg-surface-muted px-3 py-2">
+                    <summary className="text-sm text-muted-foreground cursor-pointer">
                       Ou collez des URL d’images existantes
                     </summary>
-                    <div className="mt-2 space-y-2">
-                      <label htmlFor="onboarding-avatar-url" className="sr-only">
-                        URL de la photo de profil
-                      </label>
-                      <input
+                    <div className="mt-3 space-y-3">
+                      <TextField
                         id="onboarding-avatar-url"
+                        label="URL de la photo de profil"
                         type="url"
                         value={avatarUrl}
                         onChange={(e) => setAvatarUrl(e.target.value)}
-                        placeholder="Photo de profil : https://..."
-                        className="w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                        placeholder="https://..."
                       />
-                      <label htmlFor="onboarding-cover-url" className="sr-only">
-                        URL de la photo de couverture
-                      </label>
-                      <input
+                      <TextField
                         id="onboarding-cover-url"
+                        label="URL de la photo de couverture"
                         type="url"
                         value={coverUrl}
                         onChange={(e) => setCoverUrl(e.target.value)}
-                        placeholder="Photo de couverture : https://..."
-                        className="w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
+                        placeholder="https://..."
                       />
                     </div>
                   </details>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="onboarding-full-name"
-                    className="text-xs font-sora font-bold text-muted-foreground-soft uppercase"
-                  >
-                    Nom complet
-                  </label>
-                  <input
-                    id="onboarding-full-name"
-                    type="text"
-                    autoComplete="name"
-                    minLength={2}
-                    maxLength={150}
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
-                  />
-                </div>
+                <TextField
+                  id="onboarding-full-name"
+                  label="Nom complet"
+                  type="text"
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={150}
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  hint="Affiché sur votre fiche publique."
+                />
 
-                <div>
-                  <label
-                    htmlFor="onboarding-bio"
-                    className="text-xs font-sora font-bold text-muted-foreground-soft uppercase"
-                  >
-                    Bio
-                  </label>
-                  <textarea
-                    id="onboarding-bio"
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    maxLength={2000}
-                    rows={4}
-                    placeholder="Présentez votre expérience, vos spécialités..."
-                    className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none resize-none"
-                  />
-                </div>
+                <TextAreaField
+                  id="onboarding-bio"
+                  label="Présentation"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  maxLength={2000}
+                  rows={4}
+                  placeholder="Présentez votre expérience, vos spécialités..."
+                />
 
-                <div>
-                  <label
-                    htmlFor="onboarding-experience"
-                    className="text-xs font-sora font-bold text-muted-foreground-soft uppercase"
-                  >
-                    Années d’expérience
-                  </label>
-                  <input
-                    id="onboarding-experience"
-                    type="number"
-                    min={0}
-                    max={80}
-                    value={yearsExperience}
-                    onChange={(e) => setYearsExperience(e.target.value)}
-                    className="mt-1 w-full p-3 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm outline-none"
-                  />
-                </div>
+                <TextField
+                  id="onboarding-experience"
+                  label="Années d’expérience"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={80}
+                  value={yearsExperience}
+                  onChange={(e) => setYearsExperience(e.target.value)}
+                />
 
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  fullWidth
                   onClick={handleUseCurrentLocation}
-                  disabled={isLocating}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold hover:bg-primary/5 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+                  isLoading={isLocating}
+                  leadingIcon={<MapPin aria-hidden className="w-4 h-4" />}
                 >
-                  <MapPin className="w-4 h-4" />
                   {isLocating
                     ? 'Localisation...'
                     : pendingLocation
                       ? 'Position mise à jour, prête à enregistrer'
                       : 'Utiliser ma position actuelle'}
-                </button>
+                </Button>
 
-                {actions.error && <p className="text-xs text-destructive">{actions.error}</p>}
+                {actions.error && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {actions.error}
+                  </p>
+                )}
 
-                <button
+                <Button
                   type="submit"
-                  disabled={actions.isSaving}
-                  className="w-full py-3 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
+                  variant="brand"
+                  size="lg"
+                  fullWidth
+                  isLoading={actions.isSaving}
                 >
                   {actions.isSaving ? 'Enregistrement...' : 'Enregistrer mon profil'}
-                </button>
+                </Button>
               </form>
+            </Card>
 
-              <section className="bg-white rounded-2xl p-5 border border-border-subtle space-y-4">
-                <h2 className="font-bold text-lg text-primary flex items-center gap-2">
-                  <Wrench className="w-5 h-5" /> Mes métiers
-                </h2>
+            <Card
+              as="section"
+              padding="lg"
+              aria-labelledby="onboarding-metiers"
+              className="space-y-4"
+            >
+              <h2
+                id="onboarding-metiers"
+                className="font-display text-display-sm font-semibold text-primary flex items-center gap-2"
+              >
+                <Wrench aria-hidden className="w-5 h-5" /> Mes métiers
+              </h2>
 
-                {profile.trades.length === 0 ? (
-                  <p className="text-sm text-muted-foreground-soft">
-                    Aucun métier déclaré pour le moment.
-                  </p>
-                ) : (
-                  <ul className="space-y-2">
-                    {profile.trades.map((trade) => (
-                      <li
-                        key={trade.id}
-                        className="flex items-center justify-between gap-3 p-3 rounded-xl bg-surface-muted"
+              {profile.trades.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Aucun métier déclaré pour le moment.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {profile.trades.map((trade) => (
+                    <li
+                      key={trade.id}
+                      className="flex items-center justify-between gap-3 rounded-field bg-emerald-tint px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{trade.tradeLabel}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatFcfa(trade.hourlyRateFcfa)}/h · rayon{' '}
+                          {(trade.serviceRadiusM / 1000).toFixed(1)} km
+                        </p>
+                      </div>
+                      <IconButton
+                        label={`Retirer ${trade.tradeLabel}`}
+                        onClick={() => actions.removeTrade(trade.id)}
+                        disabled={actions.isSaving}
+                        className="text-destructive hover:bg-destructive-soft"
                       >
-                        <div>
-                          <p className="font-sora text-sm font-bold text-foreground">
-                            {trade.tradeLabel}
-                          </p>
-                          <p className="text-xs text-muted-foreground-soft">
-                            {formatFcfa(trade.hourlyRateFcfa)}/h · rayon{' '}
-                            {(trade.serviceRadiusM / 1000).toFixed(1)} km
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => actions.removeTrade(trade.id)}
-                          disabled={actions.isSaving}
-                          aria-label={`Retirer ${trade.tradeLabel}`}
-                          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-destructive-soft transition-colors cursor-pointer disabled:opacity-60"
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                        <Trash2 aria-hidden className="w-4 h-4" />
+                      </IconButton>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-                {availableTrades.length > 0 && (
-                  <form
-                    onSubmit={handleAddTrade}
-                    className="space-y-3 pt-3 border-t border-border-faint"
+              {availableTrades.length > 0 && (
+                <form
+                  onSubmit={handleAddTrade}
+                  className="space-y-3 pt-4 border-t border-border-faint"
+                >
+                  <SelectField
+                    label="Ajouter un métier"
+                    value={selectedTradeCode}
+                    onChange={(e) => setSelectedTradeCode(e.target.value)}
                   >
-                    <select
-                      value={selectedTradeCode}
-                      onChange={(e) => setSelectedTradeCode(e.target.value)}
-                      className="w-full p-3 rounded-xl border border-border-strong text-sm outline-none focus:border-primary"
-                    >
-                      <option value="">Choisir un métier</option>
-                      {availableTrades.map((trade) => (
-                        <option key={trade.code} value={trade.code}>
-                          {trade.labelFr}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-3">
-                      <input
-                        type="number"
-                        min={0}
-                        value={hourlyRateFcfa}
-                        onChange={(e) => setHourlyRateFcfa(e.target.value)}
-                        placeholder="Tarif horaire (FCFA)"
-                        className="flex-1 p-3 rounded-xl border border-border-strong text-sm outline-none focus:border-primary"
-                      />
-                      <input
-                        type="number"
-                        min={0.1}
-                        step={0.1}
-                        value={radiusKm}
-                        onChange={(e) => setRadiusKm(e.target.value)}
-                        placeholder="Rayon (km)"
-                        className="flex-1 p-3 rounded-xl border border-border-strong text-sm outline-none focus:border-primary"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={
-                        actions.isSaving || !selectedTradeCode || !hourlyRateFcfa || !radiusKm
-                      }
-                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold hover:bg-primary/5 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-                    >
-                      <Plus className="w-4 h-4" /> Ajouter ce métier
-                    </button>
-                  </form>
-                )}
-              </section>
-            </>
-          ) : null}
+                    <option value="">Choisir un métier</option>
+                    {availableTrades.map((trade) => (
+                      <option key={trade.code} value={trade.code}>
+                        {trade.labelFr}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <div className="grid grid-cols-2 gap-3">
+                    <TextField
+                      label="Tarif horaire"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={hourlyRateFcfa}
+                      onChange={(e) => setHourlyRateFcfa(e.target.value)}
+                      placeholder="Tarif horaire (FCFA)"
+                    />
+                    <TextField
+                      label="Rayon d’intervention"
+                      type="number"
+                      inputMode="decimal"
+                      min={0.1}
+                      step={0.1}
+                      value={radiusKm}
+                      onChange={(e) => setRadiusKm(e.target.value)}
+                      placeholder="Rayon (km)"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    fullWidth
+                    disabled={
+                      actions.isSaving || !selectedTradeCode || !hourlyRateFcfa || !radiusKm
+                    }
+                    leadingIcon={<Plus aria-hidden className="w-4 h-4" />}
+                  >
+                    Ajouter ce métier
+                  </Button>
+                </form>
+              )}
+            </Card>
+          </>
+        ) : null}
 
-          <section className="bg-white rounded-2xl p-5 border border-border-subtle space-y-4">
-            <h2 className="font-bold text-lg text-primary flex items-center gap-2">
-              <FileText className="w-5 h-5" /> Documents de vérification
+        <Card
+          as="section"
+          padding="lg"
+          aria-labelledby="onboarding-documents"
+          className="space-y-4"
+        >
+          <div className="space-y-1">
+            <h2
+              id="onboarding-documents"
+              className="font-display text-display-sm font-semibold text-primary flex items-center gap-2"
+            >
+              <FileText aria-hidden className="w-5 h-5" /> Documents de vérification
             </h2>
+            <p className="text-sm text-muted-foreground">
+              Vos documents restent privés : seule l&apos;équipe Téranga les consulte pour vérifier
+              votre identité.
+            </p>
+          </div>
 
-            {isVerificationLoading && !verification ? (
-              <Skeleton className="h-32 rounded-2xl" />
-            ) : verificationError && !verification ? (
-              <ErrorState message={verificationError.message} onRetry={reloadVerification} />
-            ) : (
-              REQUIRED_DOCS.map(({ type, label, hint }) => {
+          {isVerificationLoading && !verification ? (
+            <Skeleton className="h-32 rounded-field" />
+          ) : verificationError && !verification ? (
+            <ErrorState message={verificationError.message} onRetry={reloadVerification} />
+          ) : (
+            <ul className="space-y-3">
+              {REQUIRED_DOCS.map(({ type, label, hint }) => {
                 const doc = latestByType[type];
                 const uploadState = documentUpload.stateFor(type);
                 return (
-                  <div key={type} className="p-3 rounded-xl border border-border-subtle space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <p className="font-sora text-sm font-bold text-foreground">{label}</p>
-                        <p className="text-xs text-muted-foreground-soft">{hint}</p>
+                  <li key={type} className="rounded-field bg-surface-muted p-3 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{label}</p>
+                        <p className="text-sm text-muted-foreground">{hint}</p>
                       </div>
                       {doc && (
-                        <span
-                          className={`text-xs font-sora font-bold px-2 py-1 rounded-full shrink-0 ${DOC_STATUS_PILL[doc.status]}`}
-                        >
-                          {DOC_STATUS_LABEL[doc.status]}
-                        </span>
+                        <StatusPill tone={DOC_STATUS[doc.status].tone}>
+                          {DOC_STATUS[doc.status].label}
+                        </StatusPill>
                       )}
                     </div>
 
                     {doc?.status === 'rejected' && doc.note && (
-                      <p className="text-xs text-destructive">Motif : {doc.note}</p>
+                      <p className="text-sm text-destructive">Motif : {doc.note}</p>
                     )}
 
-                    <label className="inline-flex items-center gap-2 py-2 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold cursor-pointer hover:bg-primary/5 active:scale-95 transition-all">
-                      <UploadCloud className="w-4 h-4" />
+                    <label
+                      className={cn(
+                        buttonClasses({ variant: 'outline', size: 'sm' }),
+                        'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-emerald',
+                      )}
+                    >
+                      <UploadCloud aria-hidden className="w-4 h-4" />
                       <span>
                         {uploadState.isUploading
                           ? 'Envoi...'
@@ -598,24 +650,29 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                             ? 'Renvoyer un document'
                             : 'Envoyer un document'}
                       </span>
+                      {/* sr-only (et non hidden) : atteignable au clavier, nommé
+                          pour les lecteurs d'écran. */}
                       <input
                         type="file"
                         accept="image/png,image/jpeg,application/pdf"
-                        className="hidden"
+                        aria-label={`Envoyer : ${label}`}
+                        className="sr-only"
                         disabled={uploadState.isUploading}
                         onChange={(e) => handleFileSelected(type, e)}
                       />
                     </label>
 
                     {uploadState.error && (
-                      <p className="text-xs text-destructive">{uploadState.error}</p>
+                      <p role="alert" className="text-sm text-destructive">
+                        {uploadState.error}
+                      </p>
                     )}
-                  </div>
+                  </li>
                 );
-              })
-            )}
-          </section>
-        </div>
+              })}
+            </ul>
+          )}
+        </Card>
       </main>
     </>
   );
