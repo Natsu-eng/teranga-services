@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Eye, FileText, LogOut, ShieldCheck } from 'lucide-react';
+import { Eye, FileText, ShieldCheck } from 'lucide-react';
 import { Avatar } from '../../components/ui/Avatar';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { TextAreaField } from '../../components/ui/Field';
-import { Logo } from '../../components/ui/Logo';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { useAuth } from '../auth/hooks/useAuth';
+import { AdminHeader } from './AdminHeader';
 import { useAdminVerificationQueue } from './hooks/useAdminVerificationQueue';
 import { useDocumentPreview } from './hooks/useDocumentPreview';
 import { useVerificationReview } from './hooks/useVerificationReview';
@@ -183,34 +182,16 @@ const VerificationCard: React.FC<VerificationCardProps> = ({ item, onReviewed })
  * En-tête CLAIR et neutre, volontairement distinct du bandeau vert de
  * l'espace Pro : aucune confusion possible entre les deux espaces.
  * Hors de MainLayout (RequireAdminRoute le monte sous MinimalLayout) et
- * sans aucun lien vers cet espace ailleurs dans l'app (URL directe seule).
+ * sans aucun lien vers cet espace ailleurs dans l'app (URL directe seule) ;
+ * l'en-tête relie ses sections entre elles (vérifications, litiges).
  */
 export const AdminVerificationQueueScreen: React.FC = () => {
-  const auth = useAuth();
   const queue = useAdminVerificationQueue();
   const pendingCount = queue.data?.length ?? null;
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 bg-surface shadow-card">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 h-16 px-4 md:px-8">
-          <div className="flex items-center gap-2">
-            <Logo />
-            <span className="inline-flex items-center gap-1 rounded-md bg-foreground px-1.5 py-0.5 text-caption font-bold uppercase tracking-wider text-white">
-              <ShieldCheck aria-hidden className="w-3.5 h-3.5" />
-              Admin
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void auth.logout()}
-            leadingIcon={<LogOut aria-hidden className="w-4 h-4" />}
-          >
-            Déconnexion
-          </Button>
-        </div>
-      </header>
+      <AdminHeader />
 
       <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-16 space-y-5">
         <div className="space-y-1">
