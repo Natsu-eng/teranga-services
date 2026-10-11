@@ -34,6 +34,7 @@ const serviceRequestFixture: ServiceRequest = {
   description: 'Une prise ne fonctionne plus.',
   photoUrl: null,
   location: { lat: 14.6937, lng: -17.4441 },
+  locationLabel: null,
   urgency: 'urgent',
   aiEstimateMinFcfa: 12_000,
   aiEstimateMaxFcfa: 25_000,

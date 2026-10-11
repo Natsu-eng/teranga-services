@@ -26,6 +26,9 @@ import type {
   ArtisanTradeDetail,
   Cancellation,
   ClientPayment,
+  EngagementBlocker,
+  EngagementCheck,
+  RequestEligibility,
   Dispute,
   Intervention,
   MyArtisanProfile,
@@ -203,6 +206,7 @@ interface BackendServiceRequest {
   description: string;
   photo_url: string | null;
   location: BackendLocation;
+  location_label?: string | null;
   urgency: 'normal' | 'urgent' | 'immediat';
   ai_estimate_min_fcfa: number | null;
   ai_estimate_max_fcfa: number | null;
@@ -415,6 +419,7 @@ function mapServiceRequest(request: BackendServiceRequest): ServiceRequest {
     description: request.description,
     photoUrl: request.photo_url,
     location: { lat: request.location.lat, lng: request.location.lng },
+    locationLabel: request.location_label ?? null,
     urgency: request.urgency,
     aiEstimateMinFcfa: request.ai_estimate_min_fcfa,
     aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
@@ -954,6 +959,7 @@ export const httpApiClient: ApiClient = {
         description: input.description,
         photo_url: input.photoUrl ?? null,
         location: input.location,
+        location_label: input.locationLabel,
         urgency: input.urgency,
         ai_estimate_min_fcfa: input.aiEstimateMinFcfa ?? null,
         ai_estimate_max_fcfa: input.aiEstimateMaxFcfa ?? null,
@@ -965,6 +971,32 @@ export const httpApiClient: ApiClient = {
   async listMyServiceRequests(): Promise<ServiceRequest[]> {
     const page = await apiRequest<BackendPage<BackendServiceRequest>>('/requests/me');
     return page.items.map(mapServiceRequest);
+  },
+
+  async listRequestEligibility(artisanId: string): Promise<RequestEligibility[]> {
+    const items = await apiRequest<
+      { request_id: string; eligible: boolean; reason: EngagementBlocker | null }[]
+    >(`/requests/me/eligibility?artisan_id=${encodeURIComponent(artisanId)}`);
+    return items.map((item) => ({
+      requestId: item.request_id,
+      eligible: item.eligible,
+      reason: item.reason,
+    }));
+  },
+
+  async checkArtisanCoverage(
+    artisanId: string,
+    tradeCode: string,
+    location: { lat: number; lng: number },
+  ): Promise<EngagementCheck> {
+    const params = new URLSearchParams({
+      trade: tradeCode,
+      lat: String(location.lat),
+      lng: String(location.lng),
+    });
+    return apiRequest<EngagementCheck>(
+      `/artisans/${encodeURIComponent(artisanId)}/coverage?${params.toString()}`,
+    );
   },
 
   async listMyInterventions(): Promise<Intervention[]> {

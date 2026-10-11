@@ -8,6 +8,8 @@ import type {
   Artisan,
   ArtisanStats,
   Intervention,
+  EngagementCheck,
+  RequestEligibility,
   ArtisanEarnings,
   ClientPayment,
   PaymentChannel,
@@ -63,6 +65,8 @@ export interface CreateServiceRequestInput {
   description: string;
   photoUrl?: string | null;
   location: { lat: number; lng: number };
+  /** Lieu que le client a vu et confirmé avant d'envoyer. */
+  locationLabel: string;
   urgency: 'normal' | 'urgent' | 'immediat';
   aiEstimateMinFcfa?: number | null;
   aiEstimateMaxFcfa?: number | null;
@@ -160,6 +164,14 @@ export interface ApiClient {
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   listMyServiceRequests(): Promise<ServiceRequest[]>;
+  /** Pour chaque demande ouverte : cet artisan peut-il la recevoir (métier, zone) ? */
+  listRequestEligibility(artisanId: string): Promise<RequestEligibility[]>;
+  /** Cet artisan intervient-il pour ce métier à ce lieu ? (avant de créer la demande) */
+  checkArtisanCoverage(
+    artisanId: string,
+    tradeCode: string,
+    location: { lat: number; lng: number },
+  ): Promise<EngagementCheck>;
   listMyInterventions(): Promise<Intervention[]>;
   createIntervention(input: CreateInterventionInput): Promise<Intervention>;
   getInterventionById(id: string): Promise<Intervention>;

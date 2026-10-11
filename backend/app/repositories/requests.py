@@ -36,6 +36,7 @@ async def create_service_request(
     photo_url: str | None,
     lat: float,
     lng: float,
+    location_label: str | None,
     urgency: Urgency,
     ai_estimate_min_fcfa: int | None,
     ai_estimate_max_fcfa: int | None,
@@ -49,6 +50,7 @@ async def create_service_request(
         description=description,
         photo_url=photo_url,
         location=to_point(lat=lat, lng=lng),
+        location_label=location_label,
         urgency=urgency,
         ai_estimate_min_fcfa=ai_estimate_min_fcfa,
         ai_estimate_max_fcfa=ai_estimate_max_fcfa,
@@ -82,6 +84,22 @@ async def list_by_client(
         .offset(offset)
     )
     return list((await session.execute(stmt)).unique().scalars().all())
+
+
+async def list_open_by_client(
+    session: AsyncSession, client_id: uuid.UUID, *, limit: int
+) -> list[ServiceRequest]:
+    """Demandes encore ouvertes du client, les plus récentes d'abord."""
+    stmt = (
+        select(ServiceRequest)
+        .where(
+            ServiceRequest.client_id == client_id,
+            ServiceRequest.status == ServiceRequestStatus.OUVERTE,
+        )
+        .order_by(ServiceRequest.created_at.desc(), ServiceRequest.id)
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())
 
 
 async def count_by_client(session: AsyncSession, client_id: uuid.UUID) -> int:

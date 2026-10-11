@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 from geoalchemy2 import Geography
 from geoalchemy2.elements import WKBElement, WKTElement
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     from app.models.messaging import Conversation
     from app.models.trade import Trade
     from app.models.user import User
+
+
+# Longueur maximale du libellé de lieu : un nom de quartier ou de commune,
+# jamais une adresse complète.
+LOCATION_LABEL_MAX_LENGTH = 120
 
 
 class ServiceRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -36,6 +41,10 @@ class ServiceRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     photo_url: Mapped[str | None] = mapped_column(Text)
+    # Lieu de l'intervention tel que le client l'a CONFIRMÉ (ex. « Dakar
+    # Plateau », « Ma position actuelle ») : la référence lisible des
+    # coordonnées `location`. NULL pour les demandes antérieures.
+    location_label: Mapped[str | None] = mapped_column(String(LOCATION_LABEL_MAX_LENGTH))
     location: Mapped[WKBElement | WKTElement] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False), nullable=False
     )

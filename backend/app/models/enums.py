@@ -129,6 +129,15 @@ class PayoutStatus(StrEnum):
     ECHOUE = "echoue"
 
 
+class EngagementBlocker(StrEnum):
+    """Pourquoi une demande ne peut pas être adressée à un artisan (règle de
+    `POST /interventions`, dans cet ordre)."""
+
+    ARTISAN_NON_VERIFIE = "artisan_non_verifie"
+    METIER_NON_EXERCE = "metier_non_exerce"
+    HORS_ZONE = "hors_zone"
+
+
 class InterventionCancellationKind(StrEnum):
     """Pourquoi une intervention a fini `annulee`."""
 

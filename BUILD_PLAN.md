@@ -586,9 +586,14 @@ la pagination : §5.
 
 **Demandes & IA**
 ```
-POST /api/v1/requests             (client) { trade_code, description, photo_url?, location, urgency,
+POST /api/v1/requests             (client) { trade_code, description, photo_url?, location,
+                                   location_label?, urgency,
                                    ai_estimate_min_fcfa?, ai_estimate_max_fcfa? }             ✅ Lot 12
 GET  /api/v1/requests/me                                       → mes demandes, paginé         ✅ Lot 12
+GET  /api/v1/requests/me/eligibility?artisan_id=   (client)    → pour chaque demande ouverte :
+                                   { request_id, eligible, reason } (lecture seule)
+GET  /api/v1/artisans/{id}/coverage?trade=&lat=&lng=  (public) → { eligible, reason } pour un
+                                   lieu, avant même de créer la demande (lecture seule)
 GET  /api/v1/requests/{id}        (propriétaire ou artisan concerné)                          ✅ Lot 12
 POST /api/v1/ai/analyze           { description }
                                    → { trade_code, price_min_fcfa, price_max_fcfa, urgency,
@@ -596,6 +601,17 @@ POST /api/v1/ai/analyze           { description }
                                    (migration de /api/analyze-problem, provider-agnostique —
                                    Mistral par défaut, fallback heuristique, §6 Lot 11)
 ```
+
+**Localisation explicite (lot `fix/localisation-demande`).** Le lieu d'une
+demande est celui que le client a **vu et confirmé** : un quartier (liste
+unique `frontend/src/lib/places.ts`, coordonnées réelles, partagée avec
+l'en-tête) ou sa position GPS, proposée seulement sur demande et appliquée
+après confirmation. `location_label` le garde lisible. La règle
+d'engagement côté artisan (vérifié, métier exercé, zone d'intervention) est
+une fonction **unique** (`evaluate_engagement`) : `POST /interventions`
+l'applique et refuse toujours (`ARTISAN_HORS_ZONE`, dernier rempart) ; les
+deux lectures ci-dessus l'exposent pour que l'écran marque « hors de sa
+zone » AVANT l'envoi — le marquage ne peut pas diverger de la décision.
 
 `POST /ai/analyze` est **public, non authentifié** (l'écran `/demande` du
 front n'exige pas de connexion) mais protégé par rate limiting par IP (même

@@ -567,6 +567,43 @@ concernés :
   messages vocaux, suppression/édition d'un message, signalement d'un
   message à la modération.
 
+## Mise à jour — `fix/localisation-demande`
+
+Deux défauts d'ergonomie constatés en test manuel, et leur cause commune :
+la localisation des demandes. **La protection géographique du serveur
+n'est pas modifiée** : elle est seulement exposée en lecture.
+
+- **Constat** : depuis la région parisienne, les demandes étaient
+  localisées en France (GPS du navigateur lu **en silence** à l'envoi),
+  alors que l'en-tête affichait « Dakar Plateau » — et l'en-tête n'avait
+  aucune coordonnée (libellés seuls). Moussa (Plateau, 30 km) était à
+  4 205 km : le serveur refusait l'envoi (`ARTISAN_HORS_ZONE`), à raison,
+  mais **après** que le client avait choisi la demande.
+- **Corrigé — lieu explicite** : quartiers de Dakar avec coordonnées
+  réelles, liste unique partagée par l'en-tête et l'écran de demande (ils
+  ne peuvent plus se contredire) ; « Intervention à : <lieu> » avant
+  l'envoi ; la demande enregistre le lieu confirmé
+  (`service_request.location_label` + coordonnées). Le GPS devient une
+  suggestion : sur clic, résultat montré (coordonnées, distance à Dakar,
+  avertissement hors région), appliqué après confirmation. La
+  géolocalisation ne retombe plus jamais en silence sur le Plateau (même
+  défaut corrigé dans l'onboarding artisan, qui l'utilisait aussi).
+- **Corrigé — hors zone avant envoi** : `GET /requests/me/eligibility` et
+  `GET /artisans/{id}/coverage`, lectures seules, appliquent la MÊME règle
+  que `POST /interventions` (fonction unique). « Demander un devis »
+  marque « Hors de sa zone » et rend la demande non sélectionnable ;
+  l'écran de demande adressée à un artisan vérifie sa couverture du lieu
+  avant l'envoi. « Mes demandes » montre le lieu et signale une demande
+  hors de la région de Dakar (cas des demandes créées avant ce lot).
+- **Protection serveur intacte** : un envoi hors zone reste refusé
+  (`test_create_intervention_rejects_artisan_out_of_zone`, inchangé) ; un
+  test vérifie que le marquage concorde toujours avec la décision.
+- **Au passage** : la salutation disait toujours « Bonjour » ; elle suit
+  désormais l'heure (« Bonsoir » de 18 h à 5 h).
+- **Vérification** : porte backend verte, porte front verte, build OK.
+- **Reste hors périmètre** : choix d'un point précis sur une carte (le
+  quartier suffit aux rayons en kilomètres), adresse postale détaillée.
+
 ## Mise à jour — `feat/paiements`
 
 Moteur de paiement complet, référence : [BUILD_PLAN.md §3.5](BUILD_PLAN.md).

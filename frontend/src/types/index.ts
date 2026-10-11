@@ -87,11 +87,28 @@ export interface ServiceRequest {
   description: string;
   photoUrl: string | null;
   location: { lat: number; lng: number };
+  /** Lieu confirmé par le client (« Dakar Plateau »…) ; null pour les demandes antérieures. */
+  locationLabel: string | null;
   urgency: string;
   aiEstimateMinFcfa: number | null;
   aiEstimateMaxFcfa: number | null;
   status: ServiceRequestStatus;
   createdAt: string;
+}
+
+/**
+ * Pourquoi un artisan ne peut pas recevoir une demande — même règle que
+ * l'envoi (POST /interventions), lue AVANT d'envoyer.
+ */
+export type EngagementBlocker = 'artisan_non_verifie' | 'metier_non_exerce' | 'hors_zone';
+
+export interface EngagementCheck {
+  eligible: boolean;
+  reason: EngagementBlocker | null;
+}
+
+export interface RequestEligibility extends EngagementCheck {
+  requestId: string;
 }
 
 export type InterventionStatus =

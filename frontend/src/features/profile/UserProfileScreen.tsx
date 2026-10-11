@@ -24,6 +24,7 @@ import { StatusPill } from '../../components/ui/StatusPill';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { cn } from '../../lib/cn';
 import { useAuth } from '../auth/hooks/useAuth';
+import { usePlace } from '../location/usePlace';
 import { toDisplayRole } from '../auth/role';
 import { VerificationStatusBanner } from '../artisans/VerificationStatusBanner';
 import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
@@ -264,15 +265,12 @@ const ArtisanProfile: React.FC<{
 
 /* ----------------------------------------------------------------- Écran */
 
-interface UserProfileScreenProps {
-  location: string;
-}
-
 /**
  * Profil (/profil) : deux écrans distincts selon le rôle du compte
  * (toujours dérivé du serveur, auth.role), chacun orienté vers son usage.
  */
-export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }) => {
+export const UserProfileScreen: React.FC = () => {
+  const { place } = usePlace();
   const auth = useAuth();
   const role = toDisplayRole(auth.role);
   const { data: currentUser, isLoading, error, reload } = useCurrentUser();
@@ -297,7 +295,7 @@ export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }
             phone={auth.user?.phone}
           />
         ) : (
-          <ClientProfile name={currentUser.name} location={location} phone={auth.user?.phone} />
+          <ClientProfile name={currentUser.name} location={place.label} phone={auth.user?.phone} />
         )
       ) : null}
     </main>

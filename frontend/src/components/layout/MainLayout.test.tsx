@@ -9,6 +9,8 @@ import {
   DEFAULT_REALTIME,
   RealtimeContext,
 } from '../../features/messages/realtime/realtime-context';
+import { PlaceContext } from '../../features/location/place-context';
+import { neighborhoodPlace, type Place } from '../../lib/places';
 
 vi.mock('../../features/auth/hooks/useAuth');
 
@@ -41,24 +43,53 @@ function userFixture(role: AuthUser['role'], fullName: string): AuthUser {
   };
 }
 
-function renderLayout(path = '/accueil', setLocation = vi.fn(), unreadCount: number | null = null) {
+function renderLayout(
+  path = '/accueil',
+  setPlace: (place: Place) => void = vi.fn(),
+  unreadCount: number | null = null,
+) {
   return render(
-    <RealtimeContext.Provider value={{ ...DEFAULT_REALTIME, unreadCount }}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<MainLayout location="Dakar Plateau" setLocation={setLocation} />}>
-            <Route path="/accueil" element={<p>Contenu accueil</p>} />
-            <Route path="/pro" element={<p>Contenu pro</p>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </RealtimeContext.Provider>,
+    <PlaceContext.Provider value={{ place: neighborhoodPlace('plateau'), setPlace }}>
+      <RealtimeContext.Provider value={{ ...DEFAULT_REALTIME, unreadCount }}>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route element={<MainLayout />}>
+              <Route path="/accueil" element={<p>Contenu accueil</p>} />
+              <Route path="/pro" element={<p>Contenu pro</p>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </RealtimeContext.Provider>
+    </PlaceContext.Provider>,
   );
 }
 
 describe('MainLayout — espace client', () => {
-  beforeEach(() => mockedUseAuth.mockReset());
-  afterEach(cleanup);
+  beforeEach(() => {
+    mockedUseAuth.mockReset();
+    // Heure fixée (10 h) : la salutation dépend de l'heure, pas le résultat des tests.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 12, 10, 0));
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('dit « Bonsoir » le soir', () => {
+    vi.setSystemTime(new Date(2026, 9, 12, 20, 30));
+    mockedUseAuth.mockReturnValue(
+      authValue({
+        isAuthenticated: true,
+        role: 'client',
+        user: userFixture('client', 'Dian Diallo'),
+      }),
+    );
+
+    renderLayout();
+
+    expect(screen.getByText('Bonsoir, Dian')).toBeInTheDocument();
+  });
 
   it('affiche l’en-tête clair et la navigation client à 4 entrées', () => {
     mockedUseAuth.mockReturnValue(authValue({}));
@@ -193,14 +224,20 @@ describe('Sélecteur de quartier', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('remonte le quartier choisi', () => {
-    const setLocation = vi.fn();
-    renderLayout('/accueil', setLocation);
+  it('remonte le quartier choisi, avec ses coordonnées réelles', () => {
+    const setPlace = vi.fn();
+    renderLayout('/accueil', setPlace);
 
     fireEvent.click(screen.getByRole('button', { name: /Dakar Plateau/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Ouakam, Dakar' }));
 
-    expect(setLocation).toHaveBeenCalledWith('Ouakam, Dakar');
+    expect(setPlace).toHaveBeenCalledWith({
+      kind: 'quartier',
+      neighborhoodId: 'ouakam',
+      label: 'Ouakam, Dakar',
+      lat: 14.7225,
+      lng: -17.4878,
+    });
   });
 });
 

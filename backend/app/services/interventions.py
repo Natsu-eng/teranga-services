@@ -27,6 +27,7 @@ seul une intervention dont les fonds sont en séquestre : il ouvre un litige.
 """
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -34,9 +35,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
+from app.models.artisan import ArtisanProfile
 from app.models.enums import (
     ArtisanVerifiedStatus,
     DisputeOutcome,
+    EngagementBlocker,
     InterventionCancellationKind,
     InterventionStatus,
     Role,
@@ -48,8 +51,15 @@ from app.repositories import artisans as artisans_repository
 from app.repositories import interventions as interventions_repository
 from app.repositories import payments as payments_repository
 from app.repositories import requests as requests_repository
+from app.repositories import trades as trades_repository
 from app.repositories.requests import location_to_lat_lng
-from app.schemas.interventions import CancellationOut, InterventionCreateIn, InterventionOut
+from app.schemas.interventions import (
+    CancellationOut,
+    EngagementCheckOut,
+    InterventionCreateIn,
+    InterventionOut,
+    RequestEligibilityOut,
+)
 from app.schemas.pagination import Page
 from app.schemas.payments import DisputeOut
 from app.schemas.quotes import QuoteOut
@@ -68,6 +78,7 @@ from app.services.intervention_errors import (
 )
 from app.services.payment_providers.base import PaymentProvider
 from app.services.payment_summary import summarize as summarize_payment
+from app.services.requests import MetierInconnuError
 from app.services.verification import compute_verified_status
 
 # Transitions autorisées, par statut de départ (BUILD_PLAN.md §6 Lot 12b).
@@ -268,6 +279,92 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
     )
 
 
+_BLOCKER_ERRORS: dict[EngagementBlocker, Callable[[], AppError]] = {
+    EngagementBlocker.ARTISAN_NON_VERIFIE: ArtisanNonVerifieError,
+    EngagementBlocker.METIER_NON_EXERCE: ArtisanMetierNonExerceError,
+    EngagementBlocker.HORS_ZONE: ArtisanHorsZoneError,
+}
+
+
+async def evaluate_engagement(
+    session: AsyncSession,
+    *,
+    artisan: ArtisanProfile,
+    trade_id: uuid.UUID,
+    lat: float,
+    lng: float,
+    settings: Settings,
+) -> EngagementBlocker | None:
+    """La règle d'engagement côté artisan, SOURCE UNIQUE (règles 3 à 5 de
+    `create_intervention`) : artisan vérifié, métier exercé, zone
+    d'intervention (`service_area`, sinon `service_radius_m` autour de
+    `base_location`) qui couvre le point. Renvoie le premier obstacle, ou
+    `None`.
+
+    Utilisée par la création d'intervention (refus) ET par les lectures
+    d'éligibilité (marquage avant envoi) : l'écran ne peut jamais annoncer
+    « dans sa zone » une demande que le serveur refuserait, ni l'inverse.
+    """
+    verified_status = compute_verified_status(
+        artisan.verifications, settings.verification_required_doc_types
+    )
+    if verified_status is not ArtisanVerifiedStatus.VERIFIED:
+        return EngagementBlocker.ARTISAN_NON_VERIFIE
+    if not await artisans_repository.artisan_exercises_trade(
+        session, artisan_id=artisan.id, trade_id=trade_id
+    ):
+        return EngagementBlocker.METIER_NON_EXERCE
+    if not await artisans_repository.is_artisan_reachable_for_trade(
+        session, artisan_id=artisan.id, trade_id=trade_id, lat=lat, lng=lng
+    ):
+        return EngagementBlocker.HORS_ZONE
+    return None
+
+
+async def list_request_eligibility(
+    session: AsyncSession, *, client: User, artisan_id: uuid.UUID, settings: Settings
+) -> list[RequestEligibilityOut]:
+    """Pour chaque demande OUVERTE du client courant : peut-elle être
+    adressée à cet artisan ? Lecture seule, rien n'est créé. Seules les
+    demandes du client sont lues (jamais celles d'autrui)."""
+    artisan = await get_artisan_or_404(session, artisan_id)
+    requests = await requests_repository.list_open_by_client(
+        session, client.id, limit=settings.pagination_page_size_max
+    )
+    results: list[RequestEligibilityOut] = []
+    for request in requests:
+        lat, lng = location_to_lat_lng(request)
+        blocker = await evaluate_engagement(
+            session, artisan=artisan, trade_id=request.trade_id, lat=lat, lng=lng, settings=settings
+        )
+        results.append(
+            RequestEligibilityOut(request_id=request.id, eligible=blocker is None, reason=blocker)
+        )
+    return results
+
+
+async def check_coverage(
+    session: AsyncSession,
+    *,
+    artisan_id: uuid.UUID,
+    trade_code: str,
+    lat: float,
+    lng: float,
+    settings: Settings,
+) -> EngagementCheckOut:
+    """Cet artisan peut-il intervenir pour ce métier à ce lieu ? Lecture
+    seule, avant même qu'une demande existe (écran de description d'un
+    besoin adressé à un artisan) : rien n'est créé ni réservé."""
+    artisan = await get_artisan_or_404(session, artisan_id)
+    trade = await trades_repository.get_active_trade_by_code(session, trade_code)
+    if trade is None:
+        raise MetierInconnuError()
+    blocker = await evaluate_engagement(
+        session, artisan=artisan, trade_id=trade.id, lat=lat, lng=lng, settings=settings
+    )
+    return EngagementCheckOut(eligible=blocker is None, reason=blocker)
+
+
 async def create_intervention(
     session: AsyncSession, *, client: User, payload: InterventionCreateIn, settings: Settings
 ) -> InterventionOut:
@@ -291,24 +388,14 @@ async def create_intervention(
         raise DemandeNonOuverteError()
 
     artisan = await get_artisan_or_404(session, payload.artisan_id)
-    verified_status = compute_verified_status(
-        artisan.verifications, settings.verification_required_doc_types
-    )
-    if verified_status is not ArtisanVerifiedStatus.VERIFIED:
-        raise ArtisanNonVerifieError()
-
-    exercises_trade = await artisans_repository.artisan_exercises_trade(
-        session, artisan_id=artisan.id, trade_id=request.trade_id
-    )
-    if not exercises_trade:
-        raise ArtisanMetierNonExerceError()
-
     lat, lng = location_to_lat_lng(request)
-    reachable = await artisans_repository.is_artisan_reachable_for_trade(
-        session, artisan_id=artisan.id, trade_id=request.trade_id, lat=lat, lng=lng
+    blocker = await evaluate_engagement(
+        session, artisan=artisan, trade_id=request.trade_id, lat=lat, lng=lng, settings=settings
     )
-    if not reachable:
-        raise ArtisanHorsZoneError()
+    # Dernier rempart, inchangé : un envoi hors règle est refusé ici même si
+    # l'écran ne l'a pas empêché (client modifié, données périmées...).
+    if blocker is not None:
+        raise _BLOCKER_ERRORS[blocker]()
 
     rate = await commission_service.resolve_effective_commission_rate(
         session, trade_id=request.trade_id

@@ -17,6 +17,7 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     description: 'Fuite sous l’évier.',
     photoUrl: null,
     location: { lat: 14.69, lng: -17.44 },
+    locationLabel: null,
     urgency: 'normal',
     aiEstimateMinFcfa: 10_000,
     aiEstimateMaxFcfa: 20_000,
@@ -88,5 +89,36 @@ describe('MyRequestsScreen', () => {
       'href',
       '/mes-interventions',
     );
+  });
+
+  it('affiche le lieu confirmé de chaque demande', () => {
+    mockedUseMyRequests.mockReturnValue({
+      data: [
+        requestFixture({ id: 'r1', locationLabel: 'Ouakam, Dakar' }),
+        requestFixture({ id: 'r2', locationLabel: null }),
+      ],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    renderScreen();
+
+    expect(screen.getByText('Lieu : Ouakam, Dakar')).toBeInTheDocument();
+    expect(screen.getByText('Lieu : position GPS enregistrée')).toBeInTheDocument();
+    expect(screen.queryByText(/hors de la région de Dakar/)).not.toBeInTheDocument();
+  });
+
+  it('signale une demande localisée hors de la région de Dakar', () => {
+    mockedUseMyRequests.mockReturnValue({
+      data: [requestFixture({ location: { lat: 48.9097, lng: 2.3819 } })],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    renderScreen();
+
+    expect(screen.getByText(/localisée hors de la région de Dakar/)).toBeInTheDocument();
   });
 });

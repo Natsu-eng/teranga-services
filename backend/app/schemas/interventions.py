@@ -10,7 +10,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import InterventionCancellationKind, InterventionStatus, Role
+from app.models.enums import (
+    EngagementBlocker,
+    InterventionCancellationKind,
+    InterventionStatus,
+    Role,
+)
 from app.schemas.payments import DisputeOut, PaymentSummaryOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.requests import ServiceRequestOut
@@ -20,6 +25,20 @@ from app.schemas.reviews import ReviewOut
 class InterventionCreateIn(BaseModel):
     service_request_id: uuid.UUID
     artisan_id: uuid.UUID
+
+
+class EngagementCheckOut(BaseModel):
+    """Un artisan peut-il recevoir cette demande / ce lieu ? Même règle que
+    `POST /interventions` (lecture seule) : le front marque AVANT l'envoi au
+    lieu de découvrir un refus après coup."""
+
+    eligible: bool
+    # Premier obstacle rencontré, dans l'ordre de la règle ; `None` si éligible.
+    reason: EngagementBlocker | None
+
+
+class RequestEligibilityOut(EngagementCheckOut):
+    request_id: uuid.UUID
 
 
 class InterventionDeclineIn(BaseModel):

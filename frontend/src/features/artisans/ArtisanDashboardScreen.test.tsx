@@ -86,6 +86,7 @@ function interventionFixture(overrides: Partial<Intervention>): Intervention {
       description: 'Fuite sous l’évier.',
       photoUrl: null,
       location: { lat: 14.6937, lng: -17.4441 },
+      locationLabel: null,
       urgency: 'normal',
       aiEstimateMinFcfa: null,
       aiEstimateMaxFcfa: null,
