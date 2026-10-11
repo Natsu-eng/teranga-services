@@ -343,6 +343,15 @@ class Settings(BaseSettings):
     # occupée par un seul compte.
     ws_max_connections_per_user: int = 5
 
+    # --- Paiements (BUILD_PLAN.md §3.5) ------------------------------------
+
+    # Règle d'arrondi de la commission (app/services/commission_calculation.py).
+    # "floor" (défaut) : vers le bas, en faveur de l'artisan -- la commission
+    # ne dépasse jamais le taux annoncé, écart maximal 1 FCFA au détriment de
+    # Téranga. Le montant calculé est stocké sur la platform_fee à sa
+    # création : changer cette règle ne modifie jamais une commission passée.
+    commission_rounding: Literal["floor", "half_up", "ceil"] = "floor"
+
     # Origine publique du backend, utilisée pour construire l'URL absolue
     # d'un avatar (`{backend_public_base_url}/static/avatars/...`). Une URL
     # relative ne suffit pas : front (Vercel) et back (Railway) sont deux
