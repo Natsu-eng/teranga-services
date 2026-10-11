@@ -377,6 +377,20 @@ tickets consommés sont en mémoire du processus : un bus partagé (Redis
 pub/sub) est **obligatoire avant** de lancer plusieurs instances du backend
 (BUILD_PLAN.md §3.4, « Dette multi-instance »).
 
+## Lieu des demandes et éligibilité avant envoi
+
+Une demande enregistre le lieu **confirmé** par le client
+(`location` + `location_label`, ex. « Dakar Plateau »). La règle
+d'engagement côté artisan (vérifié, métier exercé, zone d'intervention) est
+une fonction unique (`evaluate_engagement`), appliquée par `POST
+/interventions` (refus `ARTISAN_HORS_ZONE` inchangé) et exposée en lecture
+seule par :
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/v1/requests/me/eligibility?artisan_id=` | Client : chaque demande ouverte, éligible ou non, avec la raison (`hors_zone`, `metier_non_exerce`, `artisan_non_verifie`) |
+| `GET /api/v1/artisans/{id}/coverage?trade=&lat=&lng=` | Public : cet artisan couvre-t-il ce lieu pour ce métier ? |
+
 ## Paiements (séquestre, espèces, versements)
 
 Détail et décisions : [BUILD_PLAN.md §3.5](../BUILD_PLAN.md).
