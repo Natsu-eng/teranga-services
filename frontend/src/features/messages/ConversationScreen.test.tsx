@@ -289,6 +289,24 @@ describe('ConversationScreen', () => {
       expect(screen.getByText('Arrivé pendant la coupure')).toBeInTheDocument();
     });
 
+    it('envoie et confirme un message par REST sans aucun temps réel', async () => {
+      // Preuve de fiabilité : l'envoi ne dépend jamais du WebSocket.
+      mockedApi.sendMessage.mockResolvedValue(
+        message({ id: 'm2', seq: 2, senderId: ME, body: 'Envoyé sans WebSocket' }),
+      );
+      renderThread(fakeRealtime('unavailable').value);
+      await screen.findByText('Bonjour, je peux passer demain.');
+
+      fireEvent.change(screen.getByLabelText('Votre message'), {
+        target: { value: 'Envoyé sans WebSocket' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Envoyer' }));
+
+      expect(mockedApi.sendMessage).toHaveBeenCalledWith('c1', 'Envoyé sans WebSocket');
+      await waitFor(() => expect(screen.queryByText('Envoi…')).not.toBeInTheDocument());
+      expect(within(messageList()).getAllByText('Envoyé sans WebSocket')).toHaveLength(1);
+    });
+
     it('ne relit plus à intervalle régulier quand le temps réel est ouvert', async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       renderThread(fakeRealtime('open').value);

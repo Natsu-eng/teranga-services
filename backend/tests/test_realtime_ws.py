@@ -8,6 +8,7 @@ base de dev n'est jamais modifiée durablement.
 import asyncio
 from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -165,6 +166,26 @@ async def test_ticket_is_single_use(db_session: AsyncSession) -> None:
         async with _connect(client, _protocols(ticket)) as ws:
             assert ws.subprotocol == "teranga.v1"
         # Le même ticket, rejoué : refusé.
+        await _assert_refused(client, _protocols(ticket))
+
+
+async def test_connection_refused_with_an_expired_ticket(db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role=Role.CLIENT)
+    expired_settings = get_settings().model_copy(update={"ws_ticket_ttl_seconds": -1})
+    ticket, _jti = encode_ws_ticket(user, settings=expired_settings)
+
+    async with _client() as client:
+        await _assert_refused(client, _protocols(ticket))
+
+
+async def test_connection_refused_once_the_account_is_deleted(db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role=Role.CLIENT)
+
+    async with _client() as client:
+        ticket = await _ticket(client, user)
+        # Compte supprimé entre la délivrance du ticket et la connexion.
+        user.deleted_at = datetime.now(UTC)
+        await db_session.flush()
         await _assert_refused(client, _protocols(ticket))
 
 

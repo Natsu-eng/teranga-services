@@ -116,13 +116,24 @@ async def test_third_party_gets_the_same_403_as_a_missing_conversation(
             json={"body": "Bonjour"},
             headers=_auth(outsider),
         )
+        photo = await client.post(
+            f"/api/v1/conversations/{engagement.conversation.id}/messages/image",
+            files={"file": ("photo.jpg", make_jpeg(32, 32), "image/jpeg")},
+            headers=_auth(outsider),
+        )
+        mark_read = await client.post(
+            f"/api/v1/conversations/{engagement.conversation.id}/read",
+            json={"last_read_seq": 0},
+            headers=_auth(outsider),
+        )
 
     # Strictement identiques : rien ne révèle l'existence du fil.
     assert foreign.status_code == missing.status_code == 403
     assert foreign.json() == missing.json()
     assert foreign.json()["error"]["code"] == "CONVERSATION_ACCES_INTERDIT"
-    assert read_messages.status_code == 403
-    assert write.status_code == 403
+    for refused in (read_messages, write, photo, mark_read):
+        assert refused.status_code == 403, refused.text
+        assert refused.json() == foreign.json()
 
 
 async def test_admin_is_excluded_from_messaging(db_session: AsyncSession) -> None:
