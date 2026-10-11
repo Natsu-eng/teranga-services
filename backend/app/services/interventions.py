@@ -37,6 +37,7 @@ from app.schemas.pagination import Page
 from app.schemas.quotes import QuoteOut
 from app.schemas.reviews import ReviewOut
 from app.services import commission as commission_service
+from app.services import conversations as conversations_service
 from app.services import requests as requests_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
 from app.services.identity import public_display_name
@@ -192,6 +193,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
             if intervention.review
             else None
         ),
+        conversation_id=(intervention.conversations[0].id if intervention.conversations else None),
         created_at=intervention.created_at,
     )
 
@@ -250,6 +252,12 @@ async def create_intervention(
         commission_rate=rate,
     )
     await requests_repository.set_status(session, request, ServiceRequestStatus.EN_RELATION)
+    # Le fil de discussion naît avec l'engagement, dans la même transaction :
+    # jamais de messagerie avant une mise en relation réelle, jamais
+    # d'intervention sans son fil (BUILD_PLAN.md §3.2, Messagerie).
+    await conversations_service.create_for_intervention(
+        session, intervention=intervention, artisan_user_id=artisan.user_id
+    )
 
     return to_intervention_out(intervention)
 

@@ -325,9 +325,10 @@ async def make_engagement(
     session: AsyncSession,
     *,
     status: InterventionStatus = InterventionStatus.ACCEPTEE,
+    client: User | None = None,
 ) -> Engagement:
     trade = await make_trade(session)
-    client = await make_user(session, role=Role.CLIENT, full_name="Awa Diop")
+    client = client or await make_user(session, role=Role.CLIENT, full_name="Awa Diop")
     artisan_user = await make_user(session, role=Role.ARTISAN, full_name="Idrissa Fall")
     artisan = await make_artisan_profile(session, user=artisan_user)
     rate = await make_commission_rate(session, trade_id=trade.id)

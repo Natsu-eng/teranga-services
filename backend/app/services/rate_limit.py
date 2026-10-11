@@ -160,6 +160,8 @@ OTP_BUCKET = "otp"
 AI_ANALYZE_BUCKET = "ai_analyze"
 DOCUMENT_UPLOAD_BUCKET = "document_upload"
 PROFILE_MEDIA_UPLOAD_BUCKET = "profile_media_upload"
+MESSAGE_SEND_BUCKET = "message_send"
+MESSAGE_ATTACHMENT_BUCKET = "message_attachment"
 
 _memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
 _postgres_limiters: dict[str, PostgresRateLimiter] = {}
@@ -202,3 +204,16 @@ def get_profile_media_upload_rate_limiter(settings: SettingsDep) -> RateLimiter:
     """`POST /api/v1/artisans/me/avatar` et `.../me/cover` -- un seul budget
     partagé entre les deux (même clé par utilisateur authentifié)."""
     return _limiter_for(PROFILE_MEDIA_UPLOAD_BUCKET, settings)
+
+
+def get_message_send_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/conversations/{id}/messages` -- clé par utilisateur
+    authentifié, toutes conversations confondues (un script ne peut pas
+    contourner la limite en ouvrant plusieurs fils)."""
+    return _limiter_for(MESSAGE_SEND_BUCKET, settings)
+
+
+def get_message_attachment_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/conversations/{id}/messages/image` -- budget distinct,
+    plus serré : chaque envoi décode, réencode et écrit un fichier."""
+    return _limiter_for(MESSAGE_ATTACHMENT_BUCKET, settings)
