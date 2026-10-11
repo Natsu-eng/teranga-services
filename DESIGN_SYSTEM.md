@@ -138,7 +138,7 @@ Les `display-*` embarquent leur interlignage et leur approche (tokens).
 | Composant | Usage | À savoir |
 |---|---|---|
 | `Button` / `ButtonLink` | Toute action / navigation habillée en bouton | Variantes `primary` (or, **1 par écran**), `brand` (émeraude), `outline`, `ghost`, `danger`, `danger-outline`, `danger-ghost`, `on-dark` ; tailles `sm` / `md` / `lg` ; `isLoading` (désactive + `aria-busy`) ; `type="button"` par défaut |
-| `IconButton` | Bouton icône seule | `label` obligatoire (nom accessible) ; tonalités `light`, `on-dark`, `danger` |
+| `IconButton` | Bouton icône seule | `label` obligatoire (nom accessible) ; tonalités `light`, `on-dark`, `danger`, `brand` (action principale pleine, ex. « Envoyer » de la messagerie) |
 | `Card` | Toute surface de contenu | `tone` `default` / `tint` / `dark`, `padding`, `interactive`, `as` ; pour une carte-lien, habiller un `<Link>` avec `cardClasses()` |
 | `VerifiedBadge` | Le signal de confiance | Pastille émeraude pleine, texte blanc, bouclier-check ; `sm` (cartes), `md`, `lg` (fiche) ; uniquement si `verified` |
 | `Avatar` | Personne | Photo via `SafeImage` (lazy) sinon initiales colorées déterministes ; nom resté au numéro → silhouette ; `decorative` quand le nom est écrit à côté |
@@ -151,13 +151,21 @@ Les `display-*` embarquent leur interlignage et leur approche (tokens).
 | `StatusPill` | État (demande, intervention, document) | Tonalités `neutral`, `info`, `success`, `warning`, `danger` ; le texte porte le sens |
 | `Switch` | On / off | `role="switch"` ; `tone="on-dark"` sur le bandeau Pro |
 | `Sheet` | Panneau modal | `role="dialog"`, focus piégé puis restitué, Échap, voile ; contenu monté à l'ouverture |
-| `EmptyState`, `ErrorState`, `Skeleton`, `Spinner` / `PageLoader`, `ComingSoon` | États | Chaque écran branché gère chargement (squelette à la forme du contenu), erreur (avec « Réessayer ») et vide (avec une suite) |
+| `EmptyState`, `ErrorState`, `Skeleton`, `Spinner` / `PageLoader` | États | Chaque écran branché gère chargement (squelette à la forme du contenu), erreur (avec « Réessayer ») et vide (avec une suite) |
 | `Logo` | Marque | Typographique ; `variant="pro"`, `tone="on-dark"` |
 | `SafeImage` | Toute image | Repli local si l'URL casse ; `loading="lazy"` par défaut (`eager` pour un héros) |
 
 Composants métier partagés : `ArtisanCard` (accueil, recherche, résultats
 IA — identique partout), `InterventionCard` (client et artisan),
 `QuoteRequestSheet`, `VerificationStatusBanner`, `IdentityCard`.
+
+Messagerie (`src/features/messages/components/`) : `MessageBubble` (mes
+messages à droite sur fond `primary-emerald`, ceux de l'autre à gauche sur
+surface claire, heure discrète), `PendingBubble` (message
+optimiste : « Envoi… », puis en échec la raison avec « Réessayer » /
+« Supprimer »), `MaskedNotice` (avertissement de masquage), `AttachmentImage`
+(photo chargée avec authentification, jamais par URL publique),
+`MessageComposer` (champ multiligne, photo, `IconButton tone="brand"`).
 
 ### Règle des classes
 
@@ -195,6 +203,14 @@ dépendrait de l'ordre du CSS généré).
   affiché nulle part ; le contact passe par « Message » et « Demander un
   devis ». Un nom resté au numéro (compte hérité) n'est jamais affiché comme
   un nom (`lib/identity.ts`).
+- **Messagerie, transparence d'abord** : la liste rappelle que numéros et
+  e-mails sont masqués automatiquement et que les photos ne sont visibles
+  que des deux participants ; un message masqué le dit aux deux parties
+  (jamais de masquage silencieux). Connexion temps réel perdue : une ligne
+  discrète (`role="status"`, « quelques secondes de délai »), jamais une
+  alerte — l'envoi continue de fonctionner. Badge de non-lus : pastille or
+  sur l'icône « Messages » des deux navigations, nombre exact annoncé dans
+  le nom du lien (« Messages, 3 non lus »).
 
 ---
 

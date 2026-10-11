@@ -499,6 +499,74 @@ concernés :
   l'espace admin en conditions réelles (aucun compte admin local utilisé
   pour les captures).
 
+## Mise à jour — `feat/messagerie`
+
+Messagerie in-app client ↔ artisan, temps réel avec repli automatique,
+référence : [BUILD_PLAN.md §3.4](BUILD_PLAN.md). Points de cet audit
+concernés :
+
+- **§1, `/messages/:conversationId` placeholder : close.** `ComingSoon`
+  supprimé (preuve grep : plus aucun usage). `/messages` liste les
+  discussions triées par activité, `/messages/:id` affiche le fil ; les deux
+  routes exigent le rôle client ou artisan (l'admin en est exclu, côté front
+  comme côté API).
+- **§2, `GET|POST /conversations/{id}/messages` annoncés mais absents :
+  clos.** Liste, détail, historique `since`/`before`, envoi texte et photo,
+  lecture d'une photo, curseurs de lecture, compteur de non-lus, ticket et
+  canal WebSocket (`app/api/v1/conversations.py`, `realtime.py`).
+- **§4, tables `conversation`/`message` sans code : close.** Modèle complété
+  (`seq`, curseurs de lecture, `last_message_at`, masquage, pièce jointe,
+  contraintes), migration `c0a26cec109e` réversible (descente/remontée
+  vérifiées, `alembic check` sans dérive), conversation ouverte avec chaque
+  intervention.
+- **§5, « déblocage de contact après engagement » : tranché.** Les
+  coordonnées ne sont jamais débloquées : les échanges restent sur la
+  plateforme et tout numéro ou e-mail écrit dans un message est masqué avant
+  stockage, avec avertissement visible des deux parties (second étage de
+  l'anti-désintermédiation, après l'absence de numéro sur les fiches).
+- **Sécurité vérifiée par les tests** :
+  - isolation : un tiers reçoit le même `403 CONVERSATION_ACCES_INTERDIT`
+    qu'un fil inexistant, sur chaque route (lecture, envoi, photo, lecture
+    d'une photo, marquage lu) ; le WebSocket ne publie qu'aux deux
+    participants (test de diffusion avec un troisième compte connecté qui ne
+    reçoit rien) ;
+  - authentification WebSocket : sans ticket, ticket expiré, rejoué, falsifié,
+    access token à la place d'un ticket, compte supprimé, admin → poignée de
+    main refusée (`4401`) ; tests vérifiés par mutation (chaque contrôle
+    retiré fait échouer au moins un test) ;
+  - masquage : 18 formats de numéros sénégalais, numéros internationaux et
+    liens `wa.me`, e-mails, plusieurs numéros dans un message, et 13 textes
+    qui ne doivent PAS être masqués (montants, mesures, heures, dates) ;
+  - photos : réencodées (EXIF/GPS absents du fichier stocké), stockage
+    privé, `Cache-Control: private, no-store`, fichier supprimé si
+    l'enregistrement échoue.
+- **Fiabilité** : REST reste la source de vérité ; l'envoi ne dépend jamais
+  du WebSocket (test front dédié, transport `unavailable`). Repli polling
+  (5 s pour le fil, 30 s pour le badge) tant que le temps réel est
+  indisponible, rattrapage `since` à chaque reconnexion et retour au premier
+  plan, déduplication par identifiant (un message reçu à la fois par le
+  temps réel et par REST n'apparaît qu'une fois).
+- **Constaté pendant le lot, corrigé** :
+  - `test_artisans_list_endpoint.py` dépendait du contenu de la base locale
+    (seed) : désormais autonome (seed exécuté dans la transaction annulée du
+    test) ;
+  - tri par activité instable : `now()` renvoie l'heure de début de
+    transaction (égalités) → `clock_timestamp()` ;
+  - nom accessible du badge de navigation : annoncé « Messages, 3 non lus »
+    (et non « , 3 non lus Messages »).
+- **Vérification** : porte backend verte (`scripts/validate.py` : ruff,
+  mypy strict, pytest), porte front verte (`npm run validate`, 371 tests,
+  `npm run build`).
+- **Dette ouverte (documentée, BUILD_PLAN.md §3.4)** : diffusion temps réel
+  et registre des tickets en mémoire du processus, exacts en instance
+  unique ; **bus Redis pub/sub obligatoire avant de passer à plusieurs
+  instances backend**. Limites assumées du masquage : numéro épelé en
+  lettres, découpé sur plusieurs messages ou visible sur une photo (périmètre
+  de la détection NLP, Phase 3+).
+- **Reste hors périmètre** : notifications push (application fermée),
+  messages vocaux, suppression/édition d'un message, signalement d'un
+  message à la modération.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

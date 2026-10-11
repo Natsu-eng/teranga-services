@@ -151,6 +151,22 @@ uv run uvicorn app.main:app --reload --port 8000
 | `PROFILE_MEDIA_MAX_PIXELS` | Non (`50000000`) | Plafond largeur × hauteur d'une image envoyée, vérifié avant décodage (anti-bombe de décompression). |
 | `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_MAX` | Non (`20`) | Nombre max d'envois de photo (avatar + couverture, budget partagé) par utilisateur sur la fenêtre glissante. |
 | `RATE_LIMIT_PROFILE_MEDIA_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
+| `MESSAGING_BODY_MAX_LENGTH` | Non (`2000`) | Longueur maximale d'un message (caractères), légende de photo comprise. |
+| `MESSAGING_HISTORY_PAGE_SIZE_DEFAULT` | Non (`30`) | Messages renvoyés par défaut par `GET .../messages`. |
+| `MESSAGING_HISTORY_PAGE_SIZE_MAX` | Non (`100`) | Plafond de `limit` sur `GET .../messages`. |
+| `RATE_LIMIT_MESSAGE_SEND_PER_USER_MAX` | Non (`30`) | Nombre max de messages texte par utilisateur sur la fenêtre glissante. |
+| `RATE_LIMIT_MESSAGE_SEND_PER_USER_WINDOW_SECONDS` | Non (`60`) | Largeur de la fenêtre glissante (secondes). |
+| `MESSAGE_ATTACHMENT_STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Stockage PRIVÉ des photos de la messagerie. |
+| `MESSAGE_ATTACHMENT_STORAGE_LOCAL_DIR` | Non (`var/message-attachments`) | Répertoire privé (jamais servi en statique), relatif à `backend/` ou chemin absolu. |
+| `MESSAGE_ATTACHMENT_MAX_UPLOAD_BYTES` | Non (`10485760`) | Taille maximale d'une photo envoyée (octets, 10 Mo). |
+| `MESSAGE_ATTACHMENT_MAX_SIDE_PX` | Non (`1600`) | Côté le plus long de la photo stockée, après réencodage. |
+| `MESSAGE_ATTACHMENT_MAX_PIXELS` | Non (`50000000`) | Plafond largeur × hauteur vérifié avant décodage (anti-bombe de décompression). |
+| `RATE_LIMIT_MESSAGE_ATTACHMENT_PER_USER_MAX` | Non (`20`) | Nombre max de photos par utilisateur sur la fenêtre glissante. |
+| `RATE_LIMIT_MESSAGE_ATTACHMENT_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante (secondes). |
+| `WS_TICKET_TTL_SECONDS` | Non (`60`) | Durée de vie d'un ticket d'ouverture WebSocket (usage unique). |
+| `WS_HEARTBEAT_INTERVAL_SECONDS` | Non (`25`) | Intervalle des pings serveur sur le WebSocket. |
+| `WS_HEARTBEAT_TIMEOUT_SECONDS` | Non (`60`) | Connexion fermée (`4408`) sans signe du client pendant ce délai. |
+| `WS_MAX_CONNECTIONS_PER_USER` | Non (`5`) | Connexions simultanées par utilisateur ; au-delà, la plus ancienne est fermée (`4429`). |
 | `BACKEND_PUBLIC_BASE_URL` | Non (`http://localhost:8000`) | Origine publique du backend, préfixe des URL absolues d'avatar/couverture. **À renseigner en prod.** |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
@@ -298,6 +314,55 @@ non-admin -- jamais un message "accès refusé" ni une redirection vers
 `/connexion`, l'un comme l'autre confirmeraient l'existence de la section.
 Aucun lien vers `/admin/*` n'apparaît dans la navigation pour un compte
 non-admin.
+
+## Messagerie (temps réel)
+
+Une conversation par intervention, ouverte avec elle ; deux participants
+(le client et l'artisan), **admin exclu** (`403 ROLE_INSUFFISANT`). Un tiers
+reçoit le même `403 CONVERSATION_ACCES_INTERDIT` qu'un fil inexistant :
+l'existence d'une discussion n'est jamais révélée. Détail et décisions :
+[BUILD_PLAN.md §3.4](../BUILD_PLAN.md).
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/v1/conversations/me` | Mes discussions, triées par activité (`?page=&page_size=&artisan_id=`), dernier message et non-lus |
+| `GET /api/v1/conversations/me/unread-count` | Total de non-lus (badge de navigation) |
+| `GET /api/v1/conversations/{id}` | Contexte : interlocuteur, intervention, `can_send`, `my_last_read_seq` |
+| `GET /api/v1/conversations/{id}/messages` | Historique : `?since=<seq>` (nouveaux, rattrapage et polling) ou `?before=<seq>` (plus anciens), `&limit=` |
+| `POST /api/v1/conversations/{id}/messages` | `{ body }` → 201 ; vide refusé, 2 000 caractères max, coordonnées masquées |
+| `POST /api/v1/conversations/{id}/messages/image` | Multipart `file` (JPEG/PNG) + `caption` optionnelle → 201 |
+| `GET /api/v1/conversations/{id}/messages/{message_id}/attachment` | La photo, participants seuls, `Cache-Control: private, no-store` |
+| `POST /api/v1/conversations/{id}/read` | `{ last_read_seq }` ; le curseur ne recule jamais |
+| `POST /api/v1/realtime/ticket` | `{ ticket, expires_in }` : ticket WebSocket à usage unique (60 s) |
+| `WS /api/v1/realtime/ws` | Sous-protocoles `["teranga.v1", "ticket.<jwt>"]` |
+
+**REST est la source de vérité** : le WebSocket ne fait que notifier
+(`message.created`, `conversation.read`) après le commit. Sans WebSocket,
+rien n'est perdu : le front relit `?since=`.
+
+**WebSocket.** Le ticket est vérifié **avant** l'acceptation (signature,
+type `ws`, expiration, usage unique, compte non supprimé, rôle client ou
+artisan) ; refus = fermeture `4401`, la poignée de main échoue. Le serveur
+ne renvoie que `teranga.v1`. Ping serveur toutes les 25 s, le client peut
+envoyer `{"type": "ping"}` (réponse `pong`) ; fermeture `4408` sans signe du
+client en 60 s ; `4429` pour la connexion la plus ancienne au-delà de 5 par
+utilisateur. Un événement n'est publié qu'aux deux participants : aucun
+abonnement côté client.
+
+**Masquage** (`app/services/contact_masking.py`) : numéros sénégalais
+(70/75/76/77/78/33, avec ou sans indicatif, tous séparateurs courants),
+numéros internationaux et e-mails remplacés par `[numéro masqué]` /
+`[e-mail masqué]` **avant stockage** ; `contact_masked=true` sur le message.
+Montants, mesures, heures et dates ne sont jamais masqués
+(`tests/test_contact_masking.py`).
+
+**Photos** : réencodées (EXIF/GPS retirés, 1 600 px max), stockage privé à
+clé aléatoire, supprimées si l'enregistrement échoue.
+
+**Limite actuelle — instance unique.** Les connexions WebSocket et les
+tickets consommés sont en mémoire du processus : un bus partagé (Redis
+pub/sub) est **obligatoire avant** de lancer plusieurs instances du backend
+(BUILD_PLAN.md §3.4, « Dette multi-instance »).
 
 ## Triage IA (Lot 11)
 
