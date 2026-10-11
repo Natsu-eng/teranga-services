@@ -71,6 +71,10 @@ export default defineConfig(({ mode }) => {
       // Réécrit l'en-tête Host vers celui du backend (comportement de
       // l'ancien proxy Express, `changeOrigin: true`).
       changeOrigin: true,
+      // Relaie aussi les WebSockets (messagerie temps réel,
+      // /api/v1/realtime/ws) : sans ça, la poignée de main n'atteindrait
+      // jamais FastAPI et le front resterait en repli polling.
+      ws: true,
     },
   };
 
