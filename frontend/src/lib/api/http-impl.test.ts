@@ -1162,4 +1162,127 @@ describe('httpApiClient', () => {
       });
     });
   });
+
+  describe('messagerie', () => {
+    const backendMessage = {
+      id: 'm1',
+      conversation_id: 'c1',
+      seq: 42,
+      sender_id: 'u1',
+      body: 'Mon numéro : [numéro masqué]',
+      contact_masked: true,
+      has_attachment: false,
+      attachment_content_type: null,
+      created_at: '2026-10-11T10:00:00Z',
+    };
+
+    it('mappe un message (texte masqué, curseur seq)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, backendMessage));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const message = await httpApiClient.sendMessage!('c1', 'Mon numéro : 77 123 45 67');
+
+      expect(message).toEqual({
+        id: 'm1',
+        conversationId: 'c1',
+        seq: 42,
+        senderId: 'u1',
+        body: 'Mon numéro : [numéro masqué]',
+        contactMasked: true,
+        hasAttachment: false,
+        attachmentContentType: null,
+        createdAt: '2026-10-11T10:00:00Z',
+      });
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/conversations\/c1\/messages$/);
+      expect(JSON.parse(options.body as string)).toEqual({ body: 'Mon numéro : 77 123 45 67' });
+    });
+
+    it('relit les nouveaux messages avec le curseur since (repli polling)', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { items: [backendMessage], has_more: false }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const history = await httpApiClient.listMessages!('c1', { since: 41 });
+
+      expect(history.items.map((m) => m.seq)).toEqual([42]);
+      expect(history.hasMore).toBe(false);
+      expect(fetchMock.mock.calls[0][0]).toMatch(/\/conversations\/c1\/messages\?since=41$/);
+    });
+
+    it('envoie une image en multipart, jamais en JSON', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(201, { ...backendMessage, has_attachment: true, body: '' }),
+        );
+      vi.stubGlobal('fetch', fetchMock);
+      const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'photo.jpg', {
+        type: 'image/jpeg',
+      });
+
+      const message = await httpApiClient.sendImageMessage!('c1', file, 'La fuite');
+
+      expect(message.hasAttachment).toBe(true);
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/conversations\/c1\/messages\/image$/);
+      expect(options.body).toBeInstanceOf(FormData);
+      expect((options.body as FormData).get('caption')).toBe('La fuite');
+      expect((options.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+    });
+
+    it('mappe la liste des conversations et filtre par artisan', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          items: [
+            {
+              id: 'c1',
+              intervention_id: 'i1',
+              intervention_status: 'acceptee',
+              trade_label: 'Plomberie',
+              other_party: {
+                user_id: 'u2',
+                role: 'artisan',
+                display_name: 'Idrissa Fall',
+                avatar_url: null,
+                artisan_profile_id: 'a1',
+              },
+              last_message: {
+                body: 'Je passe demain',
+                from_me: false,
+                has_attachment: false,
+                created_at: '2026-10-11T10:00:00Z',
+              },
+              unread_count: 2,
+              last_activity_at: '2026-10-11T10:00:00Z',
+            },
+          ],
+          pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const [conversation] = await httpApiClient.listConversations!({ artisanId: 'a1' });
+
+      expect(conversation.otherParty.displayName).toBe('Idrissa Fall');
+      expect(conversation.unreadCount).toBe(2);
+      expect(conversation.lastMessage?.fromMe).toBe(false);
+      expect(fetchMock.mock.calls[0][0]).toContain('artisan_id=a1');
+    });
+
+    it('obtient un ticket temps réel par un appel authentifié', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { ticket: 'jeton', expires_in: 60 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const ticket = await httpApiClient.createRealtimeTicket!();
+
+      expect(ticket).toEqual({ ticket: 'jeton', expiresIn: 60 });
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/realtime\/ticket$/);
+      expect(options.method).toBe('POST');
+    });
+  });
 });

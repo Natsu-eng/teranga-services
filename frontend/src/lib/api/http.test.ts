@@ -41,6 +41,20 @@ describe('http client', () => {
     await expect(promise).rejects.toMatchObject({ code: 'not_found', message: 'Artisan introuvable.' });
   });
 
+  it('distingue un refus d’accès (403) d’une erreur de validation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(403, {
+          error: { code: 'CONVERSATION_ACCES_INTERDIT', message: 'Accès refusé.' },
+        }),
+      ),
+    );
+
+    const promise = apiRequest('/conversations/abc');
+    await expect(promise).rejects.toMatchObject({ code: 'forbidden', message: 'Accès refusé.' });
+  });
+
   it('maps a 4xx business error to the validation code', async () => {
     vi.stubGlobal(
       'fetch',

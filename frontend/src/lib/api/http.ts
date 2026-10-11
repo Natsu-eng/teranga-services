@@ -14,9 +14,10 @@ interface BackendErrorBody {
   error?: { code?: string; message?: string };
 }
 
-/** Backend statuses -> the four ApiErrorCode values screens already know how to render. */
+/** Statuts HTTP du backend -> codes ApiError que les écrans savent interpréter. */
 function errorCodeForStatus(status: number): ApiErrorCode {
   if (status === 404) return 'not_found';
+  if (status === 403) return 'forbidden';
   if (status >= 400 && status < 500) return 'validation';
   if (status >= 500) return 'network';
   return 'unknown';
