@@ -235,7 +235,14 @@ async def make_payment(
     channel: PaymentChannel = PaymentChannel.WAVE,
 ) -> Payment:
     payment = Payment(
-        intervention_id=intervention.id, amount_fcfa=amount_fcfa, channel=channel, status=status
+        intervention_id=intervention.id,
+        amount_fcfa=amount_fcfa,
+        channel=channel,
+        status=status,
+        # Un paiement en ligne a toujours un fournisseur, le cash jamais
+        # (CHECK `provider_iff_online_channel`).
+        provider=None if channel is PaymentChannel.CASH else "sandbox",
+        provider_ref=None if channel is PaymentChannel.CASH else f"sbx_test_{uuid.uuid4().hex}",
     )
     session.add(payment)
     await session.flush()

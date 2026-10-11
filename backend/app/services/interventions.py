@@ -25,14 +25,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.models.enums import ArtisanVerifiedStatus, InterventionStatus, Role, ServiceRequestStatus
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    InterventionCancellationKind,
+    InterventionStatus,
+    Role,
+    ServiceRequestStatus,
+)
 from app.models.intervention import Intervention
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories import interventions as interventions_repository
 from app.repositories import requests as requests_repository
 from app.repositories.requests import location_to_lat_lng
-from app.schemas.interventions import InterventionCreateIn, InterventionOut
+from app.schemas.interventions import CancellationOut, InterventionCreateIn, InterventionOut
 from app.schemas.pagination import Page
 from app.schemas.quotes import QuoteOut
 from app.schemas.reviews import ReviewOut
@@ -165,6 +171,36 @@ def ensure_is_client(intervention: Intervention, user: User) -> None:
         raise ActionReserveeAutrePartieError()
 
 
+def mark_cancelled(
+    intervention: Intervention,
+    *,
+    by: Role,
+    kind: InterventionCancellationKind,
+    reason: str | None,
+) -> None:
+    """Renseigne la clôture d'une intervention qui vient de passer `annulee`
+    (les quatre champs vont ensemble, CHECK `cancellation_fields_together`)."""
+    intervention.cancelled_at = datetime.now(UTC)
+    intervention.cancelled_by = by
+    intervention.cancellation_kind = kind
+    intervention.cancellation_reason = reason
+
+
+def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
+    if (
+        intervention.cancelled_at is None
+        or intervention.cancelled_by is None
+        or intervention.cancellation_kind is None
+    ):
+        return None
+    return CancellationOut(
+        kind=intervention.cancellation_kind,
+        by=intervention.cancelled_by,
+        reason=intervention.cancellation_reason,
+        at=intervention.cancelled_at,
+    )
+
+
 def to_intervention_out(intervention: Intervention) -> InterventionOut:
     """Assemble `InterventionOut` depuis une entité déjà chargée (avec
     `quote`/`review` eager-loadés) -- réutilisé par `app.services.quotes` et
@@ -180,7 +216,12 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
         agreed_amount_fcfa=intervention.agreed_amount_fcfa,
         scheduled_at=intervention.scheduled_at,
         completed_at=intervention.completed_at,
-        decline_reason=intervention.decline_reason,
+        cancellation=to_cancellation_out(intervention),
+        decline_reason=(
+            intervention.cancellation_reason
+            if intervention.cancellation_kind is InterventionCancellationKind.REFUS
+            else None
+        ),
         quote=QuoteOut.model_validate(intervention.quote) if intervention.quote else None,
         review=(
             ReviewOut(
@@ -338,7 +379,9 @@ async def decline_intervention(
     intervention = await get_intervention_or_404(session, intervention_id)
     ensure_is_artisan(intervention, artisan_user)
     transition_intervention(intervention, InterventionStatus.ANNULEE)
-    intervention.decline_reason = reason
+    mark_cancelled(
+        intervention, by=Role.ARTISAN, kind=InterventionCancellationKind.REFUS, reason=reason
+    )
     await requests_repository.set_status(
         session, intervention.service_request, ServiceRequestStatus.OUVERTE
     )

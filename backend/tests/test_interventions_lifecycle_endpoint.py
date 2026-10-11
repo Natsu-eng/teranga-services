@@ -113,6 +113,11 @@ async def test_artisan_declines_intervention_reopens_the_request(
     body = response.json()
     assert body["status"] == "annulee"
     assert body["decline_reason"] == "Indisponible cette semaine."
+    # Clôture explicite : un refus de l'artisan, avec son motif.
+    assert body["cancellation"]["kind"] == "refus"
+    assert body["cancellation"]["by"] == "artisan"
+    assert body["cancellation"]["reason"] == "Indisponible cette semaine."
+    assert body["cancellation"]["at"] is not None
 
     await db_session.refresh(request)
     assert request.status is ServiceRequestStatus.OUVERTE

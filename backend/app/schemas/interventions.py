@@ -10,7 +10,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import InterventionStatus
+from app.models.enums import InterventionCancellationKind, InterventionStatus, Role
 from app.schemas.quotes import QuoteOut
 from app.schemas.requests import ServiceRequestOut
 from app.schemas.reviews import ReviewOut
@@ -25,6 +25,15 @@ class InterventionDeclineIn(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class CancellationOut(BaseModel):
+    """Comment une intervention `annulee` a été close (BUILD_PLAN.md §3.5)."""
+
+    kind: InterventionCancellationKind
+    by: Role
+    reason: str | None
+    at: datetime
+
+
 class InterventionOut(BaseModel):
     id: uuid.UUID
     service_request: ServiceRequestOut
@@ -35,6 +44,10 @@ class InterventionOut(BaseModel):
     agreed_amount_fcfa: int | None
     scheduled_at: datetime | None
     completed_at: datetime | None
+    cancellation: CancellationOut | None = None
+    # Compatibilité : motif du refus par l'artisan (= `cancellation.reason`
+    # quand `cancellation.kind == "refus"`), conservé tant que des clients
+    # le lisent encore.
     decline_reason: str | None
     quote: QuoteOut | None
     review: ReviewOut | None

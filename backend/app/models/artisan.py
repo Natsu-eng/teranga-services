@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.models.enums import (
     ArtisanVerifiedStatus,
+    PayoutChannel,
     SubscriptionTier,
     VerificationDocType,
     VerificationStatus,
@@ -76,6 +77,12 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
     # par `app.services.reviews.recalculate_artisan_rating`, jamais saisi
     # directement (BUILD_PLAN.md §6, Lot 9).
     rating_avg: Mapped[Decimal | None] = mapped_column(Numeric(precision=3, scale=2))
+    # Moyen de versement choisi par l'artisan (BUILD_PLAN.md §3.5). Le numéro,
+    # lui, n'est jamais saisi : c'est toujours celui du compte, vérifié par
+    # OTP. NULL = réglage par défaut (PAYOUT_DEFAULT_CHANNEL).
+    payout_channel: Mapped[PayoutChannel | None] = mapped_column(
+        enum_column(PayoutChannel, "artisan_profile_payout_channel")
+    )
     review_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     user: Mapped["User"] = relationship(back_populates="artisan_profile")
