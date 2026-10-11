@@ -34,12 +34,14 @@ from app.schemas.artisans import (
     ProfileMediaConstraintsOut,
     VerificationDocumentOut,
 )
+from app.schemas.interventions import EngagementCheckOut
 from app.schemas.pagination import Page
 from app.schemas.reviews import ReviewOut
 from app.services import artisans as artisans_service
 from app.services import avatars as avatars_service
 from app.services import covers as covers_service
 from app.services import documents as documents_service
+from app.services import interventions as interventions_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
 from app.services.profile_media import discard_obsolete_media, media_constraints
@@ -294,6 +296,25 @@ async def get_artisan(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ArtisanDetailOut:
     return await artisans_service.get_artisan_detail(session, artisan_id, settings=settings)
+
+
+@router.get("/{artisan_id}/coverage", response_model=EngagementCheckOut)
+async def check_artisan_coverage(
+    artisan_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    trade: Annotated[str, Query(min_length=1, description="Code du métier")],
+    lat: Annotated[float, Query(ge=-90, le=90)],
+    lng: Annotated[float, Query(ge=-180, le=180)],
+) -> EngagementCheckOut:
+    """Cet artisan peut-il intervenir pour ce métier à ce lieu ? Même règle
+    que `POST /interventions` (vérifié, métier exercé, zone d'intervention),
+    en lecture seule : l'écran l'annonce avant que le client n'envoie quoi
+    que ce soit. Public comme la fiche et la recherche par proximité, qui
+    n'en révèlent pas moins."""
+    return await interventions_service.check_coverage(
+        session, artisan_id=artisan_id, trade_code=trade, lat=lat, lng=lng, settings=settings
+    )
 
 
 @router.get("/{artisan_id}/reviews", response_model=Page[ReviewOut])

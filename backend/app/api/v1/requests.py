@@ -15,8 +15,10 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_session
 from app.models.enums import Role
 from app.models.user import User
+from app.schemas.interventions import RequestEligibilityOut
 from app.schemas.pagination import Page
 from app.schemas.requests import ServiceRequestCreateIn, ServiceRequestOut
+from app.services import interventions as interventions_service
 from app.services import requests as requests_service
 
 router = APIRouter(prefix="/requests", tags=["requests"])
@@ -47,6 +49,21 @@ async def list_my_requests(
         page=page,
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
+    )
+
+
+@router.get("/me/eligibility", response_model=list[RequestEligibilityOut])
+async def list_my_request_eligibility(
+    artisan_id: Annotated[uuid.UUID, Query(description="Artisan à qui adresser une demande")],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> list[RequestEligibilityOut]:
+    """Pour chaque demande ouverte du client : cet artisan peut-il la
+    recevoir (métier, zone) ? Lecture seule -- l'envoi reste vérifié par
+    `POST /interventions`."""
+    return await interventions_service.list_request_eligibility(
+        session, client=client, artisan_id=artisan_id, settings=settings
     )
 
 

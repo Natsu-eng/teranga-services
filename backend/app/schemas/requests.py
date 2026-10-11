@@ -8,9 +8,10 @@ re-validés côté serveur par `app.services.requests` avant écriture.
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import ServiceRequestStatus, Urgency
+from app.models.request import LOCATION_LABEL_MAX_LENGTH
 from app.schemas.trades import TradeOut
 
 
@@ -29,11 +30,22 @@ class ServiceRequestCreateIn(BaseModel):
     description: str = Field(min_length=1, max_length=2000)
     photo_url: str | None = None
     location: LocationIn
+    # Lieu confirmé par le client (quartier choisi ou « Ma position
+    # actuelle ») : ce qu'il a VU avant d'envoyer, jamais deviné ici.
+    location_label: str | None = Field(default=None, max_length=LOCATION_LABEL_MAX_LENGTH)
     urgency: Urgency = Urgency.NORMAL
     # Issus du triage IA (POST /ai/analyze) -- optionnels, re-validés côté
     # serveur (app.services.requests), jamais persistés tels quels.
     ai_estimate_min_fcfa: int | None = None
     ai_estimate_max_fcfa: int | None = None
+
+    @field_validator("location_label")
+    @classmethod
+    def _clean_location_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        return cleaned or None
 
 
 class ServiceRequestOut(BaseModel):
@@ -43,6 +55,7 @@ class ServiceRequestOut(BaseModel):
     description: str
     photo_url: str | None
     location: LocationOut
+    location_label: str | None = None
     urgency: Urgency
     ai_estimate_min_fcfa: int | None
     ai_estimate_max_fcfa: int | None
