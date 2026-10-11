@@ -7,8 +7,9 @@ Plateforme sénégalaise de mise en relation entre particuliers et artisans qual
 - **Recherche & découverte** — recherche filtrée d'artisans par métier, note et disponibilité.
 - **Diagnostic assisté par IA** — description d'un problème analysée côté backend (`POST /api/v1/ai/analyze`, Mistral), avec repli automatique sur une heuristique par mots-clés au moindre incident (clé absente ou refusée, timeout, réponse non conforme).
 - **Messagerie & devis** — discussion client ↔ artisan en temps réel (WebSocket, repli automatique sur relecture REST), ouverte avec chaque mise en relation ; numéros et e-mails masqués automatiquement, photos réencodées sans métadonnées et visibles des deux seuls participants. Devis envoyés et acceptés depuis la mise en relation.
+- **Paiement sécurisé** — séquestre en ligne (Wave, Orange Money, carte) : le client paie le prix du devis sans frais ajoutés, Téranga conserve l'argent jusqu'à sa confirmation de fin des travaux, puis verse à l'artisan son net (commission de 10 % au taux figé, affichée des deux côtés) ; espèces enregistrées ; annulation remboursée, litige arbitré. Fournisseur interchangeable (sandbox en dev).
 - **Tableau de bord artisan** — suivi des revenus, des demandes entrantes et des indicateurs de performance.
-- **Profils** — fiches artisan détaillées (photo de profil et de couverture envoyées par l'artisan, avis, réalisations, statistiques) et profil client avec moyens de paiement locaux (Wave, Orange Money, carte).
+- **Profils** — fiches artisan détaillées (photo de profil et de couverture envoyées par l'artisan, avis, réalisations, statistiques) et profil client (historique des paiements).
 - **Onboarding & vérification artisan** — profil, métiers, photos et documents de vérification (CNI, selfie) en un seul parcours, revus par un espace admin dédié.
 
 ## Topologie

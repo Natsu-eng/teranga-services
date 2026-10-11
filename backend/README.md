@@ -167,6 +167,19 @@ uv run uvicorn app.main:app --reload --port 8000
 | `WS_HEARTBEAT_INTERVAL_SECONDS` | Non (`25`) | Intervalle des pings serveur sur le WebSocket. |
 | `WS_HEARTBEAT_TIMEOUT_SECONDS` | Non (`60`) | Connexion fermée (`4408`) sans signe du client pendant ce délai. |
 | `WS_MAX_CONNECTIONS_PER_USER` | Non (`5`) | Connexions simultanées par utilisateur ; au-delà, la plus ancienne est fermée (`4429`). |
+| `COMMISSION_ROUNDING` | Non (`floor`) | Arrondi de la commission : `floor` (en faveur de l'artisan), `half_up`, `ceil`. Sans effet sur les commissions déjà enregistrées. |
+| `PAYMENT_PROVIDER` | Non (`sandbox`) | `sandbox` (contrat d'agrégateur simulé, interdit en prod) \| `disabled` (espèces seules). Point de bascule vers un agrégateur réel. |
+| `PAYMENT_WEBHOOK_SECRET` | Hors dev | Secret HMAC des webhooks (32 caractères min.) ; en dev avec le sandbox, dérivé de `JWT_SECRET` s'il est vide. |
+| `PAYMENT_WEBHOOK_TOLERANCE_SECONDS` | Non (`300`) | Écart maximal entre l'horodatage signé d'un webhook et l'horloge serveur. |
+| `PAYMENT_WEBHOOK_MAX_BODY_BYTES` | Non (`65536`) | Taille maximale du corps d'un webhook. |
+| `PAYMENT_CHECKOUT_TTL_SECONDS` | Non (`1800`) | Validité d'une page de paiement. |
+| `PAYMENT_ONLINE_CHANNELS` | Non (`wave,orange_money,carte`) | Moyens en ligne proposés. |
+| `PAYMENT_CASH_ENABLED` | Non (`true`) | Espèces enregistrables. |
+| `PAYMENT_PROVIDER_TIMEOUT_SECONDS` | Non (`10`) | Délai maximal d'un appel au fournisseur. |
+| `PAYOUT_DEFAULT_CHANNEL` / `PAYOUT_ALLOWED_CHANNELS` | Non (`wave` / `wave,orange_money`) | Moyen de versement par défaut et moyens choisissables par l'artisan. |
+| `RATE_LIMIT_PAYMENT_INIT_PER_USER_MAX` / `..._WINDOW_SECONDS` | Non (`10` / `600`) | Tentatives de paiement par utilisateur. |
+| `FRONTEND_PUBLIC_BASE_URL` | Non (`http://localhost:3000`) | Origine du front pour les pages de retour après paiement. **À renseigner en prod.** |
+| `SANDBOX_WEBHOOK_URL` | Non (vide) | Sandbox : cible des webhooks simulés (défaut : ce backend). |
 | `BACKEND_PUBLIC_BASE_URL` | Non (`http://localhost:8000`) | Origine publique du backend, préfixe des URL absolues d'avatar/couverture. **À renseigner en prod.** |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
@@ -363,6 +376,48 @@ clé aléatoire, supprimées si l'enregistrement échoue.
 tickets consommés sont en mémoire du processus : un bus partagé (Redis
 pub/sub) est **obligatoire avant** de lancer plusieurs instances du backend
 (BUILD_PLAN.md §3.4, « Dette multi-instance »).
+
+## Paiements (séquestre, espèces, versements)
+
+Détail et décisions : [BUILD_PLAN.md §3.5](../BUILD_PLAN.md).
+
+| Route | Rôle |
+| --- | --- |
+| `GET /api/v1/payments/options` | Moyens réellement proposés (client) |
+| `POST /api/v1/payments/init` | `{ intervention_id, channel }` (client propriétaire) : montant du devis accepté, jamais reçu ; en ligne -> `checkout_url`, `cash` -> enregistré |
+| `GET /api/v1/payments/me` | Paiements du client |
+| `GET /api/v1/payments/me/earnings` | Gains de l'artisan : versé, séquestre, commissions, espèces, commission due, détail |
+| `GET\|PUT /api/v1/payments/me/payout-settings` | Moyen de versement (artisan) ; destination = numéro vérifié du compte |
+| `POST /api/v1/webhooks/payments` | Public, signé HMAC, idempotent par event id |
+| `POST /api/v1/interventions/{id}/cancel` | Annulation (remboursement si fonds retenus) |
+| `POST /api/v1/interventions/{id}/dispute` | Litige : gèle l'argent |
+| `GET /api/v1/admin/disputes`, `POST .../{id}/resolve` | Arbitrage admin (`libere` \| `rembourse`) |
+
+**Montants** : entiers de FCFA, commission = `montant × taux_bps // 10 000`
+(arrondi vers le bas, en faveur de l'artisan) sur le taux **figé** de
+l'intervention ; net = montant − commission.
+
+**Séquestre** : payé -> `retenu` (webhook) -> `libere` à la complétion
+confirmée par le client, versement du net envoyé après le commit ;
+annulation ou arbitrage pour le client -> `rembourse`, ni versement ni
+commission. **Espèces** : `reussi`, commission `due` par l'artisan
+(recouvrement hors périmètre).
+
+**Sandbox** (`PAYMENT_PROVIDER=sandbox`, défaut en dev) : `POST
+/payments/init` renvoie une page de paiement servie par ce backend
+(`/api/v1/sandbox/checkout/...`) ; « Payer » ou « Simuler un échec » livre
+une notification signée au webhook par HTTP (cible : `SANDBOX_WEBHOOK_URL`
+ou ce backend), puis renvoie vers le front. Case « Livrer la notification
+deux fois » : vérification manuelle de l'idempotence.
+
+**Versements en échec** : relancés par
+
+```bash
+uv run python scripts/dispatch_payouts.py            # --limit 50 pour borner
+```
+
+(clé d'idempotence `payout-<id>`, jamais de double versement ; code de
+sortie non nul s'il reste des échecs).
 
 ## Triage IA (Lot 11)
 

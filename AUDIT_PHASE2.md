@@ -567,6 +567,56 @@ concernés :
   messages vocaux, suppression/édition d'un message, signalement d'un
   message à la modération.
 
+## Mise à jour — `feat/paiements`
+
+Moteur de paiement complet, référence : [BUILD_PLAN.md §3.5](BUILD_PLAN.md).
+Points de cet audit concernés :
+
+- **§2, `POST /payments/init` et webhook annoncés mais absents : clos.**
+  Initiation (montant toujours serveur), webhook signé et idempotent,
+  consultation (client, artisan, admin), annulation, litige et arbitrage.
+- **§4, tables `payment`/`platform_fee`/`payout` sans code : close.**
+  Alimentées et contraintes en base (un paiement vivant, une commission, un
+  versement par intervention ; cash sans fournisseur) ; `payment_event`
+  remplace `wave_event_id` ; migration `b25862fcd340` réversible.
+- **§5, paiement / anti-désintermédiation : livré.** Séquestre en ligne
+  (le client est protégé, l'artisan payé à la confirmation), espèces
+  enregistrées avec commission `due` (la fuite est mesurée), versement
+  toujours vers le numéro vérifié du compte artisan.
+- **Sécurité et fiabilité vérifiées par les tests** :
+  - montant jamais pris du client (champ envoyé ignoré), commission sur le
+    taux figé même après un changement de taux ;
+  - webhook : signature forgée, autre secret, corps modifié, horodatage
+    trop ancien -> 401 sans écriture ; rejeu -> `deja_traite`, un seul
+    versement même rejoué après la complétion ; idempotence prouvée par
+    mutation (deux défenses : event id unique, machine à états) ;
+  - isolation financière : un tiers (client ou artisan) reçoit 403 sans
+    aucun montant ; seul le client paie ; seul l'admin tranche ;
+  - pannes du fournisseur : checkout -> 502 sans trace ; remboursement ->
+    502, rien ne change ; versement -> complétion acceptée, versement
+    `echoue` puis relancé une seule fois ;
+  - paiement tardif d'une page abandonnée -> remboursé automatiquement.
+- **Constaté pendant le lot, corrigé** :
+  - **`.env.example` empêchait le démarrage** : `RATE_LIMIT_BACKEND=` (vide,
+    « recommandé ») était rejeté par la configuration ; une valeur vide
+    signifie désormais « choix automatique » (test : `.env.example` copié tel
+    quel est une configuration valide) ;
+  - le refus de l'artisan (`decline_reason`) ne savait pas décrire les
+    autres clôtures : remplacé par `cancellation` (refus, annulation,
+    arbitrage ; par qui ; motif), données existantes reprises ;
+  - pendant un litige, rien n'empêchait le client de confirmer seul la fin
+    des travaux (la transition `litige -> terminee` existe pour
+    l'arbitrage) : la complétion exige désormais `en_cours` (trouvé par un
+    test) ;
+  - tuile « Revenus » du tableau de bord Pro ambiguë : « Chiffre
+    d'affaires », montants payés avant commission.
+- **Vérification** : porte backend verte (ruff, ruff format, mypy strict,
+  pytest), porte front verte (`npm run validate`, `npm run build`).
+- **Reste hors périmètre (documenté)** : agrégateur réel (point de bascule
+  unique, §3.5), recouvrement des commissions dues en espèces,
+  planification des relances de versement, libération automatique après
+  délai, abonnement « Vérifié ».
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

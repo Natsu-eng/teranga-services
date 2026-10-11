@@ -159,6 +159,14 @@ Composants métier partagés : `ArtisanCard` (accueil, recherche, résultats
 IA — identique partout), `InterventionCard` (client et artisan),
 `QuoteRequestSheet`, `VerificationStatusBanner`, `IdentityCard`.
 
+Paiements (`src/features/payments/`) : `MoneyBreakdown` (les montants
+selon la partie — client : « Total à payer » et « aucun frais ajouté » ;
+artisan : prix, commission avec son taux, « Vous recevez »), `PaymentPanel`
+(volet « Paiement » de la carte d'intervention : pastille d'état, montants,
+explication datée, action payer/reprendre). Choix d'un moyen de paiement
+ou de versement : cartes-radio (`fieldset`/`legend`, `input type="radio"`)
+comme `QuoteRequestSheet`, jamais une liste déroulante.
+
 Messagerie (`src/features/messages/components/`) : `MessageBubble` (mes
 messages à droite sur fond `primary-emerald`, ceux de l'autre à gauche sur
 surface claire, heure discrète), `PendingBubble` (message
@@ -203,6 +211,15 @@ dépendrait de l'ordre du CSS généré).
   affiché nulle part ; le contact passe par « Message » et « Demander un
   devis ». Un nom resté au numéro (compte hérité) n'est jamais affiché comme
   un nom (`lib/identity.ts`).
+- **Argent, transparence d'abord** : jamais un montant sans dire ce qu'il
+  est. Le client lit « Total à payer » (le prix du devis, sans frais
+  ajoutés) et sait que la commission de Téranga, nommée avec son taux, est
+  prise sur la part de l'artisan ; l'artisan lit le prix, la commission
+  (montant et taux figé, « estimée » tant qu'elle n'est pas enregistrée) et
+  « Vous recevez ». Chaque état de paiement a une phrase qui dit ce qui se
+  passe et quand (séquestre, versement, remboursement), formulée pour la
+  partie qui lit. Les espèces sont proposées avec leur conséquence (« sans
+  protection du séquestre »). Aucun montant n'est calculé par le front.
 - **Messagerie, transparence d'abord** : la liste rappelle que numéros et
   e-mails sont masqués automatiquement et que les photos ne sont visibles
   que des deux participants ; un message masqué le dit aux deux parties
