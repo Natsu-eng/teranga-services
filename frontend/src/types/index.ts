@@ -108,6 +108,70 @@ export interface Quote {
   createdAt: string;
 }
 
+/*
+ * Paiements (BUILD_PLAN.md §3.5). Montants en FCFA ENTIERS, taux en points
+ * de base (1 000 = 10 %) : le front n'en calcule aucun, il affiche ceux du
+ * serveur.
+ */
+export type PaymentChannel = 'wave' | 'orange_money' | 'free_money' | 'carte' | 'cash';
+
+/**
+ * En ligne (séquestre) : en_attente -> retenu -> libere | rembourse ;
+ * checkout abandonné : echoue | annule. Espèces : reussi (réglé
+ * directement à l'artisan) ou annule.
+ */
+export type PaymentStatus =
+  'en_attente' | 'retenu' | 'libere' | 'reussi' | 'echoue' | 'annule' | 'rembourse';
+
+export type PlatformFeeStatus = 'due' | 'collectee' | 'annulee';
+export type PayoutChannel = 'wave' | 'orange_money' | 'bank';
+export type PayoutStatus = 'en_attente' | 'envoye' | 'echoue';
+
+export interface PaymentSummary {
+  /** Prix du devis accepté : ce que paie le client, sans frais ajoutés. */
+  amountFcfa: number;
+  commission: {
+    rateBps: number;
+    amountFcfa: number;
+    /** `null` : pas encore enregistrée (estimation sur le taux figé). */
+    status: PlatformFeeStatus | null;
+  };
+  /** Ce que touche l'artisan : montant − commission. */
+  netFcfa: number;
+  /** `null` : aucun paiement initié. */
+  status: PaymentStatus | null;
+  channel: PaymentChannel | null;
+  checkoutUrl: string | null;
+  checkoutExpiresAt: string | null;
+  paidAt: string | null;
+  releasedAt: string | null;
+  refundedAt: string | null;
+  payout: {
+    status: PayoutStatus;
+    amountFcfa: number;
+    channel: PayoutChannel;
+    sentAt: string | null;
+  } | null;
+}
+
+export type CancellationKind = 'refus' | 'annulation' | 'arbitrage';
+
+export interface Cancellation {
+  kind: CancellationKind;
+  by: UserRole | 'admin';
+  reason: string | null;
+  at: string;
+}
+
+export interface Dispute {
+  openedBy: UserRole | 'admin';
+  reason: string;
+  openedAt: string;
+  outcome: 'libere' | 'rembourse' | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+}
+
 export interface Intervention {
   id: string;
   serviceRequest: ServiceRequest;
@@ -118,12 +182,68 @@ export interface Intervention {
   agreedAmountFcfa: number | null;
   scheduledAt: string | null;
   completedAt: string | null;
-  declineReason: string | null;
+  /** Comment une intervention `annulee` a été close (refus, annulation, arbitrage). */
+  cancellation: Cancellation | null;
   quote: Quote | null;
   review: Review | null;
   /** Fil de discussion client ↔ artisan, ouvert avec l'intervention (messagerie). */
   conversationId: string | null;
+  /** Volet financier, dès qu'un devis est accepté (deux parties et admin seulement). */
+  payment: PaymentSummary | null;
+  dispute: Dispute | null;
   createdAt: string;
+}
+
+/** Moyens de paiement réellement proposés par le serveur. */
+export interface PaymentOptions {
+  onlineChannels: PaymentChannel[];
+  cashEnabled: boolean;
+  currency: string;
+}
+
+/** Un paiement dans l'historique du client. */
+export interface ClientPayment {
+  id: string;
+  interventionId: string;
+  tradeLabel: string;
+  artisanName: string;
+  amountFcfa: number;
+  channel: PaymentChannel;
+  status: PaymentStatus;
+  createdAt: string;
+  paidAt: string | null;
+  releasedAt: string | null;
+  refundedAt: string | null;
+}
+
+export interface EarningsTotals {
+  paidOutFcfa: number;
+  payoutPendingFcfa: number;
+  inEscrowFcfa: number;
+  commissionCollectedFcfa: number;
+  cashReceivedFcfa: number;
+  commissionDueFcfa: number;
+}
+
+export interface EarningItem {
+  interventionId: string;
+  tradeLabel: string;
+  clientName: string;
+  interventionStatus: InterventionStatus;
+  payment: PaymentSummary;
+}
+
+export interface ArtisanEarnings {
+  totals: EarningsTotals;
+  items: EarningItem[];
+}
+
+/** Où l'artisan reçoit ses versements : toujours le numéro vérifié du compte. */
+export interface PayoutSettings {
+  channel: PayoutChannel;
+  chosen: boolean;
+  allowedChannels: PayoutChannel[];
+  destinationPhone: string;
 }
 
 /**

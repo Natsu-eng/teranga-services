@@ -83,9 +83,25 @@ class PaymentChannel(StrEnum):
 
 
 class PaymentStatus(StrEnum):
+    """Cycle de vie d'un paiement (BUILD_PLAN.md §3.5).
+
+    En ligne (séquestre) : `en_attente` (checkout ouvert) -> `retenu` (fonds
+    reçus et RETENUS par Téranga) -> `libere` (versés à l'artisan à la
+    complétion) ou `rembourse` (rendus au client). Un checkout qui n'aboutit
+    pas finit `echoue` (refus/expiration chez le fournisseur) ou `annule`
+    (abandonné côté Téranga : annulation, changement de moyen de paiement).
+
+    Espèces : `reussi` dès la déclaration -- réglé directement à l'artisan,
+    Téranga ne détient jamais ces fonds -- ou `annule` si la mise en relation
+    est annulée.
+    """
+
     EN_ATTENTE = "en_attente"
+    RETENU = "retenu"
+    LIBERE = "libere"
     REUSSI = "reussi"
     ECHOUE = "echoue"
+    ANNULE = "annule"
     REMBOURSE = "rembourse"
 
 
@@ -111,6 +127,26 @@ class PayoutStatus(StrEnum):
     EN_ATTENTE = "en_attente"
     ENVOYE = "envoye"
     ECHOUE = "echoue"
+
+
+class InterventionCancellationKind(StrEnum):
+    """Pourquoi une intervention a fini `annulee`."""
+
+    # L'artisan a décliné la mise en relation avant de l'accepter.
+    REFUS = "refus"
+    # Une partie y a mis fin en cours de route (avant la complétion).
+    ANNULATION = "annulation"
+    # Un admin a tranché un litige en faveur du client (remboursement).
+    ARBITRAGE = "arbitrage"
+
+
+class DisputeOutcome(StrEnum):
+    """Décision d'un admin sur un litige (BUILD_PLAN.md §3.5)."""
+
+    # Les travaux sont reconnus faits : séquestre libéré à l'artisan.
+    LIBERE = "libere"
+    # Le client est remboursé, aucune commission.
+    REMBOURSE = "rembourse"
 
 
 class ReviewStatus(StrEnum):

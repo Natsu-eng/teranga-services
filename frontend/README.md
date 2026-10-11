@@ -131,6 +131,21 @@ En dev, le proxy Vite transmet aussi le WebSocket (`ws: true`). En
 production, la CSP de [vercel.json](vercel.json) autorise `connect-src`
 `https:` et `wss:`.
 
+## Paiements (`src/features/payments`)
+
+- **Le front n'envoie jamais de montant** : `initPayment(interventionId,
+  channel)` ; le serveur applique le prix du devis accepté. Aucun montant
+  n'est calculé côté front (total, commission, net viennent du serveur).
+- **Redirection vers le fournisseur** limitée aux URL `http(s)` absolues
+  ([externalNavigation.ts](src/lib/externalNavigation.ts)) — jamais un
+  `javascript:` ou un schéma inattendu, même renvoyé par le serveur.
+- **Retour du fournisseur** (`/paiement/:id?retour=succes|echec`) : la
+  confirmation arrivant par webhook, l'écran relit l'état toutes les 3 s
+  pendant 2 min au plus, puis l'annonce honnêtement.
+- **Transparence par rôle** (`MoneyBreakdown`) : le client voit « Total à
+  payer » et l'absence de frais ajoutés ; l'artisan voit prix, commission
+  (taux figé) et « Vous recevez ».
+
 ## Accès aux données (`src/lib/api`)
 
 `api` (index.ts) **est** `httpApiClient` : il implémente tout le contrat

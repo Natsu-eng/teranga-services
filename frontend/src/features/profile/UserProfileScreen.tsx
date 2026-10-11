@@ -7,8 +7,10 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  Receipt,
   Sparkles,
   UserRoundCog,
+  Wallet,
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
@@ -129,14 +131,19 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
             label="Devis et travaux"
             description="Devis des artisans à accepter, travaux en cours, avis à laisser."
           />
+          <MenuLink
+            to="/mes-paiements"
+            icon={Receipt}
+            label="Mes paiements"
+            description="Ce que vous avez payé, en séquestre ou remboursé."
+          />
         </ul>
       </Card>
     </section>
 
     {/*
-      Section volontairement informative : l'ancienne version proposait un
-      choix (Wave / OM / carte) qui n'était enregistré nulle part. Rien n'est
-      prétendu tant que le paiement en ligne n'existe pas.
+      Section informative : le moyen se choisit au moment de payer un devis
+      (écran de paiement), jamais enregistré à l'avance.
     */}
     <section aria-labelledby="paiement" className="space-y-3">
       <SectionHeader id="paiement" title="Moyens de paiement au Sénégal" />
@@ -170,10 +177,9 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
           </li>
         </ul>
         <p className="text-sm text-muted-foreground">
-          <StatusPill tone="neutral" className="mr-2">
-            Bientôt
-          </StatusPill>
-          Le paiement dans l&apos;application arrive prochainement.
+          Payez un devis accepté depuis le suivi de vos travaux, ou réglez l&apos;artisan en
+          espèces. En ligne, Téranga conserve votre argent et ne le verse à l&apos;artisan
+          qu&apos;après votre confirmation de fin des travaux.
         </p>
       </Card>
     </section>
@@ -188,7 +194,8 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
  * Profil d'un ARTISAN : orienté vers son activité. Statut de vérification,
  * accès au tableau de bord, à l'édition complète du profil Pro (photo,
  * présentation, métiers, tarifs, documents) et à sa fiche publique.
- * Aucun moyen de paiement client ici (sans objet pour un artisan).
+ * Aucun moyen de paiement client ici : l'artisan règle où il est payé
+ * (moyen de versement), dans ses gains.
  */
 const ArtisanProfile: React.FC<{
   name: string;
@@ -225,6 +232,12 @@ const ArtisanProfile: React.FC<{
               icon={LayoutDashboard}
               label="Tableau de bord"
               description="Disponibilité, demandes reçues, revenus."
+            />
+            <MenuLink
+              to="/pro/gains"
+              icon={Wallet}
+              label="Mes gains et versements"
+              description="Ce que vous touchez, commissions prélevées, moyen de versement."
             />
             <MenuLink
               to="/pro/onboarding"

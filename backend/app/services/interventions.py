@@ -13,34 +13,61 @@ le code, ici ou dans `app.services.quotes`/`app.services.reviews`.
 ```
 proposee --(artisan accepte)--> acceptee --(devis accepté)--> en_cours --(complétion)--> terminee
 proposee --(artisan refuse)--> annulee
+acceptee / en_cours --(annulation par une partie)--> annulee
+en_cours --(litige ouvert par une partie)--> litige --(arbitrage admin)--> terminee | annulee
 ```
 Toute autre transition est rejetée (`TRANSITION_INTERVENTION_INVALIDE`).
-`litige` n'a aucune transition entrante/sortante gérée dans ce lot.
+
+**Argent (BUILD_PLAN.md §3.5)** -- chaque transition qui clôt une
+intervention règle son volet financier dans la même transaction, sous
+verrou de la ligne (`get_by_id_for_update`) : complétion -> séquestre
+libéré et versement du net ; annulation ou arbitrage pour le client ->
+remboursement, ni versement ni commission. Un client ne peut pas annuler
+seul une intervention dont les fonds sont en séquestre : il ouvre un litige.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import AppError
-from app.models.enums import ArtisanVerifiedStatus, InterventionStatus, Role, ServiceRequestStatus
-from app.models.intervention import Intervention
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    DisputeOutcome,
+    InterventionCancellationKind,
+    InterventionStatus,
+    Role,
+    ServiceRequestStatus,
+)
+from app.models.intervention import Intervention, InterventionDispute
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories import interventions as interventions_repository
+from app.repositories import payments as payments_repository
 from app.repositories import requests as requests_repository
 from app.repositories.requests import location_to_lat_lng
-from app.schemas.interventions import InterventionCreateIn, InterventionOut
+from app.schemas.interventions import CancellationOut, InterventionCreateIn, InterventionOut
 from app.schemas.pagination import Page
+from app.schemas.payments import DisputeOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.reviews import ReviewOut
 from app.services import commission as commission_service
 from app.services import conversations as conversations_service
+from app.services import payments as payments_service
 from app.services import requests as requests_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
 from app.services.identity import public_display_name
+from app.services.intervention_errors import (
+    ActionReserveeAutrePartieError,
+    InterventionAccesInterditError,
+    InterventionIntrouvableError,
+    InterventionTransitionInvalideError,
+)
+from app.services.payment_providers.base import PaymentProvider
+from app.services.payment_summary import summarize as summarize_payment
 from app.services.verification import compute_verified_status
 
 # Transitions autorisées, par statut de départ (BUILD_PLAN.md §6 Lot 12b).
@@ -51,12 +78,46 @@ _ALLOWED_TRANSITIONS: dict[InterventionStatus, frozenset[InterventionStatus]] = 
     InterventionStatus.PROPOSEE: frozenset(
         {InterventionStatus.ACCEPTEE, InterventionStatus.ANNULEE}
     ),
-    InterventionStatus.ACCEPTEE: frozenset({InterventionStatus.EN_COURS}),
-    InterventionStatus.EN_COURS: frozenset({InterventionStatus.TERMINEE}),
+    InterventionStatus.ACCEPTEE: frozenset(
+        {InterventionStatus.EN_COURS, InterventionStatus.ANNULEE}
+    ),
+    InterventionStatus.EN_COURS: frozenset(
+        {InterventionStatus.TERMINEE, InterventionStatus.ANNULEE, InterventionStatus.LITIGE}
+    ),
     InterventionStatus.TERMINEE: frozenset(),
     InterventionStatus.ANNULEE: frozenset(),
-    InterventionStatus.LITIGE: frozenset(),
+    InterventionStatus.LITIGE: frozenset({InterventionStatus.TERMINEE, InterventionStatus.ANNULEE}),
 }
+
+# Qui peut annuler, et depuis quel statut. Le refus avant acceptation passe
+# par `decline_intervention` (artisan) ; après la complétion, plus rien.
+_CANCELLABLE_BY: dict[Role, frozenset[InterventionStatus]] = {
+    Role.CLIENT: frozenset(
+        {InterventionStatus.PROPOSEE, InterventionStatus.ACCEPTEE, InterventionStatus.EN_COURS}
+    ),
+    Role.ARTISAN: frozenset({InterventionStatus.ACCEPTEE, InterventionStatus.EN_COURS}),
+}
+
+
+class AnnulationFondsRetenusError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ANNULATION_FONDS_RETENUS",
+            message=(
+                "Votre paiement est en séquestre : signalez un problème, un conseiller "
+                "Téranga tranchera et vous serez remboursé si les travaux n'ont pas été faits."
+            ),
+            status_code=409,
+        )
+
+
+@dataclass(frozen=True)
+class SettledIntervention:
+    """Intervention après une transition qui peut déclencher un versement :
+    le versement est envoyé APRÈS le commit (`payout_id`)."""
+
+    intervention: InterventionOut
+    payout_id: uuid.UUID | None
 
 
 class DemandeAutruiInterditeError(AppError):
@@ -104,40 +165,6 @@ class ArtisanHorsZoneError(AppError):
         )
 
 
-class InterventionIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="INTERVENTION_NOT_FOUND", message="Intervention introuvable.", status_code=404
-        )
-
-
-class InterventionAccesInterditError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="INTERVENTION_ACCES_INTERDIT",
-            message="Vous n'avez pas accès à cette intervention.",
-            status_code=403,
-        )
-
-
-class InterventionTransitionInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="TRANSITION_INTERVENTION_INVALIDE",
-            message="Cette action n'est pas possible dans l'état actuel de l'intervention.",
-            status_code=409,
-        )
-
-
-class ActionReserveeAutrePartieError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ACTION_RESERVEE_AUTRE_PARTIE",
-            message="Cette action est réservée à l'autre partie de cette intervention.",
-            status_code=403,
-        )
-
-
 def transition_intervention(intervention: Intervention, to: InterventionStatus) -> None:
     """Seule porte d'entrée pour changer `intervention.status` (BUILD_PLAN.md
     §6 Lot 12b) : centralise les transitions légales, jamais un
@@ -165,6 +192,36 @@ def ensure_is_client(intervention: Intervention, user: User) -> None:
         raise ActionReserveeAutrePartieError()
 
 
+def mark_cancelled(
+    intervention: Intervention,
+    *,
+    by: Role,
+    kind: InterventionCancellationKind,
+    reason: str | None,
+) -> None:
+    """Renseigne la clôture d'une intervention qui vient de passer `annulee`
+    (les quatre champs vont ensemble, CHECK `cancellation_fields_together`)."""
+    intervention.cancelled_at = datetime.now(UTC)
+    intervention.cancelled_by = by
+    intervention.cancellation_kind = kind
+    intervention.cancellation_reason = reason
+
+
+def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
+    if (
+        intervention.cancelled_at is None
+        or intervention.cancelled_by is None
+        or intervention.cancellation_kind is None
+    ):
+        return None
+    return CancellationOut(
+        kind=intervention.cancellation_kind,
+        by=intervention.cancelled_by,
+        reason=intervention.cancellation_reason,
+        at=intervention.cancelled_at,
+    )
+
+
 def to_intervention_out(intervention: Intervention) -> InterventionOut:
     """Assemble `InterventionOut` depuis une entité déjà chargée (avec
     `quote`/`review` eager-loadés) -- réutilisé par `app.services.quotes` et
@@ -180,7 +237,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
         agreed_amount_fcfa=intervention.agreed_amount_fcfa,
         scheduled_at=intervention.scheduled_at,
         completed_at=intervention.completed_at,
-        decline_reason=intervention.decline_reason,
+        cancellation=to_cancellation_out(intervention),
         quote=QuoteOut.model_validate(intervention.quote) if intervention.quote else None,
         review=(
             ReviewOut(
@@ -194,6 +251,19 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
             else None
         ),
         conversation_id=(intervention.conversations[0].id if intervention.conversations else None),
+        payment=summarize_payment(intervention, rounding=get_settings().commission_rounding),
+        dispute=(
+            DisputeOut(
+                opened_by=intervention.dispute.opened_by_role,
+                reason=intervention.dispute.reason,
+                opened_at=intervention.dispute.created_at,
+                outcome=intervention.dispute.outcome,
+                resolved_at=intervention.dispute.resolved_at,
+                resolution_note=intervention.dispute.resolution_note,
+            )
+            if intervention.dispute is not None
+            else None
+        ),
         created_at=intervention.created_at,
     )
 
@@ -263,21 +333,34 @@ async def create_intervention(
 
 
 async def get_intervention_or_404(
-    session: AsyncSession, intervention_id: uuid.UUID
+    session: AsyncSession, intervention_id: uuid.UUID, *, fresh: bool = False
 ) -> Intervention:
-    intervention = await interventions_repository.get_by_id(session, intervention_id)
+    intervention = await interventions_repository.get_by_id(session, intervention_id, fresh=fresh)
     if intervention is None:
         raise InterventionIntrouvableError()
     return intervention
 
 
 async def get_intervention_for_user(
-    session: AsyncSession, *, intervention_id: uuid.UUID, user: User
+    session: AsyncSession, *, intervention_id: uuid.UUID, user: User, fresh: bool = False
 ) -> InterventionOut:
-    intervention = await get_intervention_or_404(session, intervention_id)
-    if intervention.client_id == user.id or intervention.artisan.user_id == user.id:
+    intervention = await get_intervention_or_404(session, intervention_id, fresh=fresh)
+    # Les deux parties, et l'admin (arbitrage) -- jamais un tiers : le volet
+    # financier voyage dans cette réponse (BUILD_PLAN.md §3.5).
+    if (
+        intervention.client_id == user.id
+        or intervention.artisan.user_id == user.id
+        or user.role is Role.ADMIN
+    ):
         return to_intervention_out(intervention)
     raise InterventionAccesInterditError()
+
+
+async def get_intervention_for_admin(
+    session: AsyncSession, *, intervention_id: uuid.UUID
+) -> InterventionOut:
+    """Vue admin (arbitrage d'un litige) : l'appelant a vérifié le rôle."""
+    return to_intervention_out(await get_intervention_or_404(session, intervention_id, fresh=True))
 
 
 async def list_my_interventions(
@@ -337,8 +420,14 @@ async def decline_intervention(
     """
     intervention = await get_intervention_or_404(session, intervention_id)
     ensure_is_artisan(intervention, artisan_user)
+    # Explicite : depuis `acceptee`, l'artisan annule (`cancel_intervention`),
+    # il ne « refuse » plus.
+    if intervention.status is not InterventionStatus.PROPOSEE:
+        raise InterventionTransitionInvalideError()
     transition_intervention(intervention, InterventionStatus.ANNULEE)
-    intervention.decline_reason = reason
+    mark_cancelled(
+        intervention, by=Role.ARTISAN, kind=InterventionCancellationKind.REFUS, reason=reason
+    )
     await requests_repository.set_status(
         session, intervention.service_request, ServiceRequestStatus.OUVERTE
     )
@@ -347,8 +436,12 @@ async def decline_intervention(
 
 
 async def complete_intervention(
-    session: AsyncSession, *, intervention_id: uuid.UUID, client_user: User
-) -> InterventionOut:
+    session: AsyncSession,
+    *,
+    intervention_id: uuid.UUID,
+    client_user: User,
+    settings: Settings,
+) -> SettledIntervention:
     """Confirme la complétion (`en_cours` -> `terminee`, BUILD_PLAN.md §6 Lot 12b).
 
     **Qui déclenche : le client, seul.** Un unique acteur plutôt qu'un
@@ -356,14 +449,173 @@ async def complete_intervention(
     exigerait un statut intermédiaire absent du modèle de données actuel,
     BUILD_PLAN.md §2.2) -- mais délibérément le client, jamais l'artisan :
     laisser l'artisan clôturer unilatéralement ouvrirait la porte à une
-    intervention marquée terminée (donc éligible à commission et à avis)
-    sans que le client n'ait rien confirmé. Le client est la seule partie
-    dont la confirmation ne crée aucun conflit d'intérêt vis-à-vis de la
-    transition qu'elle déclenche.
+    intervention marquée terminée (donc éligible à commission, à avis et
+    désormais au VERSEMENT du séquestre) sans que le client n'ait rien
+    confirmé. Le client est la seule partie dont la confirmation ne crée
+    aucun conflit d'intérêt vis-à-vis de la transition qu'elle déclenche.
+
+    Enchaînement financier (BUILD_PLAN.md §3.5) : séquestre libéré,
+    commission collectée, versement du net créé ici puis envoyé après le
+    commit par l'appelant (`SettledIntervention.payout_id`).
     """
-    intervention = await get_intervention_or_404(session, intervention_id)
+    intervention = await _get_for_update_or_404(session, intervention_id)
     ensure_is_client(intervention, client_user)
+    # Explicite : un litige ne se clôt que par l'arbitrage d'un admin
+    # (`resolve_dispute`), jamais par une confirmation unilatérale.
+    if intervention.status is not InterventionStatus.EN_COURS:
+        raise InterventionTransitionInvalideError()
     transition_intervention(intervention, InterventionStatus.TERMINEE)
     intervention.completed_at = datetime.now(UTC)
+    payout = payments_service.settle_on_completion(session, intervention, settings=settings)
+    await session.flush()
+    return SettledIntervention(
+        intervention=to_intervention_out(intervention),
+        payout_id=payout.id if payout is not None else None,
+    )
+
+
+async def _get_for_update_or_404(session: AsyncSession, intervention_id: uuid.UUID) -> Intervention:
+    intervention = await interventions_repository.get_by_id_for_update(session, intervention_id)
+    if intervention is None:
+        raise InterventionIntrouvableError()
+    return intervention
+
+
+def _party_role(intervention: Intervention, user: User) -> Role:
+    if intervention.client_id == user.id:
+        return Role.CLIENT
+    if intervention.artisan.user_id == user.id:
+        return Role.ARTISAN
+    raise InterventionAccesInterditError()
+
+
+async def cancel_intervention(
+    session: AsyncSession,
+    *,
+    intervention_id: uuid.UUID,
+    user: User,
+    reason: str | None,
+    settings: Settings,
+    provider: PaymentProvider | None,
+) -> InterventionOut:
+    """Une partie met fin à la mise en relation avant la complétion
+    (BUILD_PLAN.md §3.5).
+
+    - Le client : tant que ses fonds ne sont pas en séquestre. Une fois
+      payé en ligne, il ouvre un litige -- sinon il pourrait récupérer son
+      argent après des travaux réalisés.
+    - L'artisan : après avoir accepté ; s'il a été payé, le client est
+      remboursé (l'artisan renonce, aucun conflit d'intérêt).
+
+    Fonds retenus -> remboursés ; checkout ouvert ou espèces déclarées ->
+    annulés ; commission annulée. La demande redevient `ouverte` : le
+    client peut s'adresser à un autre artisan.
+    """
+    intervention = await _get_for_update_or_404(session, intervention_id)
+    role = _party_role(intervention, user)
+    if intervention.status not in _CANCELLABLE_BY[role]:
+        raise InterventionTransitionInvalideError()
+    if role is Role.CLIENT and payments_service.has_retained_funds(intervention):
+        raise AnnulationFondsRetenusError()
+
+    transition_intervention(intervention, InterventionStatus.ANNULEE)
+    mark_cancelled(
+        intervention, by=role, kind=InterventionCancellationKind.ANNULATION, reason=reason
+    )
+    await payments_service.settle_on_cancellation(
+        session, intervention, settings=settings, provider=provider
+    )
+    await requests_repository.set_status(
+        session, intervention.service_request, ServiceRequestStatus.OUVERTE
+    )
     await session.flush()
     return to_intervention_out(intervention)
+
+
+async def open_dispute(
+    session: AsyncSession, *, intervention_id: uuid.UUID, user: User, reason: str
+) -> InterventionOut:
+    """Une partie signale un problème sur des travaux en cours
+    (`en_cours` -> `litige`). L'argent est GELÉ tel quel -- ni versement ni
+    remboursement -- jusqu'à la décision d'un admin. C'est aussi le recours
+    de l'artisan quand un client ne confirme jamais la fin des travaux."""
+    intervention = await _get_for_update_or_404(session, intervention_id)
+    role = _party_role(intervention, user)
+    transition_intervention(intervention, InterventionStatus.LITIGE)
+    dispute = InterventionDispute(
+        intervention=intervention,
+        opened_by_id=user.id,
+        opened_by_role=role,
+        reason=reason,
+        created_at=datetime.now(UTC),
+    )
+    session.add(dispute)
+    await session.flush()
+    return to_intervention_out(intervention)
+
+
+async def resolve_dispute(
+    session: AsyncSession,
+    *,
+    intervention_id: uuid.UUID,
+    admin: User,
+    outcome: DisputeOutcome,
+    note: str,
+    settings: Settings,
+    provider: PaymentProvider | None,
+) -> SettledIntervention:
+    """Un admin tranche un litige (BUILD_PLAN.md §3.5) :
+
+    - `libere` : travaux reconnus faits -> `terminee`, même enchaînement
+      qu'une complétion (séquestre libéré, versement du net) ;
+    - `rembourse` : -> `annulee` (arbitrage), client remboursé, ni
+      versement ni commission.
+    """
+    intervention = await _get_for_update_or_404(session, intervention_id)
+    dispute = intervention.dispute
+    if intervention.status is not InterventionStatus.LITIGE or dispute is None:
+        raise InterventionTransitionInvalideError()
+
+    payout = None
+    if outcome is DisputeOutcome.LIBERE:
+        transition_intervention(intervention, InterventionStatus.TERMINEE)
+        intervention.completed_at = datetime.now(UTC)
+        payout = payments_service.settle_on_completion(session, intervention, settings=settings)
+    else:
+        transition_intervention(intervention, InterventionStatus.ANNULEE)
+        mark_cancelled(
+            intervention, by=Role.ADMIN, kind=InterventionCancellationKind.ARBITRAGE, reason=note
+        )
+        await payments_service.settle_on_cancellation(
+            session, intervention, settings=settings, provider=provider
+        )
+        await requests_repository.set_status(
+            session, intervention.service_request, ServiceRequestStatus.OUVERTE
+        )
+    dispute.outcome = outcome
+    dispute.resolved_by_id = admin.id
+    dispute.resolved_at = datetime.now(UTC)
+    dispute.resolution_note = note
+    await session.flush()
+    return SettledIntervention(
+        intervention=to_intervention_out(intervention),
+        payout_id=payout.id if payout is not None else None,
+    )
+
+
+async def list_disputes(
+    session: AsyncSession, *, resolved: bool, page: int, page_size: int, settings: Settings
+) -> Page[InterventionOut]:
+    """File des litiges pour l'admin : ouverts (premier ouvert, premier
+    tranché) ou déjà tranchés."""
+    if page > settings.pagination_max_page:
+        raise PageHorsBornesError()
+    resolved_page_size = min(page_size, settings.pagination_page_size_max)
+    offset = (page - 1) * resolved_page_size
+    ids = await payments_repository.list_disputed_intervention_ids(
+        session, resolved=resolved, limit=resolved_page_size, offset=offset
+    )
+    total = await payments_repository.count_disputes(session, resolved=resolved)
+    interventions = await interventions_repository.list_by_ids(session, ids)
+    items = [to_intervention_out(intervention) for intervention in interventions]
+    return Page.of(items, page=page, page_size=resolved_page_size, total=total)

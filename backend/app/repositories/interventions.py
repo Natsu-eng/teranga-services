@@ -44,6 +44,12 @@ def _eager_load(
         # Fil de discussion (identifiant exposé dans InterventionOut) : une
         # seule requête groupée pour toute la liste, jamais une par ligne.
         selectinload(Intervention.conversations),
+        # Paiements, commission, versement, litige : le résumé financier de
+        # chaque intervention (BUILD_PLAN.md §3.5), chargé par lots.
+        selectinload(Intervention.payments),
+        selectinload(Intervention.platform_fees),
+        selectinload(Intervention.payouts),
+        selectinload(Intervention.dispute),
     )
 
 
@@ -74,15 +80,57 @@ async def create_intervention(
         # Idem pour le fil de discussion : la conversation créée juste après
         # (même transaction) s'y ajoute en mémoire, sans lazy load.
         conversations=[],
+        # Volet financier vide à la création, lu sans requête (même raison).
+        payments=[],
+        platform_fees=[],
+        payouts=[],
+        dispute=None,
     )
     session.add(intervention)
     await session.flush()
     return intervention
 
 
-async def get_by_id(session: AsyncSession, intervention_id: uuid.UUID) -> Intervention | None:
+async def get_by_id(
+    session: AsyncSession, intervention_id: uuid.UUID, *, fresh: bool = False
+) -> Intervention | None:
+    """`fresh` : relit l'état en base même si l'intervention est déjà en
+    mémoire (après une écriture faite par une autre transaction)."""
     stmt = _eager_load(select(Intervention).where(Intervention.id == intervention_id))
+    if fresh:
+        stmt = stmt.execution_options(populate_existing=True)
     return (await session.execute(stmt)).unique().scalar_one_or_none()
+
+
+async def get_by_id_for_update(
+    session: AsyncSession, intervention_id: uuid.UUID
+) -> Intervention | None:
+    """Comme `get_by_id`, en verrouillant la ligne (`SELECT ... FOR UPDATE`)
+    jusqu'à la fin de la transaction : toute opération financière sur une
+    intervention (paiement, webhook, complétion, annulation, litige) passe
+    par ce verrou, donc s'exécute l'une après l'autre -- jamais deux
+    décisions concurrentes sur le même séquestre. `populate_existing` :
+    l'état relu sous verrou remplace celui déjà en mémoire."""
+    stmt = (
+        _eager_load(select(Intervention).where(Intervention.id == intervention_id))
+        .with_for_update(of=Intervention)
+        .execution_options(populate_existing=True)
+    )
+    return (await session.execute(stmt)).unique().scalar_one_or_none()
+
+
+async def list_by_ids(
+    session: AsyncSession, intervention_ids: list[uuid.UUID]
+) -> list[Intervention]:
+    """Les interventions demandées, dans l'ordre de `intervention_ids`, avec
+    leur client (nom affiché dans l'historique des gains)."""
+    if not intervention_ids:
+        return []
+    stmt = _eager_load(select(Intervention).where(Intervention.id.in_(intervention_ids))).options(
+        joinedload(Intervention.client)
+    )
+    found = {i.id: i for i in (await session.execute(stmt)).unique().scalars().all()}
+    return [found[i] for i in intervention_ids if i in found]
 
 
 async def list_for_client(

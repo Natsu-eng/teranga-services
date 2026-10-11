@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { InterventionCard } from './InterventionCard';
 import { api } from '../../lib/api';
 import type { Intervention, ServiceRequest } from '../../types';
+import { paymentFixture } from '../payments/paymentFixtures';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
@@ -18,6 +19,8 @@ vi.mock('../../lib/api', async (importOriginal) => {
       refuseQuote: vi.fn(),
       completeIntervention: vi.fn(),
       createReview: vi.fn(),
+      cancelIntervention: vi.fn(),
+      openDispute: vi.fn(),
     },
   };
 });
@@ -49,7 +52,9 @@ function interventionFixture(overrides: Partial<Intervention>): Intervention {
     agreedAmountFcfa: null,
     scheduledAt: null,
     completedAt: null,
-    declineReason: null,
+    cancellation: null,
+    payment: null,
+    dispute: null,
     quote: null,
     review: null,
     conversationId: null,
@@ -295,6 +300,170 @@ describe('InterventionCard', () => {
         'href',
         '/messages/fil-1',
       );
+    });
+  });
+
+  describe('paiement, annulation et litige', () => {
+    const inProgress = (payment = paymentFixture()) =>
+      interventionFixture({ status: 'en_cours', agreedAmountFcfa: 12_000, payment });
+
+    function renderCard(intervention: Intervention, role: 'client' | 'artisan') {
+      return render(
+        <MemoryRouter>
+          <InterventionCard intervention={intervention} role={role} onChanged={onChanged} />
+        </MemoryRouter>,
+      );
+    }
+
+    beforeEach(() => {
+      mockedApi.cancelIntervention.mockReset().mockResolvedValue(interventionFixture({}));
+      mockedApi.openDispute.mockReset().mockResolvedValue(interventionFixture({}));
+    });
+
+    it('invite le client à payer le devis accepté', () => {
+      renderCard(inProgress(), 'client');
+
+      expect(screen.getByRole('link', { name: 'Payer 12 000 FCFA' })).toHaveAttribute(
+        'href',
+        '/paiement/int-1',
+      );
+      expect(
+        screen.getByText(/Sans paiement en ligne, vous réglez l'artisan directement/),
+      ).toBeInTheDocument();
+    });
+
+    it("bloque la fin des travaux tant qu'un paiement en ligne est en cours", () => {
+      renderCard(
+        inProgress(
+          paymentFixture({ status: 'en_attente', channel: 'wave', checkoutUrl: 'https://x/c' }),
+        ),
+        'client',
+      );
+
+      expect(screen.getByRole('button', { name: 'Confirmer la fin des travaux' })).toBeDisabled();
+      expect(screen.getByText(/terminez-le avant de confirmer/)).toBeInTheDocument();
+    });
+
+    it('rappelle au client que confirmer la fin verse le séquestre', () => {
+      renderCard(inProgress(paymentFixture({ status: 'retenu', channel: 'wave' })), 'client');
+
+      expect(
+        screen.getByText(/Confirmer la fin des travaux verse le paiement/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirmer la fin des travaux' })).toBeEnabled();
+    });
+
+    it("ne laisse pas le client annuler seul une fois l'argent en séquestre, mais lui permet de signaler un problème", () => {
+      renderCard(inProgress(paymentFixture({ status: 'retenu', channel: 'wave' })), 'client');
+
+      expect(screen.queryByRole('button', { name: 'Annuler' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Signaler un problème' })).toBeInTheDocument();
+    });
+
+    it("l'artisan annule en sachant que le client sera remboursé", async () => {
+      renderCard(inProgress(paymentFixture({ status: 'retenu', channel: 'wave' })), 'artisan');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Annuler' }));
+      expect(screen.getByText(/client sera intégralement remboursé/)).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("Motif de l'annulation"), {
+        target: { value: 'Pièce introuvable.' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: "Confirmer l'annulation" }));
+
+      await waitFor(() =>
+        expect(mockedApi.cancelIntervention).toHaveBeenCalledWith('int-1', 'Pièce introuvable.'),
+      );
+      await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
+    });
+
+    it('un litige exige une description, puis est envoyé', async () => {
+      renderCard(inProgress(paymentFixture({ status: 'retenu', channel: 'wave' })), 'client');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Signaler un problème' }));
+      const send = screen.getByRole('button', { name: 'Envoyer le signalement' });
+      fireEvent.change(screen.getByLabelText('Description du problème'), {
+        target: { value: 'Trop court' },
+      });
+      expect(send).toBeEnabled();
+      fireEvent.change(screen.getByLabelText('Description du problème'), {
+        target: { value: 'Court' },
+      });
+      expect(send).toBeDisabled();
+      fireEvent.change(screen.getByLabelText('Description du problème'), {
+        target: { value: 'La fuite continue après les travaux.' },
+      });
+      fireEvent.click(send);
+
+      await waitFor(() =>
+        expect(mockedApi.openDispute).toHaveBeenCalledWith(
+          'int-1',
+          'La fuite continue après les travaux.',
+        ),
+      );
+    });
+
+    it("explique le litige en cours et le gel de l'argent", () => {
+      renderCard(
+        interventionFixture({
+          status: 'litige',
+          agreedAmountFcfa: 12_000,
+          payment: paymentFixture({ status: 'retenu', channel: 'wave' }),
+          dispute: {
+            openedBy: 'client',
+            reason: 'La fuite continue.',
+            openedAt: '2026-10-11T10:00:00Z',
+            outcome: null,
+            resolvedAt: null,
+            resolutionNote: null,
+          },
+        }),
+        'artisan',
+      );
+
+      expect(screen.getByText('Problème signalé par le client')).toBeInTheDocument();
+      expect(screen.getByText(/L'argent est gelé/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Annuler' })).not.toBeInTheDocument();
+    });
+
+    it("dit qui a annulé et comment l'argent a été rendu", () => {
+      renderCard(
+        interventionFixture({
+          status: 'annulee',
+          agreedAmountFcfa: 12_000,
+          cancellation: {
+            kind: 'annulation',
+            by: 'artisan',
+            reason: 'Pièce introuvable.',
+            at: '2026-10-11T10:00:00Z',
+          },
+          payment: paymentFixture({ status: 'rembourse', channel: 'wave' }),
+        }),
+        'client',
+      );
+
+      expect(
+        screen.getByText("L'artisan a annulé cette mise en relation. Motif : Pièce introuvable."),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Remboursé')).toBeInTheDocument();
+    });
+
+    it('annonce un arbitrage en faveur du client', () => {
+      renderCard(
+        interventionFixture({
+          status: 'annulee',
+          cancellation: {
+            kind: 'arbitrage',
+            by: 'admin',
+            reason: 'Non réalisé.',
+            at: '2026-10-11T10:00:00Z',
+          },
+        }),
+        'artisan',
+      );
+
+      expect(
+        screen.getByText(/Litige tranché par Téranga : le client a été remboursé/),
+      ).toBeInTheDocument();
     });
   });
 });

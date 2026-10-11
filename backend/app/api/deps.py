@@ -21,11 +21,14 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.security import TokenInvalideError, decode_token
 from app.db.session import get_session
 from app.models.enums import Role
 from app.models.user import User
+from app.services.payment_providers import build_payment_provider
+from app.services.payment_providers.base import PaymentProvider
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -87,3 +90,12 @@ def require_role(*roles: Role) -> Callable[[User], Awaitable[User]]:
         return user
 
     return _dependency
+
+
+def get_payment_provider(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PaymentProvider | None:
+    """Fournisseur de paiement actif (BUILD_PLAN.md §3.5), `None` si le
+    paiement en ligne est coupé. Surchargeable dans les tests (fournisseur
+    en panne, par exemple)."""
+    return build_payment_provider(settings)

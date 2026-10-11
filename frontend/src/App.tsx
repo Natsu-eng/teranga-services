@@ -27,6 +27,10 @@ import { ConversationScreen } from './features/messages/ConversationScreen';
 import { RealtimeProvider } from './features/messages/realtime/RealtimeProvider';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
+import { AdminDisputesScreen } from './features/admin/AdminDisputesScreen';
+import { PaymentScreen } from './features/payments/PaymentScreen';
+import { MyPaymentsScreen } from './features/payments/MyPaymentsScreen';
+import { EarningsScreen } from './features/payments/EarningsScreen';
 
 /*
  * Rôles autorisés par espace, alignés sur les gardes du backend
@@ -77,6 +81,14 @@ export function AppRoutes() {
                 </RequireAdminRoute>
               }
             />
+            <Route
+              path="admin/litiges"
+              element={
+                <RequireAdminRoute>
+                  <AdminDisputesScreen />
+                </RequireAdminRoute>
+              }
+            />
           </Route>
 
           <Route element={<SubPageLayout />}>
@@ -95,6 +107,31 @@ export function AppRoutes() {
               element={
                 <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
                   <InterventionsScreen />
+                </ProtectedRoute>
+              }
+            />
+            {/* Paiement d'une intervention (client) ; page de retour du fournisseur. */}
+            <Route
+              path="paiement/:interventionId"
+              element={
+                <ProtectedRoute roles={CLIENT_ONLY}>
+                  <PaymentScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="mes-paiements"
+              element={
+                <ProtectedRoute roles={CLIENT_ONLY}>
+                  <MyPaymentsScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="pro/gains"
+              element={
+                <ProtectedRoute roles={ARTISAN_ONLY}>
+                  <EarningsScreen />
                 </ProtectedRoute>
               }
             />

@@ -11,20 +11,25 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_role
+from app.api.deps import get_current_user, get_payment_provider, require_role
 from app.core.config import Settings, get_settings
-from app.db.session import get_session
+from app.db.session import SessionFactory, get_session, get_session_factory
 from app.models.enums import Role
 from app.models.user import User
 from app.schemas.interventions import InterventionCreateIn, InterventionDeclineIn, InterventionOut
 from app.schemas.pagination import Page
+from app.schemas.payments import DisputeOpenIn, InterventionCancelIn
 from app.schemas.quotes import QuoteCreateIn
 from app.schemas.reviews import ReviewCreateIn, ReviewOut
 from app.services import interventions as interventions_service
+from app.services import payments as payments_service
 from app.services import quotes as quotes_service
 from app.services import reviews as reviews_service
+from app.services.payment_providers.base import PaymentProvider
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
+
+ProviderDep = Annotated[PaymentProvider | None, Depends(get_payment_provider)]
 
 
 @router.post("", response_model=InterventionOut, status_code=status.HTTP_201_CREATED)
@@ -100,10 +105,60 @@ async def decline_intervention(
 async def complete_intervention(
     intervention_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
+    session_factory: Annotated[SessionFactory, Depends(get_session_factory)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    provider: ProviderDep,
     client: Annotated[User, Depends(require_role(Role.CLIENT))],
 ) -> InterventionOut:
     result = await interventions_service.complete_intervention(
-        session, intervention_id=intervention_id, client_user=client
+        session, intervention_id=intervention_id, client_user=client, settings=settings
+    )
+    await session.commit()
+    # Séquestre libéré et versement enregistrés : l'envoi au fournisseur se
+    # fait APRÈS le commit, dans sa propre transaction -- un fournisseur
+    # indisponible ne fait jamais échouer la confirmation du client.
+    if result.payout_id is not None:
+        await payments_service.dispatch_payout(
+            session_factory, result.payout_id, provider=provider, settings=settings
+        )
+        # Relecture fraîche : le versement a été mis à jour par une autre
+        # transaction.
+        return await interventions_service.get_intervention_for_user(
+            session, intervention_id=intervention_id, user=client, fresh=True
+        )
+    return result.intervention
+
+
+@router.post("/{intervention_id}/cancel", response_model=InterventionOut)
+async def cancel_intervention(
+    intervention_id: uuid.UUID,
+    payload: InterventionCancelIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    provider: ProviderDep,
+    user: Annotated[User, Depends(require_role(Role.CLIENT, Role.ARTISAN))],
+) -> InterventionOut:
+    result = await interventions_service.cancel_intervention(
+        session,
+        intervention_id=intervention_id,
+        user=user,
+        reason=payload.reason,
+        settings=settings,
+        provider=provider,
+    )
+    await session.commit()
+    return result
+
+
+@router.post("/{intervention_id}/dispute", response_model=InterventionOut)
+async def open_dispute(
+    intervention_id: uuid.UUID,
+    payload: DisputeOpenIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    user: Annotated[User, Depends(require_role(Role.CLIENT, Role.ARTISAN))],
+) -> InterventionOut:
+    result = await interventions_service.open_dispute(
+        session, intervention_id=intervention_id, user=user, reason=payload.reason
     )
     await session.commit()
     return result

@@ -966,7 +966,7 @@ describe('httpApiClient', () => {
       agreed_amount_fcfa: null,
       scheduled_at: null,
       completed_at: null,
-      decline_reason: null,
+      cancellation: null,
       quote: {
         id: 'q1',
         labor_fcfa: 15000,
@@ -1074,14 +1074,24 @@ describe('httpApiClient', () => {
           jsonResponse(200, {
             ...backendIntervention,
             status: 'annulee',
-            decline_reason: 'Trop loin.',
+            cancellation: {
+              kind: 'refus',
+              by: 'artisan',
+              reason: 'Trop loin.',
+              at: '2026-01-02T00:00:00Z',
+            },
           }),
         );
       vi.stubGlobal('fetch', fetchMock);
 
       const intervention = await httpApiClient.declineIntervention!('int-1', 'Trop loin.');
 
-      expect(intervention.declineReason).toBe('Trop loin.');
+      expect(intervention.cancellation).toEqual({
+        kind: 'refus',
+        by: 'artisan',
+        reason: 'Trop loin.',
+        at: '2026-01-02T00:00:00Z',
+      });
       const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/interventions/int-1/decline');
       expect(JSON.parse(options.body as string)).toEqual({ reason: 'Trop loin.' });
@@ -1283,6 +1293,240 @@ describe('httpApiClient', () => {
       const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toMatch(/\/realtime\/ticket$/);
       expect(options.method).toBe('POST');
+    });
+  });
+
+  describe('paiements', () => {
+    const backendIntervention = {
+      id: 'int-1',
+      service_request: {
+        id: 'req-1',
+        client_id: 'u1',
+        trade: { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+        description: 'Fuite sous l’évier.',
+        photo_url: null,
+        location: { lat: 14.6937, lng: -17.4441 },
+        urgency: 'normal',
+        ai_estimate_min_fcfa: null,
+        ai_estimate_max_fcfa: null,
+        status: 'en_relation',
+        created_at: '2026-01-01T00:00:00Z',
+      },
+      client_id: 'u1',
+      artisan_id: 'a1',
+      status: 'en_cours',
+      commission_rate_bps: 1000,
+      agreed_amount_fcfa: 12000,
+      scheduled_at: null,
+      completed_at: null,
+      cancellation: null,
+      quote: null,
+      review: null,
+      created_at: '2026-01-01T00:00:00Z',
+    };
+    const backendPayment = {
+      amount_fcfa: 12000,
+      commission: { rate_bps: 1000, amount_fcfa: 1200, status: 'due' },
+      net_fcfa: 10800,
+      status: 'en_attente',
+      channel: 'wave',
+      checkout_url: 'http://backend/api/v1/sandbox/checkout/jeton',
+      checkout_expires_at: '2026-10-11T10:30:00Z',
+      paid_at: null,
+      released_at: null,
+      refunded_at: null,
+      payout: null,
+    };
+
+    it("ouvre un paiement en n'envoyant QUE l'intervention et le moyen, jamais un montant", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, backendPayment));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const payment = await httpApiClient.initPayment!('int-1', 'wave');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/payments\/init$/);
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        intervention_id: 'int-1',
+        channel: 'wave',
+      });
+      expect(payment).toEqual({
+        amountFcfa: 12000,
+        commission: { rateBps: 1000, amountFcfa: 1200, status: 'due' },
+        netFcfa: 10800,
+        status: 'en_attente',
+        channel: 'wave',
+        checkoutUrl: 'http://backend/api/v1/sandbox/checkout/jeton',
+        checkoutExpiresAt: '2026-10-11T10:30:00Z',
+        paidAt: null,
+        releasedAt: null,
+        refundedAt: null,
+        payout: null,
+      });
+    });
+
+    it('lit les moyens de paiement proposés par le serveur', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            online_channels: ['wave', 'carte'],
+            cash_enabled: false,
+            currency: 'XOF',
+          }),
+        ),
+      );
+
+      expect(await httpApiClient.getPaymentOptions!()).toEqual({
+        onlineChannels: ['wave', 'carte'],
+        cashEnabled: false,
+        currency: 'XOF',
+      });
+    });
+
+    it('liste les paiements du client', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [
+              {
+                id: 'p1',
+                intervention_id: 'int-1',
+                trade_label: 'Plomberie',
+                artisan_name: 'Idrissa Fall',
+                amount_fcfa: 12000,
+                channel: 'cash',
+                status: 'reussi',
+                created_at: '2026-10-11T09:00:00Z',
+                paid_at: '2026-10-11T09:00:00Z',
+                released_at: null,
+                refunded_at: null,
+              },
+            ],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const [payment] = await httpApiClient.listMyPayments!();
+
+      expect(payment).toMatchObject({
+        id: 'p1',
+        interventionId: 'int-1',
+        artisanName: 'Idrissa Fall',
+        amountFcfa: 12000,
+        channel: 'cash',
+        status: 'reussi',
+      });
+    });
+
+    it("lit les gains de l'artisan, synthèse et détail", async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            totals: {
+              paid_out_fcfa: 10800,
+              payout_pending_fcfa: 0,
+              in_escrow_fcfa: 4500,
+              commission_collected_fcfa: 1200,
+              cash_received_fcfa: 20000,
+              commission_due_fcfa: 2000,
+            },
+            items: [
+              {
+                intervention_id: 'int-1',
+                trade_label: 'Plomberie',
+                client_name: 'Awa Diop',
+                intervention_status: 'terminee',
+                payment: { ...backendPayment, status: 'libere' },
+              },
+            ],
+            pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const earnings = await httpApiClient.getMyEarnings!();
+
+      expect(earnings.totals).toEqual({
+        paidOutFcfa: 10800,
+        payoutPendingFcfa: 0,
+        inEscrowFcfa: 4500,
+        commissionCollectedFcfa: 1200,
+        cashReceivedFcfa: 20000,
+        commissionDueFcfa: 2000,
+      });
+      expect(earnings.items[0]).toMatchObject({
+        clientName: 'Awa Diop',
+        payment: { netFcfa: 10800, status: 'libere' },
+      });
+    });
+
+    it('enregistre le moyen de versement sans jamais envoyer de numéro', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          channel: 'orange_money',
+          chosen: true,
+          allowed_channels: ['wave', 'orange_money'],
+          destination_phone: '+221770000001',
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const settings = await httpApiClient.updatePayoutSettings!('orange_money');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/payments\/me\/payout-settings$/);
+      expect(options.method).toBe('PUT');
+      expect(JSON.parse(options.body as string)).toEqual({ channel: 'orange_money' });
+      expect(settings.destinationPhone).toBe('+221770000001');
+    });
+
+    it('annule, ouvre un litige et lit le volet financier de l’intervention', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          ...backendIntervention,
+          status: 'litige',
+          payment: { ...backendPayment, status: 'retenu' },
+          dispute: {
+            opened_by: 'client',
+            reason: 'Travaux non terminés.',
+            opened_at: '2026-10-11T10:00:00Z',
+            outcome: null,
+            resolved_at: null,
+            resolution_note: null,
+          },
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const disputed = await httpApiClient.openDispute!('int-1', 'Travaux non terminés.');
+      await httpApiClient.cancelIntervention!('int-1', null);
+
+      expect(disputed.payment?.status).toBe('retenu');
+      expect(disputed.dispute).toMatchObject({ openedBy: 'client', outcome: null });
+      expect(fetchMock.mock.calls[0][0]).toMatch(/\/interventions\/int-1\/dispute$/);
+      expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({
+        reason: 'Travaux non terminés.',
+      });
+      expect(fetchMock.mock.calls[1][0]).toMatch(/\/interventions\/int-1\/cancel$/);
+    });
+
+    it("tranche un litige côté admin", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, backendIntervention));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.resolveDispute!('int-1', 'rembourse', 'Travaux non réalisés.');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/admin\/disputes\/int-1\/resolve$/);
+      expect(JSON.parse(options.body as string)).toEqual({
+        outcome: 'rembourse',
+        note: 'Travaux non réalisés.',
+      });
     });
   });
 });

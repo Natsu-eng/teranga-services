@@ -10,7 +10,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import InterventionStatus
+from app.models.enums import InterventionCancellationKind, InterventionStatus, Role
+from app.schemas.payments import DisputeOut, PaymentSummaryOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.requests import ServiceRequestOut
 from app.schemas.reviews import ReviewOut
@@ -25,6 +26,15 @@ class InterventionDeclineIn(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
+class CancellationOut(BaseModel):
+    """Comment une intervention `annulee` a été close (BUILD_PLAN.md §3.5)."""
+
+    kind: InterventionCancellationKind
+    by: Role
+    reason: str | None
+    at: datetime
+
+
 class InterventionOut(BaseModel):
     id: uuid.UUID
     service_request: ServiceRequestOut
@@ -35,11 +45,19 @@ class InterventionOut(BaseModel):
     agreed_amount_fcfa: int | None
     scheduled_at: datetime | None
     completed_at: datetime | None
-    decline_reason: str | None
+    # Clôture d'une intervention `annulee` : refus, annulation ou arbitrage,
+    # par qui et pourquoi (remplace l'ancien `decline_reason`).
+    cancellation: CancellationOut | None = None
     quote: QuoteOut | None
     review: ReviewOut | None
     # Fil de discussion client ↔ artisan rattaché à cette intervention
     # (messagerie). Nul seulement si l'intervention n'a pas de fil, ce que la
     # migration c0a26cec109e a rattrapé pour les interventions existantes.
     conversation_id: uuid.UUID | None = None
+    # Où en est l'argent (BUILD_PLAN.md §3.5) : total, commission au taux
+    # figé, net de l'artisan, statut du paiement et du versement. `None`
+    # tant qu'aucun devis n'est accepté. Visible des deux parties seulement
+    # (et de l'admin), comme toute l'intervention.
+    payment: PaymentSummaryOut | None = None
+    dispute: DisputeOut | None = None
     created_at: datetime

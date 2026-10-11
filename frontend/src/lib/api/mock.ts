@@ -13,6 +13,11 @@
 import { INITIAL_ARTISANS, ARTISAN_STATS_BY_ID } from '../../data/mockData';
 import type {
   AdminVerificationListItem,
+  ArtisanEarnings,
+  ClientPayment,
+  PaymentOptions,
+  PaymentSummary,
+  PayoutSettings,
   AdminVerificationReview,
   AIAnalysisResult,
   Artisan,
@@ -335,5 +340,79 @@ export const mockApiClient: ApiClient = {
   async rejectVerification(): Promise<AdminVerificationReview> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', 'Document introuvable.');
+  },
+
+  async cancelIntervention(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async openDispute(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async getPaymentOptions(): Promise<PaymentOptions> {
+    await simulateNetworkLatency();
+    return {
+      onlineChannels: ['wave', 'orange_money', 'carte'],
+      cashEnabled: true,
+      currency: 'XOF',
+    };
+  },
+
+  async initPayment(): Promise<PaymentSummary> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async listMyPayments(): Promise<ClientPayment[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async getMyEarnings(): Promise<ArtisanEarnings> {
+    await simulateNetworkLatency();
+    return {
+      totals: {
+        paidOutFcfa: 0,
+        payoutPendingFcfa: 0,
+        inEscrowFcfa: 0,
+        commissionCollectedFcfa: 0,
+        cashReceivedFcfa: 0,
+        commissionDueFcfa: 0,
+      },
+      items: [],
+    };
+  },
+
+  async getPayoutSettings(): Promise<PayoutSettings> {
+    await simulateNetworkLatency();
+    return {
+      channel: 'wave',
+      chosen: false,
+      allowedChannels: ['wave', 'orange_money'],
+      destinationPhone: '+221770000000',
+    };
+  },
+
+  async updatePayoutSettings(channel): Promise<PayoutSettings> {
+    await simulateNetworkLatency();
+    return {
+      channel,
+      chosen: true,
+      allowedChannels: ['wave', 'orange_money'],
+      destinationPhone: '+221770000000',
+    };
+  },
+
+  async listAdminDisputes(): Promise<Intervention[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async resolveDispute(): Promise<Intervention> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette intervention n'existe pas.");
   },
 };

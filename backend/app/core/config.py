@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
-from app.models.enums import VerificationDocType
+from app.models.enums import PaymentChannel, PayoutChannel, VerificationDocType
 
 
 class Settings(BaseSettings):
@@ -132,6 +132,15 @@ class Settings(BaseSettings):
     # appliquerait sa propre limite (limite réelle multipliée d'autant), et
     # chaque redéploiement remettrait tous les compteurs à zéro.
     rate_limit_backend: Literal["memory", "postgres"] | None = None
+
+    @field_validator("rate_limit_backend", mode="before")
+    @classmethod
+    def empty_rate_limit_backend_means_auto(cls, v: object) -> object:
+        # `RATE_LIMIT_BACKEND=` (vide, la valeur recommandée de .env.example)
+        # signifie « choix automatique », pas une valeur invalide.
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     @model_validator(mode="after")
     def validate_rate_limit_backend(self) -> "Settings":
@@ -342,6 +351,99 @@ class Settings(BaseSettings):
     # appareils) : au-delà, la plus ancienne est fermée -- borne la mémoire
     # occupée par un seul compte.
     ws_max_connections_per_user: int = 5
+
+    # --- Paiements (BUILD_PLAN.md §3.5) ------------------------------------
+
+    # Règle d'arrondi de la commission (app/services/commission_calculation.py).
+    # "floor" (défaut) : vers le bas, en faveur de l'artisan -- la commission
+    # ne dépasse jamais le taux annoncé, écart maximal 1 FCFA au détriment de
+    # Téranga. Le montant calculé est stocké sur la platform_fee à sa
+    # création : changer cette règle ne modifie jamais une commission passée.
+    commission_rounding: Literal["floor", "half_up", "ceil"] = "floor"
+
+    # Fournisseur de paiement actif -- LE point de bascule sandbox -> réel
+    # (app/services/payment_providers/__init__.py). "sandbox" reproduit le
+    # contrat d'un agrégateur (checkout hébergé, webhook signé HMAC, event id)
+    # sans argent réel ; il est refusé en prod (validate_payment_provider).
+    # Brancher un agrégateur (PayDunya, CinetPay...) = un adaptateur de plus
+    # + sa valeur ici + ses identifiants, sans toucher au code métier.
+    # "disabled" : paiement en ligne coupé (seules les espèces sont
+    # enregistrables) -- la valeur d'un déploiement sans agrégateur réel.
+    payment_provider: Literal["sandbox", "disabled"] = "sandbox"
+    # Secret partagé de signature des webhooks (HMAC-SHA256), fourni par
+    # l'agrégateur. Obligatoire (>= 32 caractères) hors dev ; en dev avec le
+    # sandbox, dérivé de JWT_SECRET s'il est vide (jamais une valeur en dur).
+    payment_webhook_secret: str = ""
+    # Écart maximal accepté entre l'horodatage signé d'un webhook et
+    # l'horloge du serveur : au-delà, la notification est refusée (rejeu
+    # d'une vieille notification interceptée). 5 min, usage des agrégateurs.
+    payment_webhook_tolerance_seconds: int = 300
+    # Taille maximale du corps d'un webhook : une notification de paiement
+    # tient en quelques Ko ; au-delà, refus avant lecture complète (un
+    # endpoint public ne doit jamais bufferiser un corps arbitraire).
+    payment_webhook_max_body_bytes: int = 64 * 1024
+    # Durée de validité d'une page de paiement : au-delà, un nouveau
+    # checkout est ouvert (l'ancien ne peut plus être payé).
+    payment_checkout_ttl_seconds: int = 1800
+    # Devise unique : franc CFA BCEAO (XOF), montants entiers.
+    payment_currency: Literal["XOF"] = "XOF"
+    # Moyens de paiement EN LIGNE proposés (via le fournisseur, séquestre).
+    payment_online_channels: Annotated[list[PaymentChannel], NoDecode] = [
+        PaymentChannel.WAVE,
+        PaymentChannel.ORANGE_MONEY,
+        PaymentChannel.CARTE,
+    ]
+    # Espèces : enregistrées (pas de séquestre, commission due par l'artisan).
+    payment_cash_enabled: bool = True
+    # Délai maximal d'un appel au fournisseur (checkout, remboursement,
+    # versement) : au-delà, l'opération échoue proprement (502), jamais
+    # une requête pendue.
+    payment_provider_timeout_seconds: float = 10.0
+    # Moyen de versement par défaut d'un artisan qui n'en a pas choisi, et
+    # moyens qu'il peut choisir (toujours vers son numéro vérifié).
+    payout_default_channel: PayoutChannel = PayoutChannel.WAVE
+    payout_allowed_channels: Annotated[list[PayoutChannel], NoDecode] = [
+        PayoutChannel.WAVE,
+        PayoutChannel.ORANGE_MONEY,
+    ]
+    # Rate limiting de POST /payments/init, par utilisateur : chaque appel
+    # peut ouvrir un checkout chez le fournisseur.
+    rate_limit_payment_init_per_user_max: int = 10
+    rate_limit_payment_init_per_user_window_seconds: int = 600
+    # Origine publique du front : pages de retour après un checkout. Jamais
+    # une URL fournie par le client (redirection ouverte).
+    frontend_public_base_url: str = "http://localhost:3000"
+    # Sandbox uniquement : où le « fournisseur » simulé livre ses webhooks.
+    # Vide = {BACKEND_PUBLIC_BASE_URL}/api/v1/webhooks/payments.
+    sandbox_webhook_url: str = ""
+
+    @field_validator("payment_online_channels", "payout_allowed_channels", mode="before")
+    @classmethod
+    def split_channels(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [item.strip() for item in v.split(",") if item.strip()]
+        return v
+
+    @model_validator(mode="after")
+    def validate_payment_settings(self) -> "Settings":
+        if PaymentChannel.CASH in self.payment_online_channels:
+            raise ValueError("PAYMENT_ONLINE_CHANNELS ne peut pas contenir « cash ».")
+        if self.payout_default_channel not in self.payout_allowed_channels:
+            raise ValueError("PAYOUT_DEFAULT_CHANNEL doit figurer dans PAYOUT_ALLOWED_CHANNELS.")
+        if self.payment_provider == "sandbox" and self.app_env == "prod":
+            raise ValueError(
+                "PAYMENT_PROVIDER=sandbox est interdit avec APP_ENV=prod : aucun argent réel "
+                "ne circulerait. Configurez un agrégateur réel."
+            )
+        needs_secret = self.payment_provider != "disabled" and not (
+            self.payment_provider == "sandbox" and self.app_env == "dev"
+        )
+        if needs_secret and len(self.payment_webhook_secret) < 32:
+            raise ValueError(
+                "PAYMENT_WEBHOOK_SECRET est requis (32 caractères minimum) hors dev : "
+                "sans lui, n'importe qui pourrait forger une notification de paiement."
+            )
+        return self
 
     # Origine publique du backend, utilisée pour construire l'URL absolue
     # d'un avatar (`{backend_public_base_url}/static/avatars/...`). Une URL

@@ -22,9 +22,21 @@ import type {
   AIAnalysisResult,
   Artisan,
   ArtisanStats,
+  ArtisanEarnings,
   ArtisanTradeDetail,
+  Cancellation,
+  ClientPayment,
+  Dispute,
   Intervention,
   MyArtisanProfile,
+  PaymentChannel,
+  PaymentOptions,
+  PaymentStatus,
+  PaymentSummary,
+  PayoutChannel,
+  PayoutSettings,
+  PayoutStatus,
+  PlatformFeeStatus,
   MyVerification,
   ProfileMediaConstraints,
   Quote,
@@ -217,11 +229,87 @@ interface BackendIntervention {
   agreed_amount_fcfa: number | null;
   scheduled_at: string | null;
   completed_at: string | null;
-  decline_reason: string | null;
+  cancellation?: BackendCancellation | null;
   quote: BackendQuote | null;
   review: BackendReview | null;
   conversation_id?: string | null;
+  payment?: BackendPaymentSummary | null;
+  dispute?: BackendDispute | null;
   created_at: string;
+}
+
+interface BackendCancellation {
+  kind: Cancellation['kind'];
+  by: Cancellation['by'];
+  reason: string | null;
+  at: string;
+}
+
+interface BackendDispute {
+  opened_by: Dispute['openedBy'];
+  reason: string;
+  opened_at: string;
+  outcome: Dispute['outcome'];
+  resolved_at: string | null;
+  resolution_note: string | null;
+}
+
+interface BackendPaymentSummary {
+  amount_fcfa: number;
+  commission: { rate_bps: number; amount_fcfa: number; status: PlatformFeeStatus | null };
+  net_fcfa: number;
+  status: PaymentStatus | null;
+  channel: PaymentChannel | null;
+  checkout_url: string | null;
+  checkout_expires_at: string | null;
+  paid_at: string | null;
+  released_at: string | null;
+  refunded_at: string | null;
+  payout: {
+    status: PayoutStatus;
+    amount_fcfa: number;
+    channel: PayoutChannel;
+    sent_at: string | null;
+  } | null;
+}
+
+interface BackendClientPayment {
+  id: string;
+  intervention_id: string;
+  trade_label: string;
+  artisan_name: string;
+  amount_fcfa: number;
+  channel: PaymentChannel;
+  status: PaymentStatus;
+  created_at: string;
+  paid_at: string | null;
+  released_at: string | null;
+  refunded_at: string | null;
+}
+
+interface BackendEarnings {
+  totals: {
+    paid_out_fcfa: number;
+    payout_pending_fcfa: number;
+    in_escrow_fcfa: number;
+    commission_collected_fcfa: number;
+    cash_received_fcfa: number;
+    commission_due_fcfa: number;
+  };
+  items: {
+    intervention_id: string;
+    trade_label: string;
+    client_name: string;
+    intervention_status: BackendIntervention['status'];
+    payment: BackendPaymentSummary;
+  }[];
+}
+
+interface BackendPayoutSettings {
+  channel: PayoutChannel;
+  chosen: boolean;
+  allowed_channels: PayoutChannel[];
+  destination_phone: string;
 }
 
 interface BackendChatMessage {
@@ -346,6 +434,42 @@ function mapQuote(quote: BackendQuote): Quote {
   };
 }
 
+function mapPaymentSummary(payment: BackendPaymentSummary): PaymentSummary {
+  return {
+    amountFcfa: payment.amount_fcfa,
+    commission: {
+      rateBps: payment.commission.rate_bps,
+      amountFcfa: payment.commission.amount_fcfa,
+      status: payment.commission.status,
+    },
+    netFcfa: payment.net_fcfa,
+    status: payment.status,
+    channel: payment.channel,
+    checkoutUrl: payment.checkout_url,
+    checkoutExpiresAt: payment.checkout_expires_at,
+    paidAt: payment.paid_at,
+    releasedAt: payment.released_at,
+    refundedAt: payment.refunded_at,
+    payout: payment.payout
+      ? {
+          status: payment.payout.status,
+          amountFcfa: payment.payout.amount_fcfa,
+          channel: payment.payout.channel,
+          sentAt: payment.payout.sent_at,
+        }
+      : null,
+  };
+}
+
+function mapPayoutSettings(settings: BackendPayoutSettings): PayoutSettings {
+  return {
+    channel: settings.channel,
+    chosen: settings.chosen,
+    allowedChannels: settings.allowed_channels,
+    destinationPhone: settings.destination_phone,
+  };
+}
+
 function mapIntervention(intervention: BackendIntervention): Intervention {
   return {
     id: intervention.id,
@@ -357,10 +481,21 @@ function mapIntervention(intervention: BackendIntervention): Intervention {
     agreedAmountFcfa: intervention.agreed_amount_fcfa,
     scheduledAt: intervention.scheduled_at,
     completedAt: intervention.completed_at,
-    declineReason: intervention.decline_reason,
+    cancellation: intervention.cancellation ? { ...intervention.cancellation } : null,
     quote: intervention.quote ? mapQuote(intervention.quote) : null,
     review: intervention.review ? mapReview(intervention.review) : null,
     conversationId: intervention.conversation_id ?? null,
+    payment: intervention.payment ? mapPaymentSummary(intervention.payment) : null,
+    dispute: intervention.dispute
+      ? {
+          openedBy: intervention.dispute.opened_by,
+          reason: intervention.dispute.reason,
+          openedAt: intervention.dispute.opened_at,
+          outcome: intervention.dispute.outcome,
+          resolvedAt: intervention.dispute.resolved_at,
+          resolutionNote: intervention.dispute.resolution_note,
+        }
+      : null,
     createdAt: intervention.created_at,
   };
 }
@@ -902,6 +1037,22 @@ export const httpApiClient: ApiClient = {
     return mapIntervention(intervention);
   },
 
+  async cancelIntervention(id: string, reason?: string | null): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}/cancel`, {
+      method: 'POST',
+      body: { reason: reason ?? null },
+    });
+    return mapIntervention(intervention);
+  },
+
+  async openDispute(id: string, reason: string): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(`/interventions/${id}/dispute`, {
+      method: 'POST',
+      body: { reason },
+    });
+    return mapIntervention(intervention);
+  },
+
   async createReview(interventionId: string, input: CreateReviewInput): Promise<Review> {
     const review = await apiRequest<BackendReview>(`/interventions/${interventionId}/review`, {
       method: 'POST',
@@ -986,5 +1137,101 @@ export const httpApiClient: ApiClient = {
       method: 'POST',
     });
     return { ticket: result.ticket, expiresIn: result.expires_in };
+  },
+
+  async getPaymentOptions(): Promise<PaymentOptions> {
+    const options = await apiRequest<{
+      online_channels: PaymentChannel[];
+      cash_enabled: boolean;
+      currency: string;
+    }>('/payments/options');
+    return {
+      onlineChannels: options.online_channels,
+      cashEnabled: options.cash_enabled,
+      currency: options.currency,
+    };
+  },
+
+  /**
+   * Ouvre le paiement : seul le moyen choisi est envoyé, le MONTANT est
+   * celui du devis accepté, fixé par le serveur (jamais transmis d'ici).
+   */
+  async initPayment(interventionId: string, channel: PaymentChannel): Promise<PaymentSummary> {
+    const payment = await apiRequest<BackendPaymentSummary>('/payments/init', {
+      method: 'POST',
+      body: { intervention_id: interventionId, channel },
+    });
+    return mapPaymentSummary(payment);
+  },
+
+  async listMyPayments(): Promise<ClientPayment[]> {
+    const page = await apiRequest<BackendPage<BackendClientPayment>>('/payments/me');
+    return page.items.map((payment) => ({
+      id: payment.id,
+      interventionId: payment.intervention_id,
+      tradeLabel: payment.trade_label,
+      artisanName: payment.artisan_name,
+      amountFcfa: payment.amount_fcfa,
+      channel: payment.channel,
+      status: payment.status,
+      createdAt: payment.created_at,
+      paidAt: payment.paid_at,
+      releasedAt: payment.released_at,
+      refundedAt: payment.refunded_at,
+    }));
+  },
+
+  async getMyEarnings(): Promise<ArtisanEarnings> {
+    const earnings = await apiRequest<BackendEarnings>('/payments/me/earnings');
+    return {
+      totals: {
+        paidOutFcfa: earnings.totals.paid_out_fcfa,
+        payoutPendingFcfa: earnings.totals.payout_pending_fcfa,
+        inEscrowFcfa: earnings.totals.in_escrow_fcfa,
+        commissionCollectedFcfa: earnings.totals.commission_collected_fcfa,
+        cashReceivedFcfa: earnings.totals.cash_received_fcfa,
+        commissionDueFcfa: earnings.totals.commission_due_fcfa,
+      },
+      items: earnings.items.map((item) => ({
+        interventionId: item.intervention_id,
+        tradeLabel: item.trade_label,
+        clientName: item.client_name,
+        interventionStatus: item.intervention_status,
+        payment: mapPaymentSummary(item.payment),
+      })),
+    };
+  },
+
+  async getPayoutSettings(): Promise<PayoutSettings> {
+    return mapPayoutSettings(
+      await apiRequest<BackendPayoutSettings>('/payments/me/payout-settings'),
+    );
+  },
+
+  async updatePayoutSettings(channel: PayoutChannel): Promise<PayoutSettings> {
+    return mapPayoutSettings(
+      await apiRequest<BackendPayoutSettings>('/payments/me/payout-settings', {
+        method: 'PUT',
+        body: { channel },
+      }),
+    );
+  },
+
+  async listAdminDisputes(filters?: { resolved?: boolean }): Promise<Intervention[]> {
+    const query = filters?.resolved ? '?resolved=true' : '';
+    const page = await apiRequest<BackendPage<BackendIntervention>>(`/admin/disputes${query}`);
+    return page.items.map(mapIntervention);
+  },
+
+  async resolveDispute(
+    interventionId: string,
+    outcome: 'libere' | 'rembourse',
+    note: string,
+  ): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>(
+      `/admin/disputes/${interventionId}/resolve`,
+      { method: 'POST', body: { outcome, note } },
+    );
+    return mapIntervention(intervention);
   },
 };

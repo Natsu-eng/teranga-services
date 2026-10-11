@@ -135,14 +135,20 @@ describe('UserProfileScreen', () => {
         '/mes-interventions',
       );
       expect(screen.queryByRole('link', { name: /Tableau de bord/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Mes gains/ })).not.toBeInTheDocument();
     });
 
-    it('présente les moyens de paiement sans faux choix (aucune sélection enregistrée nulle part)', () => {
+    it('présente les moyens de paiement sans faux choix, et mène à ses paiements', () => {
       renderScreen();
 
       expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument();
-      expect(screen.getByText('Bientôt')).toBeInTheDocument();
+      // Le moyen se choisit au moment de payer un devis, jamais à l'avance.
       expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+      expect(screen.getByText(/Téranga conserve votre argent/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Mes paiements/ })).toHaveAttribute(
+        'href',
+        '/mes-paiements',
+      );
     });
   });
 
@@ -184,6 +190,10 @@ describe('UserProfileScreen', () => {
       renderScreen();
 
       expect(screen.getByRole('link', { name: /Tableau de bord/ })).toHaveAttribute('href', '/pro');
+      expect(screen.getByRole('link', { name: /Mes gains et versements/ })).toHaveAttribute(
+        'href',
+        '/pro/gains',
+      );
       expect(screen.getByRole('link', { name: /Modifier mon profil Pro/ })).toHaveAttribute(
         'href',
         '/pro/onboarding',

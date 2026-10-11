@@ -195,8 +195,10 @@ async def count_completed_interventions(session: AsyncSession, artisan_id: uuid.
 
 
 async def sum_revenue_fcfa(session: AsyncSession, artisan_id: uuid.UUID) -> int | None:
-    """Revenus dérivés des paiements réussis sur les interventions de
-    l'artisan. `None` si aucun paiement -- laisse le service décider de la
+    """Chiffre d'affaires encaissé (montants bruts) sur les interventions de
+    l'artisan : séquestre libéré (`libere`) ou espèces réglées directement
+    (`reussi`) -- jamais un paiement encore retenu ou remboursé (BUILD_PLAN.md
+    §3.5). `None` si aucun paiement -- laisse le service décider de la
     valeur d'affichage (BUILD_PLAN.md §5, réservé au propriétaire/admin)."""
     stmt = (
         select(func.sum(Payment.amount_fcfa))
@@ -204,7 +206,7 @@ async def sum_revenue_fcfa(session: AsyncSession, artisan_id: uuid.UUID) -> int 
         .join(Intervention, Intervention.id == Payment.intervention_id)
         .where(
             Intervention.artisan_id == artisan_id,
-            Payment.status == PaymentStatus.REUSSI,
+            Payment.status.in_((PaymentStatus.LIBERE, PaymentStatus.REUSSI)),
         )
     )
     return (await session.execute(stmt)).scalar_one()

@@ -44,7 +44,7 @@ async function parseJsonBody(response: Response): Promise<unknown> {
 }
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   body?: unknown;
   /** Upload multipart (ex. documents de vérification) — mutuellement exclusif avec `body`. Jamais sérialisé en JSON ; le navigateur pose lui-même la frontière multipart, donc aucun Content-Type n'est fixé explicitement ici. */
   formData?: FormData;

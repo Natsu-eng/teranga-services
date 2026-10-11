@@ -77,8 +77,9 @@ async def test_full_graph_create_and_read(db_session: AsyncSession) -> None:
         intervention_id=intervention.id,
         amount_fcfa=12_000,
         channel=PaymentChannel.WAVE,
-        status=PaymentStatus.REUSSI,
-        wave_event_id=f"evt-{intervention.id}",
+        status=PaymentStatus.LIBERE,
+        provider="sandbox",
+        provider_ref=f"sbx_cs_{intervention.id}",
     )
     platform_fee = PlatformFee(
         intervention_id=intervention.id,
@@ -93,6 +94,8 @@ async def test_full_graph_create_and_read(db_session: AsyncSession) -> None:
         amount_fcfa=10_800,
         channel=PayoutChannel.WAVE,
         status=PayoutStatus.ENVOYE,
+        destination_phone="+221770000001",
+        provider="sandbox",
     )
     review = Review(
         intervention_id=intervention.id,
@@ -155,7 +158,7 @@ async def test_full_graph_create_and_read(db_session: AsyncSession) -> None:
     assert read_artisan_trade.hourly_rate_fcfa == 15_000
     assert read_verification.status == VerificationStatus.APPROVED
     assert read_quote.total_fcfa == 12_000
-    assert read_payment.status == PaymentStatus.REUSSI
+    assert read_payment.status == PaymentStatus.LIBERE
     assert read_platform_fee.amount_fcfa == 1_200
     assert read_payout.status == PayoutStatus.ENVOYE
     assert read_review.rating == 5

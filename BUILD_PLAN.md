@@ -258,7 +258,22 @@ Le cœur de l'entonnoir : une mise en relation qui devient un travail réel.
 | agreed_amount_fcfa | int null | montant convenu (via devis) |
 | scheduled_at | timestamptz null | |
 | completed_at | timestamptz null | déclenche l'éligibilité à l'avis |
+| cancelled_at / cancelled_by / cancellation_kind / cancellation_reason | null | clôture d'une intervention `annulee` : quand, par qui (`client`/`artisan`/`admin`), comment (`refus`, `annulation`, `arbitrage`), motif ; ensemble ou absents (CHECK). Remplacent `decline_reason` (lot `feat/paiements`) |
 | created_at / updated_at | | |
+
+#### `intervention_dispute` (litige, lot `feat/paiements`)
+Un problème signalé sur des travaux en cours **gèle l'argent** jusqu'à la
+décision d'un admin (§3.5).
+
+| Champ | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| intervention_id | UUID FK → intervention **unique** | un litige par intervention |
+| opened_by_id / opened_by_role | UUID FK → user / enum | client ou artisan |
+| reason | text | obligatoire (10 caractères min. côté API) |
+| outcome | enum(`libere`,`rembourse`) null | décision de l'admin |
+| resolved_by_id / resolved_at / resolution_note | null | renseignés avec `outcome` (CHECK) |
+| created_at | timestamptz | ouverture |
 
 #### `quote` (devis)
 1:1 avec une intervention (le devis accepté la matérialise).
@@ -300,11 +315,31 @@ Un encaissement. **Le canal inclut le cash** — sinon on ne mesure pas la fuite
 | intervention_id | UUID FK → intervention | |
 | amount_fcfa | int | |
 | channel | enum(`wave`,`orange_money`,`free_money`,`carte`,`cash`) | cash enregistrable |
-| status | enum(`en_attente`,`reussi`,`echoue`,`rembourse`) | |
-| provider_ref | text null | id transaction opérateur/agrégateur |
-| wave_event_id | text null unique | **idempotence** (Wave retente 5× sur 24 h) |
-| paid_at | timestamptz null | |
+| status | enum(`en_attente`,`retenu`,`libere`,`reussi`,`echoue`,`annule`,`rembourse`) | cycle de vie §3.5 |
+| provider | text null | fournisseur (`sandbox`, ...) ; NULL **ssi** cash (CHECK) |
+| provider_ref | text null | référence du checkout ; unique par fournisseur |
+| checkout_url / checkout_expires_at | null | page de paiement hébergée et son expiration |
+| paid_at / released_at / refunded_at | timestamptz null | reçu (séquestre) / libéré / remboursé |
+| refund_ref | text null | référence du remboursement |
 | created_at / updated_at | | |
+
+**Au plus un paiement vivant par intervention** (`en_attente`, `retenu`,
+`libere`, `reussi`) : index unique partiel `uq_payment_active_intervention_id`.
+`wave_event_id` (propre à un fournisseur, un seul événement par paiement)
+est remplacé par la table `payment_event`.
+
+#### `payment_event` (lot `feat/paiements`)
+Journal des webhooks reçus. **Clé d'idempotence** : `(provider, event_id)`
+unique — une notification rejouée n'est jamais retraitée (§3.5).
+
+| Champ | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| provider / event_id | text | unique ensemble |
+| event_type | text | type brut du fournisseur (audit) |
+| payment_id | UUID FK → payment null | null si paiement inconnu |
+| outcome | text | `retenu`, `echoue`, `deja_traite`, `paiement_inconnu`, `montant_incoherent`, `rembourse_paiement_tardif`, `ignore` |
+| received_at | timestamptz | |
 
 #### `platform_fee`
 Ce que Téranga prélève, **découplé du paiement** : permet abonnement, lead OU
@@ -317,8 +352,13 @@ commission sans refonte.
 | kind | enum(`commission`,`subscription`,`lead`) | |
 | amount_fcfa | int | |
 | commission_rate_id | UUID FK → commission_rate null | traçabilité du taux appliqué |
-| status | enum(`due`,`collectee`,`annulee`) | |
+| status | enum(`due`,`collectee`,`annulee`) | `collectee` = déduite du séquestre ; `due` en cash = due par l'artisan |
+| settled_at | timestamptz null | passage à `collectee`/`annulee` |
 | created_at | timestamptz | |
+
+Une seule commission par intervention (index unique partiel sur
+`kind = 'commission'`), montant calculé **une fois** sur le taux figé et
+stocké : changer la règle d'arrondi ne réécrit jamais le passé.
 
 #### `payout`
 Versement à l'artisan. **Le versement rapide est le meilleur rempart anti-cash.**
@@ -330,10 +370,16 @@ Versement à l'artisan. **Le versement rapide est le meilleur rempart anti-cash.
 | intervention_id | UUID FK → intervention | |
 | amount_fcfa | int | net après platform_fee |
 | channel | enum(`wave`,`orange_money`,`bank`) | |
-| status | enum(`en_attente`,`envoye`,`echoue`) | |
-| provider_ref | text null | |
+| status | enum(`en_attente`,`envoye`,`echoue`) | `echoue` relançable (`scripts/dispatch_payouts.py`) |
+| destination_phone | text | **numéro vérifié (OTP) du compte artisan**, copié pour l'audit — jamais saisi |
+| provider / provider_ref | text | fournisseur et référence du versement |
+| attempts / last_attempt_at / failure_reason | | tentatives et dernier échec |
 | sent_at | timestamptz null | |
 | created_at | timestamptz | |
+
+Un seul versement par intervention (`uq_payout_intervention_id`).
+`artisan_profile.payout_channel` (null = `PAYOUT_DEFAULT_CHANNEL`) : le
+moyen choisi par l'artisan, jamais la destination.
 
 #### `review`
 Avis **conditionné à une intervention terminée** + contact vérifié (SMS).
@@ -622,11 +668,29 @@ L'avis (`POST /interventions/{id}/review`) est revalidé côté service
 trigger PostgreSQL `review_requires_completed_intervention` (Lot 7, dernier
 rempart) — jamais l'erreur DB brute renvoyée au client.
 
-**Paiements (Phase 2 tardive)**
+**Paiements** ✅ (lot `feat/paiements`, détail §3.5)
 ```
-POST /api/v1/payments/init        { intervention_id, channel } → wave_launch_url / instructions
-POST /api/v1/webhooks/wave        (HMAC-SHA256 vérifié, idempotent via wave_event_id)
+GET  /api/v1/payments/options             (client) → moyens réellement proposés
+POST /api/v1/payments/init                { intervention_id, channel } (client propriétaire)
+                                    → résumé financier + checkout_url (en ligne) ;
+                                      AUCUN montant accepté : celui du devis accepté
+GET  /api/v1/payments/me                  (client) → ses paiements
+GET  /api/v1/payments/me/earnings         (artisan) → versé, séquestre, commissions,
+                                      espèces, commission due + détail
+GET|PUT /api/v1/payments/me/payout-settings  (artisan) { channel } → moyen de versement,
+                                      destination = numéro vérifié du compte
+POST /api/v1/webhooks/payments            public, signé HMAC, idempotent (payment_event)
+POST /api/v1/interventions/{id}/cancel    { reason? } (client tant que rien n'est en
+                                      séquestre ; artisan après acceptation)
+POST /api/v1/interventions/{id}/dispute   { reason } (client ou artisan, en_cours)
+GET  /api/v1/admin/disputes               ?resolved=  (admin)
+POST /api/v1/admin/disputes/{id}/resolve  { outcome: libere|rembourse, note } (admin)
+GET|POST /api/v1/sandbox/checkout/{jeton} page de paiement simulée (sandbox seulement)
 ```
+Le résumé financier (`payment` : total, commission au taux figé, net,
+statuts, versement) voyage dans `InterventionOut`, lisible par les deux
+parties et l'admin seulement (`GET /interventions/{id}` : tiers -> 403).
+`decline_reason` est remplacé par `cancellation` (kind, by, reason, at).
 
 **Messagerie** ✅ (lot `feat/messagerie`, détail §3.4) — client ou artisan
 participant uniquement ; admin exclu (`403 ROLE_INSUFFISANT`).
@@ -908,6 +972,150 @@ Redis pub/sub (un canal par utilisateur, chaque instance relaie à ses
 sockets) et consommation atomique du `jti` en Redis (`SET NX EX`). Le rate
 limiting, lui, est déjà partagé (table `rate_limit_hit`, lot
 `feat/media-hardening`).
+
+## 3.5 Paiements : séquestre, espèces, commission, versement (lot `feat/paiements`)
+
+**Principes (actés).**
+
+- **Le montant vient TOUJOURS du serveur** : `intervention.agreed_amount_fcfa`,
+  posé à l'acceptation du devis. `POST /payments/init` n'accepte aucun
+  montant (un champ envoyé est ignoré ; testé).
+- **Montants en ENTIERS de FCFA**, taux en points de base. Aucun float,
+  nulle part (calcul, stockage, API, front).
+- **Commission sur le taux FIGÉ** : `intervention.commission_rate_id`, résolu
+  à la création de l'intervention (Lot 12a) — jamais le taux courant (test :
+  le taux du métier passe à 25 % après la création, la commission reste à 10 %).
+- **`platform_fee` découplée de `payment`** : une commission par
+  intervention, créée `due` au premier paiement (ou à la complétion sans
+  paiement), montant stocké une fois pour toutes.
+
+**Règle d'arrondi de la commission.** `commission = (montant × taux_bps) //
+10 000`, en entiers exacts : **troncature vers le bas (`floor`), en faveur de
+l'artisan** — la commission ne dépasse jamais le taux annoncé, écart maximal
+1 FCFA au détriment de Téranga. Exemple : 12 345 FCFA à 10 % = 1 234,5 →
+**1 234**. Le net artisan est toujours `montant − commission` : leur somme
+vaut le montant au franc près, par construction (vérifié par balayage sur
+les trois règles). Réglage `COMMISSION_ROUNDING` (`floor` | `half_up` |
+`ceil`), sans effet sur les commissions déjà enregistrées.
+`app/services/commission_calculation.py`, testé en isolation.
+
+**Enchaînement — paiement en ligne (séquestre).**
+
+```
+devis accepté (en_cours)
+  └─ POST /payments/init {channel: wave|orange_money|carte}
+       payment en_attente + checkout hébergé du fournisseur, commission « due »
+  └─ webhook « checkout réussi » (signé, idempotent)
+       payment RETENU (paid_at) — l'argent est chez Téranga
+  └─ le client confirme la fin des travaux (POST /interventions/{id}/complete)
+       même transaction : payment LIBERE, commission COLLECTEE,
+                          payout EN_ATTENTE (net = montant − commission)
+       après le commit : envoi du versement au fournisseur (clé payout-<id>)
+                          -> payout ENVOYE (ou ECHOUE, relancé ensuite)
+```
+
+- **Qui déclenche quoi** : le client seul confirme la complétion (Lot 12b,
+  aucun conflit d'intérêt) — c'est elle qui libère le séquestre. Un
+  checkout encore ouvert bloque la complétion (`PAIEMENT_EN_COURS`).
+- **Versement après le commit, dans sa propre transaction** : un
+  fournisseur indisponible ne fait jamais échouer la confirmation du
+  client ; le versement reste `echoue`, relancé par
+  `scripts/dispatch_payouts.py` (sans double versement : clé
+  d'idempotence). Destination : **toujours le numéro vérifié (OTP) du
+  compte artisan**, copié sur le versement ; l'artisan choisit seulement le
+  moyen (`PUT /payments/me/payout-settings`).
+- **Double clic / changement d'avis** : une page encore ouverte pour le même
+  moyen est réutilisée ; un autre moyen abandonne l'ancienne (`annule`).
+  Si celle-ci est payée malgré tout, le webhook **rembourse aussitôt**
+  (« paiement tardif ») : Téranga ne garde jamais d'argent sans cause.
+
+**Espèces.** `POST /payments/init {channel: cash}` enregistre un paiement
+`reussi` (réglé directement à l'artisan, sans séquestre ni versement) et la
+commission reste **`due` par l'artisan** — mesure de la fuite. Le client
+peut encore préférer le paiement en ligne tant que les travaux sont en
+cours (jamais l'inverse une fois l'argent en séquestre). **Recouvrement de
+la commission due : hors périmètre du code pour l'instant** (elle est
+mesurée et affichée à l'artisan, pas encore recouvrée). Une complétion sans
+aucun paiement enregistre aussi une commission `due` : le travail hors
+plateforme est mesuré, jamais ignoré.
+
+**Annulation, litige, remboursement.**
+
+- Annulation (`POST /interventions/{id}/cancel`) : par l'**artisan** après
+  avoir accepté (le client est alors remboursé), par le **client** tant
+  qu'aucun fonds n'est en séquestre. Une fois payé en ligne, le client
+  ouvre un litige : sinon il pourrait récupérer son argent après des
+  travaux faits. Effets : fonds retenus -> **remboursés** (`rembourse`),
+  checkout ouvert ou espèces -> `annule`, commission `annulee`, **jamais de
+  versement ni de commission**, demande rouverte.
+- Litige (`POST /interventions/{id}/dispute`, client ou artisan, travaux en
+  cours) : l'argent est **gelé** tel quel. C'est aussi le recours de
+  l'artisan si le client ne confirme jamais la fin. Un admin tranche
+  (`POST /admin/disputes/{id}/resolve`) : `libere` -> même enchaînement
+  qu'une complétion (versement du net) ; `rembourse` -> intervention
+  annulée (arbitrage), client remboursé, aucune commission. Justification
+  obligatoire, visible des deux parties.
+- Remboursement **idempotent** (clé `refund-<id>`) et exécuté AVANT le
+  commit : si notre transaction échoue après l'appel, la relance ne
+  rembourse pas deux fois. Fournisseur indisponible -> 502, rien ne change.
+
+**Webhook (robustesse production).** `POST /api/v1/webhooks/payments`,
+public mais authentifié :
+
+1. **Signature vérifiée avant toute lecture** — sandbox :
+   `Teranga-Sandbox-Signature: t=<horodatage>,v1=<HMAC-SHA256(secret,
+   "t.corps")>`, comparaison à temps constant, plusieurs `v1` acceptés
+   (rotation du secret), horodatage hors fenêtre (5 min) refusé. Échec ->
+   401, rien n'est écrit. Corps borné (64 Ko, 413), illisible -> 400.
+2. **Idempotence par l'event id** : `INSERT ... ON CONFLICT DO NOTHING` sur
+   `payment_event (provider, event_id)` — la base tranche, y compris entre
+   deux livraisons simultanées. Un rejeu répond 200 `deja_traite` sans
+   aucun effet. **Seconde défense** : la machine à états (un « succès » sur
+   un paiement déjà retenu, libéré ou remboursé ne change rien). Preuve :
+   tests de rejeu (×3, puis après la complétion : un seul versement) et
+   **mutation** — retirer le contrôle d'event id OU affaiblir la machine à
+   états fait échouer un test.
+3. Paiement retrouvé par la référence du fournisseur, intervention
+   **verrouillée** (`SELECT ... FOR UPDATE`, comme toute décision
+   financière), puis : succès -> `retenu` ; échec -> `echoue` ; montant ou
+   devise incohérents -> aucune transition, anomalie journalisée ;
+   paiement ou type inconnu -> 200 ignoré (le fournisseur cesse ses
+   tentatives), journalisé.
+
+**Provider-agnostique — point de bascule sandbox -> réel.** Le métier
+(`app/services/payments.py`) ne connaît que le contrat `PaymentProvider`
+(`create_checkout`, `verify_webhook_signature`, `parse_event`, `refund`,
+`send_payout`, types neutres). **Point de bascule unique** :
+`app/services/payment_providers/__init__.py:build_payment_provider` +
+`PAYMENT_PROVIDER`. Brancher un agrégateur réel (PayDunya, CinetPay, Wave
+Business) = écrire son adaptateur (traduction de son API et de ses
+webhooks), l'ajouter à ce point et à `Settings.payment_provider`,
+renseigner `PAYMENT_WEBHOOK_SECRET` et ses identifiants, déclarer chez lui
+l'URL du webhook — **sans toucher au code métier**. `sandbox` est interdit
+en prod ; `disabled` coupe le paiement en ligne (espèces seules), la valeur
+d'un déploiement sans agrégateur. Le sandbox reproduit le contrat : page
+de paiement **hébergée par le backend** (hors du front, jeton signé et
+expirant, CSP stricte), webhook signé et horodaté livré **par HTTP** au
+backend (signature et idempotence exercées comme en production), event id
+`EV_...`, montants en chaîne, références de remboursement/versement
+déterministes. Option « livrer deux fois » sur la page : vérification
+manuelle de l'idempotence.
+
+**Accès aux montants.** Le résumé financier d'une intervention (total,
+commission et taux, net, statuts datés, versement) n'est servi qu'à ses
+deux parties et à l'admin ; un tiers reçoit 403 sans aucun montant (testé).
+Côté front, la même donnée est présentée selon le rôle : le client voit
+« Total à payer » et « aucun frais ajouté pour vous » (la commission est
+nommée, prise sur la part de l'artisan) ; l'artisan voit prix, commission
+(taux figé, « estimée » tant qu'elle n'est pas enregistrée) et « Vous
+recevez ». Aucun montant n'est calculé par le front.
+
+**Limites connues.** Recouvrement des commissions dues (cash) non codé ;
+versements relancés par script (pas encore de planificateur) ; montant
+incohérent signalé par un webhook traité manuellement ; litige sans
+délai automatique de libération ; un seul fournisseur actif à la fois (un
+remboursement exige le fournisseur d'origine).
+
 
 ## 4. Authentification (téléphone + OTP)
 
@@ -1216,7 +1424,9 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
     tout artisan tant que le Lot 14 — paiements — n'est pas construit,
     aucun `payment` ne peut encore être créé par l'API ; c'est une valeur
     réellement dérivée, pas un placeholder en dur, juste une source encore
-    vide), `interventions_count` (interventions `terminee`), `rating_avg`/
+    vide ; depuis le lot `feat/paiements` : chiffre d'affaires encaissé,
+    séquestre libéré ou espèces réglées, avant commission, §3.5),
+    `interventions_count` (interventions `terminee`), `rating_avg`/
     `review_count` (dénormalisés, Lot 9), `response_rate` (toujours `null`,
     aucun tracking `responded_at` n'existe). Front : `ArtisanDashboardScreen`
     remplace l'écran d'interventions nu sur `/pro` — en-tête distincte
@@ -1386,9 +1596,22 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   d'intervention ; `ComingSoon` supprimé. Détail §3.4, dette Redis
   multi-instance comprise. *But : client et artisan se parlent sur la
   plateforme, sans s'échanger leurs numéros.*
-- **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
-  payout) + **Lot 15 — Déploiement Railway** (2 services + Postgres managé,
-  bascule `DATABASE_URL`). *À séquencer selon priorités.*
+- **Lot 14 — `feat/paiements` — Moteur de paiement.** ✅ Séquestre en ligne
+  (payé à l'acceptation du devis, `retenu`, libéré à la complétion confirmée
+  par le client, net versé vers le numéro vérifié de l'artisan), espèces
+  enregistrées (commission `due`), commission calculée en entiers sur le
+  taux FIGÉ (arrondi `floor` en faveur de l'artisan), annulation
+  (remboursement idempotent), litige qui gèle l'argent et arbitrage admin.
+  Provider-agnostique (`PaymentProvider`), fournisseur sandbox reproduisant
+  le contrat d'un agrégateur (checkout hébergé, webhook HMAC horodaté,
+  event id) ; webhook idempotent (`payment_event`), prouvé par mutation.
+  Front : écran de paiement, volet financier par rôle dans le suivi, gains
+  et versements Pro, historique client, litiges admin. Détail §3.5.
+  *But : le client paie en confiance, l'artisan sait exactement ce qu'il
+  touche, Téranga mesure tout — y compris le cash.*
+- **Lot 15 — Déploiement Railway** (2 services + Postgres managé, bascule
+  `DATABASE_URL`) + branchement d'un agrégateur réel (§3.5, point de
+  bascule). *À séquencer selon priorités.*
 
 ---
 
@@ -1402,6 +1625,11 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
 - **Anti-désintermédiation** (la fuite croît avec le taux) : messagerie in-app,
   versement rapide à l'artisan, re-réservation facile, avis vérifiés, cash
   *enregistrable* pour le mesurer.
+- **Mise en œuvre (lot `feat/paiements`, §3.5)** : séquestre en ligne (le
+  client est protégé, l'artisan payé dès la confirmation), commission
+  prélevée sur la part de l'artisan — **aucun frais ajouté au client**, dit
+  en clair à l'écran ; en cash ou sans paiement, la commission est
+  enregistrée `due` (mesure de la fuite ; recouvrement hors périmètre code).
 
 ---
 
@@ -1410,3 +1638,8 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
 Scoring de fiabilité des artisans, détection de fuite par NLP sur la messagerie,
 assistant conversationnel, i18n Wolof/Français, tarification dynamique,
 notifications push. Phase 3+.
+
+Paiements (après le lot `feat/paiements`, §3.5) : recouvrement des
+commissions dues sur le cash, planification des relances de versements,
+libération automatique d'un séquestre après un délai sans contestation,
+abonnement « Vérifié » (la `platform_fee` découplée le permet déjà).
