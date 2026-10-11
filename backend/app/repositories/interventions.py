@@ -8,7 +8,7 @@ import uuid
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models.artisan import ArtisanProfile
 from app.models.commission import CommissionRate
@@ -41,6 +41,9 @@ def _eager_load(
         joinedload(Intervention.commission_rate),
         joinedload(Intervention.quote),
         joinedload(Intervention.review).joinedload(Review.author),
+        # Fil de discussion (identifiant exposé dans InterventionOut) : une
+        # seule requête groupée pour toute la liste, jamais une par ligne.
+        selectinload(Intervention.conversations),
     )
 
 
@@ -68,6 +71,9 @@ async def create_intervention(
         commission_rate=commission_rate,
         quote=None,
         review=None,
+        # Idem pour le fil de discussion : la conversation créée juste après
+        # (même transaction) s'y ajoute en mémoire, sans lazy load.
+        conversations=[],
     )
     session.add(intervention)
     await session.flush()

@@ -38,4 +38,8 @@ class InterventionOut(BaseModel):
     decline_reason: str | None
     quote: QuoteOut | None
     review: ReviewOut | None
+    # Fil de discussion client ↔ artisan rattaché à cette intervention
+    # (messagerie). Nul seulement si l'intervention n'a pas de fil, ce que la
+    # migration c0a26cec109e a rattrapé pour les interventions existantes.
+    conversation_id: uuid.UUID | None = None
     created_at: datetime

@@ -2,6 +2,7 @@
 §6, §7 Lot 12) -- la mise en relation, avec commission figée à la création.
 """
 
+import uuid
 from collections.abc import AsyncGenerator, Generator
 from datetime import UTC, datetime
 
@@ -19,6 +20,7 @@ from app.models.enums import (
     VerificationDocType,
     VerificationStatus,
 )
+from app.models.messaging import Conversation
 from app.models.request import ServiceRequest
 from app.models.trade import Trade
 from app.models.user import User
@@ -110,6 +112,36 @@ async def test_create_intervention_nominal_freezes_commission_rate(
 
     await db_session.refresh(request)
     assert request.status is ServiceRequestStatus.EN_RELATION
+
+
+async def test_create_intervention_opens_its_conversation(db_session: AsyncSession) -> None:
+    """La messagerie naît avec l'engagement (même transaction) : le fil
+    existe dès la création, entre ce client et le COMPTE de cet artisan, et
+    son identifiant est exposé — dans la création comme dans la liste."""
+    trade = await make_trade(db_session)
+    client_user = await make_user(db_session, role=Role.CLIENT)
+    request = await _open_request(db_session, client=client_user, trade=trade)
+    artisan_user, artisan = await _verified_artisan(db_session, trade=trade)
+    await make_commission_rate(db_session, trade_id=trade.id)
+
+    async with await _client() as http:
+        created = await http.post(
+            "/api/v1/interventions",
+            json={"service_request_id": str(request.id), "artisan_id": str(artisan.id)},
+            headers=_auth_headers(client_user),
+        )
+        listed = await http.get("/api/v1/interventions/me", headers=_auth_headers(artisan_user))
+
+    assert created.status_code == 201
+    conversation_id = created.json()["conversation_id"]
+    assert conversation_id is not None
+    assert listed.json()["items"][0]["conversation_id"] == conversation_id
+
+    conversation = await db_session.get(Conversation, uuid.UUID(conversation_id))
+    assert conversation is not None
+    assert conversation.intervention_id == uuid.UUID(created.json()["id"])
+    assert conversation.client_id == client_user.id
+    assert conversation.artisan_id == artisan_user.id
 
 
 async def test_commission_rate_is_frozen_and_unaffected_by_later_changes(

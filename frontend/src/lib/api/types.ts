@@ -1,5 +1,9 @@
 import type {
   AdminVerificationListItem,
+  ChatMessage,
+  ConversationDetail,
+  ConversationSummary,
+  MessageHistory,
   AdminVerificationReview,
   Artisan,
   ArtisanStats,
@@ -19,7 +23,10 @@ import type {
 // `not_implemented` : fonctionnalité déclarée côté front mais pas encore
 // servie par le backend -- levée explicitement (`notImplemented`,
 // http-impl.ts), jamais remplacée en silence par des données fictives.
-export type ApiErrorCode = 'not_found' | 'validation' | 'network' | 'not_implemented' | 'unknown';
+// `forbidden` : 403, ressource à laquelle le compte n'a pas accès (ex. le
+// fil de discussion d'autrui) -- l'écran renvoie alors proprement ailleurs.
+export type ApiErrorCode =
+  'not_found' | 'forbidden' | 'validation' | 'network' | 'not_implemented' | 'unknown';
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode;
@@ -93,6 +100,26 @@ export interface AddArtisanTradeInput {
   serviceRadiusM: number;
 }
 
+/** Curseurs de l'historique d'un fil (exclusifs l'un de l'autre). */
+export interface MessageCursor {
+  /** Messages antérieurs à ce `seq` (remontée dans l'historique). */
+  before?: number;
+  /** Messages postérieurs à ce `seq` (nouveaux messages, repli polling). */
+  since?: number;
+  limit?: number;
+}
+
+export interface ConversationFilters {
+  /** Seulement les fils avec cet artisan (profil), ex. bouton « Message » de sa fiche. */
+  artisanId?: string;
+}
+
+/** Ticket à usage unique pour ouvrir la connexion temps réel. */
+export interface RealtimeTicket {
+  ticket: string;
+  expiresIn: number;
+}
+
 export interface AdminVerificationFilters {
   /** Défaut serveur `pending` si omis (la file d'attente à traiter). */
   status?: VerificationDocStatus;
@@ -140,4 +167,14 @@ export interface ApiClient {
   getAdminVerificationDocumentBlob(verificationId: string): Promise<Blob>;
   approveVerification(verificationId: string): Promise<AdminVerificationReview>;
   rejectVerification(verificationId: string, note: string): Promise<AdminVerificationReview>;
+  // Messagerie (REST = source de vérité ; le temps réel ne fait que notifier).
+  listConversations(filters?: ConversationFilters): Promise<ConversationSummary[]>;
+  getUnreadMessageCount(): Promise<number>;
+  getConversation(conversationId: string): Promise<ConversationDetail>;
+  listMessages(conversationId: string, cursor?: MessageCursor): Promise<MessageHistory>;
+  sendMessage(conversationId: string, body: string): Promise<ChatMessage>;
+  sendImageMessage(conversationId: string, file: File, caption: string): Promise<ChatMessage>;
+  markConversationRead(conversationId: string, lastReadSeq: number): Promise<ConversationDetail>;
+  getMessageAttachmentBlob(conversationId: string, messageId: string): Promise<Blob>;
+  createRealtimeTicket(): Promise<RealtimeTicket>;
 }

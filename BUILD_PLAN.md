@@ -355,15 +355,19 @@ C'est la digue anti-faux-avis de Checkatrade (90 % de leurs avis sont vérifiés
 > `terminee`. Contrainte applicative + idéalement contrainte DB.
 
 #### `conversation` / `message`
-Messagerie liée à une demande/intervention. Base pour la détection de fuite
-(Phase 3+ : NLP sur partage de numéros hors plateforme).
+Messagerie in-app client ↔ artisan, **une conversation par intervention**,
+créée avec l'intervention (lot `feat/messagerie`, §3.4). Le masquage des
+coordonnées est le premier filet anti-fuite ; la détection par NLP reste en
+Phase 3+.
 
 | `conversation` | Type |
 |---|---|
 | id | UUID PK |
-| service_request_id | UUID FK null |
-| intervention_id | UUID FK null |
-| client_id / artisan_id | UUID FK → user |
+| service_request_id | UUID FK null (historique, non utilisé par la messagerie) |
+| intervention_id | UUID FK null — **unique** quand renseigné (index partiel `uq_conversation_intervention_id`) |
+| client_id / artisan_id | UUID FK → user (les deux SEULS participants ; `artisan_id` = le compte de l'artisan) |
+| client_last_read_seq / artisan_last_read_seq | bigint ≥ 0 — curseur de lecture de chaque partie (ne recule jamais) |
+| last_message_at | timestamptz null — tri par activité (`clock_timestamp()`, pas `now()`) |
 | created_at | timestamptz |
 
 | `message` | Type |
@@ -371,9 +375,16 @@ Messagerie liée à une demande/intervention. Base pour la détection de fuite
 | id | UUID PK |
 | conversation_id | UUID FK → conversation |
 | sender_id | UUID FK → user |
-| body | text |
+| seq | bigint identity **unique**, croissant — curseur de synchronisation (`since`/`before`), index `(conversation_id, seq)` |
+| body | text — **déjà masqué** : le numéro d'origine n'est jamais stocké |
+| contact_masked | bool — un numéro/e-mail a été masqué (affiché aux deux parties) |
+| attachment_key / attachment_content_type | text / varchar(64) null — photo jointe, stockage privé (§3.4) |
 | kind | enum(`texte`,`devis`,`systeme`) |
 | created_at | timestamptz |
+
+Contraintes : `body_or_attachment` (jamais de message vide), `attachment_complete`
+(clé et type renseignés ensemble). Migration `c0a26cec109e` (réversible) :
+ajoute ces colonnes et ouvre la conversation des interventions existantes.
 
 #### `otp_code` (auth)
 Codes OTP pour la connexion par téléphone.
@@ -617,11 +628,31 @@ POST /api/v1/payments/init        { intervention_id, channel } → wave_launch_u
 POST /api/v1/webhooks/wave        (HMAC-SHA256 vérifié, idempotent via wave_event_id)
 ```
 
-**Messagerie**
+**Messagerie** ✅ (lot `feat/messagerie`, détail §3.4) — client ou artisan
+participant uniquement ; admin exclu (`403 ROLE_INSUFFISANT`).
 ```
-GET  /api/v1/conversations/{id}/messages
-POST /api/v1/conversations/{id}/messages   { body }
+GET  /api/v1/conversations/me              ?page=&page_size=&artisan_id=
+                                    → mes discussions, triées par activité,
+                                      dernier message et non-lus de chacune
+GET  /api/v1/conversations/me/unread-count → { count } (badge de navigation)
+GET  /api/v1/conversations/{id}            → contexte (interlocuteur, intervention,
+                                      can_send, my_last_read_seq)
+GET  /api/v1/conversations/{id}/messages   ?since=<seq> | ?before=<seq>, &limit=
+                                    → historique ; `since` sert au rattrapage
+                                      et au repli polling
+POST /api/v1/conversations/{id}/messages   { body }        → 201 (texte masqué)
+POST /api/v1/conversations/{id}/messages/image  multipart file (+ caption)
+                                    → 201 ; photo réencodée, EXIF/GPS retirés
+GET  /api/v1/conversations/{id}/messages/{message_id}/attachment
+                                    → binaire, participants seuls,
+                                      Cache-Control: private, no-store
+POST /api/v1/conversations/{id}/read       { last_read_seq } → curseur avancé
+POST /api/v1/realtime/ticket               → { ticket, expires_in } (60 s, usage unique)
+WS   /api/v1/realtime/ws                   sous-protocoles ["teranga.v1", "ticket.<jwt>"]
 ```
+Conversation inexistante OU d'autrui : même `403 CONVERSATION_ACCES_INTERDIT`
+(l'existence d'un fil n'est jamais révélée). Demande annulée :
+`409 CONVERSATION_FERMEE` à l'envoi (lecture toujours possible).
 
 **Admin** (espace admin -- toutes les routes exigent `require_role(Role.ADMIN)`,
 BUILD_PLAN.md §4.4 ; un client/artisan reçoit 403 ROLE_INSUFFISANT, un
@@ -787,6 +818,96 @@ retouchés (preuve d'identité à examiner telle que déposée).
    bloquant.
 
 ---
+
+## 3.4 Messagerie temps réel (lot `feat/messagerie`)
+
+**Rattachement.** Une conversation par intervention, ouverte dans la même
+transaction que l'intervention (`create_intervention`) : la discussion
+existe dès la mise en relation, jamais avant — pas de canal libre vers un
+artisan sans demande. Participants : exactement le client et l'artisan de
+l'intervention ; l'admin est exclu (il n'a aucun besoin de lire les
+échanges privés pour la vérification des artisans).
+
+**REST = source de vérité.** Envoi, validation (vide refusé, 2 000
+caractères max), masquage, persistance et curseurs de lecture passent
+exclusivement par REST. Le WebSocket ne fait que **notifier**, après le
+commit (`message.created`, `conversation.read`) ; une publication qui
+échoue ne fait jamais échouer l'envoi. Conséquence : un message envoyé sans
+WebSocket est enregistré exactement de la même façon — prouvé par les tests
+`test_conversations_endpoint.py` (aucun WebSocket ouvert) et, côté front,
+`ConversationScreen.test.tsx` (« envoie et confirme un message par REST
+sans aucun temps réel », transport `unavailable`).
+
+**Authentification du WebSocket — ticket à usage unique.** Un navigateur ne
+peut pas poser d'en-tête `Authorization` sur un WebSocket, et un jeton dans
+l'URL finit dans les journaux. Le front demande donc un ticket
+(`POST /realtime/ticket`, authentifié par l'access token habituel) : JWT
+`type="ws"`, 60 s, `jti` unique. Il le transmet comme **sous-protocole**
+(`["teranga.v1", "ticket.<jwt>"]`) ; le serveur le vérifie **avant**
+d'accepter (signature, type, expiration, compte non supprimé, rôle client
+ou artisan, `jti` jamais consommé) et ne renvoie que `teranga.v1` — le
+ticket n'est jamais réémis. Refus : fermeture `4401` avant acceptation (la
+poignée de main échoue). Un access token classique est refusé comme ticket
+(type différent) et inversement.
+
+**Un canal par utilisateur** (`/realtime/ws`), pas par conversation : une
+seule connexion par onglet alimente le fil ouvert et le badge de non-lus.
+Isolation structurelle : le serveur ne publie un événement qu'aux sockets
+des deux participants ; il n'existe aucun abonnement côté client, donc aucun
+moyen de recevoir le fil d'autrui. Au plus 5 connexions par utilisateur
+(`WS_MAX_CONNECTIONS_PER_USER`, la plus ancienne fermée en `4429`).
+Heartbeat : ping serveur toutes les 25 s, fermeture `4408` sans signe du
+client en 60 s ; le client répond `pong` et coupe lui-même une connexion
+muette (70 s).
+
+**Repli automatique WebSocket → polling (front).** `RealtimeConnection`
+(`src/lib/realtime/`) expose un statut `connecting | open | unavailable`.
+Tant qu'il n'est pas `open`, le fil ouvert relit `GET .../messages?since=`
+toutes les 5 s et le badge relit `unread-count` toutes les 30 s ; dès qu'il
+redevient `open`, le polling s'arrête. Reconnexion à backoff exponentiel
+(1 s → 30 s, avec gigue), nouveau ticket à chaque tentative. À chaque
+(re)connexion et à chaque retour au premier plan, le fil fait un rattrapage
+`since` : un message publié pendant une coupure n'est jamais perdu. Onglet
+en arrière-plan : connexion fermée et aucun polling (batterie, données).
+
+**Masquage anti-fuite (second étage de l'anti-désintermédiation).**
+`app/services/contact_masking.py`, appliqué au texte et aux légendes avant
+stockage : numéros sénégalais à 9 chiffres (70/75/76/77/78/33 + 7 chiffres,
+avec ou sans `+221`/`00221`/`221`, séparateurs espace . - / et
+parenthèses), numéros internationaux (`+` ou `00`, 9 à 15 chiffres, dont
+les liens `wa.me`) et e-mails → `[numéro masqué]` / `[e-mail masqué]`.
+Seul le texte masqué est stocké (`contact_masked=true`), et les deux parties
+voient l'avertissement : rien n'est caché à l'expéditeur. Pas de
+sur-masquage : montants (`15 000 FCFA`), mesures (`2 robinets de 15 mm`),
+heures, dates, quantités restent intacts (36 tests). **Limites assumées** :
+un numéro épelé en toutes lettres, découpé sur plusieurs messages ou écrit
+dans une photo n'est pas détecté — c'est le périmètre de la détection NLP
+(Phase 3+, §8).
+
+**Photos sans fuite.** `POST .../messages/image` : magic bytes JPEG/PNG uniquement,
+10 Mo max, anti-bombe de décompression (50 Mpx), **réencodage serveur**
+(EXIF et GPS retirés, 1 600 px max) — l'original n'est jamais conservé.
+Stockage **privé** (`MESSAGE_ATTACHMENT_STORAGE_LOCAL_DIR`, clé aléatoire,
+jamais servi en statique), lecture réservée aux deux participants
+(`Cache-Control: private, no-store`). Le front le charge en blob
+authentifié et révoque l'URL locale ensuite. Fichier supprimé si
+l'enregistrement en base échoue. Rate limiting par utilisateur : 30
+messages/min, 20 photos/10 min (`429 TROP_DE_DEMANDES`).
+
+**Dette multi-instance — bus Redis pub/sub (à traiter AVANT de passer à
+plusieurs instances backend).** `ConnectionManager` et le registre des
+tickets consommés sont en mémoire, locaux au processus : exacts en instance
+unique (cible de lancement, comme Railway 1 réplica). Avec plusieurs
+instances : (1) un message enregistré par l'instance A n'est pas poussé aux
+sockets ouvertes sur B — et comme un client dont le WebSocket est `open` ne
+fait pas de polling, il ne le verrait qu'au prochain rattrapage
+(reconnexion, retour au premier plan) : **dégradation silencieuse, pas
+seulement un retard** ; (2) un ticket consommé sur A pourrait être rejoué
+sur B pendant ses 60 s de validité. Correction prévue : publication via
+Redis pub/sub (un canal par utilisateur, chaque instance relaie à ses
+sockets) et consommation atomique du `jti` en Redis (`SET NX EX`). Le rate
+limiting, lui, est déjà partagé (table `rate_limit_hit`, lot
+`feat/media-hardening`).
 
 ## 4. Authentification (téléphone + OTP)
 
@@ -1249,6 +1370,22 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   embarquée dans le bundle). Parcours vérifié bout en bout via le proxy
   Vite (recherche, OTP, triage IA, uploads, dashboard, refresh/logout).
   *But : un seul backend.*
+- **Lot `feat/messagerie` — Messagerie in-app temps réel.** Une
+  conversation par intervention (créée avec elle, migration `c0a26cec109e`
+  qui ouvre aussi celle des interventions existantes), deux participants,
+  admin exclu, non-participant = même 403 qu'un fil inexistant. REST source
+  de vérité (liste paginée par activité, historique `since`/`before`, envoi
+  texte et photo, curseurs de lecture, compteur de non-lus) ; WebSocket de
+  notification par utilisateur, authentifié par ticket à usage unique en
+  sous-protocole, heartbeat ; repli automatique sur polling côté front.
+  Masquage des numéros sénégalais/internationaux et des e-mails avant
+  stockage, avertissement visible des deux parties. Photos réencodées
+  (EXIF/GPS retirés), stockage privé, servies aux seuls participants.
+  Front : `/messages`, `/messages/:id`, badge de non-lus temps réel dans les
+  deux navigations, accès au fil depuis la fiche artisan et la carte
+  d'intervention ; `ComingSoon` supprimé. Détail §3.4, dette Redis
+  multi-instance comprise. *But : client et artisan se parlent sur la
+  plateforme, sans s'échanger leurs numéros.*
 - **Lot 14 — Paiements** (Wave Business API : checkout, webhook HMAC idempotent,
   payout) + **Lot 15 — Déploiement Railway** (2 services + Postgres managé,
   bascule `DATABASE_URL`). *À séquencer selon priorités.*

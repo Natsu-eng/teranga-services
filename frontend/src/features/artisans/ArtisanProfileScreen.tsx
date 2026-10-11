@@ -24,6 +24,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { StatTile } from '../../components/ui/StatTile';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { ApiError, api } from '../../lib/api';
 import { useAuth } from '../auth/hooks/useAuth';
 import { QuoteRequestSheet } from './components/QuoteRequestSheet';
 import { useArtisan } from './hooks/useArtisan';
@@ -50,6 +51,11 @@ export const ArtisanProfileScreen: React.FC = () => {
   const auth = useAuth();
   const { data: artisan, isLoading, error, reload } = useArtisan(artisanId);
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  // Ouvert depuis « Message » sans mise en relation : le panneau explique
+  // qu'une demande doit d'abord être envoyée à l'artisan.
+  const [quoteIntro, setQuoteIntro] = useState<string | null>(null);
+  const [isOpeningThread, setIsOpeningThread] = useState(false);
+  const [threadError, setThreadError] = useState<string | null>(null);
   const [showAllReviews, setShowAllReviews] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
 
@@ -79,7 +85,42 @@ export const ArtisanProfileScreen: React.FC = () => {
       navigate('/connexion', { state: { from: location } });
       return;
     }
+    setQuoteIntro(null);
     setIsQuoteOpen(true);
+  };
+
+  /**
+   * La messagerie est rattachée à une mise en relation réelle : « Message »
+   * ouvre le fil existant avec cet artisan (le plus récent). Sans mise en
+   * relation, aucun canal libre : le panneau de demande de devis s'ouvre,
+   * avec une explication.
+   */
+  const handleMessage = async () => {
+    if (!auth.isAuthenticated) {
+      navigate('/connexion', { state: { from: location } });
+      return;
+    }
+    if (!artisan) return;
+    setThreadError(null);
+    setIsOpeningThread(true);
+    try {
+      const [latest] = await api.listConversations({ artisanId: artisan.id });
+      if (latest) {
+        navigate(`/messages/${latest.id}`);
+        return;
+      }
+      setQuoteIntro(
+        `La discussion avec ${artisan.name} s'ouvre dès que vous lui envoyez une demande : ` +
+          "c'est ce qui permet d'échanger en toute sécurité, sans partager vos coordonnées.",
+      );
+      setIsQuoteOpen(true);
+    } catch (err) {
+      setThreadError(
+        err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+      );
+    } finally {
+      setIsOpeningThread(false);
+    }
   };
 
   const reviews = artisan?.reviews ?? [];
@@ -316,14 +357,16 @@ export const ArtisanProfileScreen: React.FC = () => {
               </ButtonLink>
             ) : (
               <>
-                <ButtonLink
-                  to={`/messages/${artisanId}`}
+                <Button
                   variant="outline"
                   size="md"
+                  isLoading={isOpeningThread}
+                  disabled={!artisan.verified}
+                  onClick={() => void handleMessage()}
                   leadingIcon={<MessageCircle aria-hidden className="w-5 h-5" />}
                 >
                   Message
-                </ButtonLink>
+                </Button>
                 {/* Taille md et sans icône : les deux libellés tiennent sur une
                     ligne dès 360 px de large (vérifié en capture). */}
                 <Button
@@ -338,6 +381,11 @@ export const ArtisanProfileScreen: React.FC = () => {
               </>
             )}
           </div>
+          {threadError && (
+            <p role="alert" className="max-w-xl mx-auto pb-1 text-xs text-center text-destructive">
+              {threadError}
+            </p>
+          )}
           {!isOwnProfile && !artisan.verified && (
             <p className="max-w-xl mx-auto pb-1 text-xs text-center text-muted-foreground">
               Cet artisan n&apos;est pas encore vérifié : il ne peut pas recevoir de demande.
@@ -350,6 +398,7 @@ export const ArtisanProfileScreen: React.FC = () => {
         <QuoteRequestSheet
           artisan={artisan}
           open={isQuoteOpen}
+          intro={quoteIntro}
           onClose={() => setIsQuoteOpen(false)}
         />
       )}

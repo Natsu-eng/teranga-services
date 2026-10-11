@@ -5,6 +5,10 @@ import { MainLayout } from './MainLayout';
 import { useAuth } from '../../features/auth/hooks/useAuth';
 import type { AuthContextValue } from '../../features/auth/auth-context';
 import type { AuthUser } from '../../lib/api/auth-client';
+import {
+  DEFAULT_REALTIME,
+  RealtimeContext,
+} from '../../features/messages/realtime/realtime-context';
 
 vi.mock('../../features/auth/hooks/useAuth');
 
@@ -37,16 +41,18 @@ function userFixture(role: AuthUser['role'], fullName: string): AuthUser {
   };
 }
 
-function renderLayout(path = '/accueil', setLocation = vi.fn()) {
+function renderLayout(path = '/accueil', setLocation = vi.fn(), unreadCount: number | null = null) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route element={<MainLayout location="Dakar Plateau" setLocation={setLocation} />}>
-          <Route path="/accueil" element={<p>Contenu accueil</p>} />
-          <Route path="/pro" element={<p>Contenu pro</p>} />
-        </Route>
-      </Routes>
-    </MemoryRouter>,
+    <RealtimeContext.Provider value={{ ...DEFAULT_REALTIME, unreadCount }}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route element={<MainLayout location="Dakar Plateau" setLocation={setLocation} />}>
+            <Route path="/accueil" element={<p>Contenu accueil</p>} />
+            <Route path="/pro" element={<p>Contenu pro</p>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </RealtimeContext.Provider>,
   );
 }
 
@@ -195,5 +201,46 @@ describe('Sélecteur de quartier', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Ouakam, Dakar' }));
 
     expect(setLocation).toHaveBeenCalledWith('Ouakam, Dakar');
+  });
+});
+
+describe('Badge de messages non lus', () => {
+  afterEach(cleanup);
+
+  it('affiche le nombre de non-lus sur « Messages » (client), annoncé aux lecteurs d’écran', () => {
+    mockedUseAuth.mockReturnValue(
+      authValue({ isAuthenticated: true, role: 'client', user: userFixture('client', 'Awa Diop') }),
+    );
+
+    renderLayout('/accueil', vi.fn(), 3);
+
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
+    expect(within(nav).getByRole('link', { name: /Messages, 3 non lus/ })).toBeInTheDocument();
+  });
+
+  it("l'affiche aussi dans la navigation de l'espace Pro", () => {
+    mockedUseAuth.mockReturnValue(
+      authValue({
+        isAuthenticated: true,
+        role: 'artisan',
+        user: userFixture('artisan', 'Idrissa Diop'),
+      }),
+    );
+
+    renderLayout('/pro', vi.fn(), 1);
+
+    const nav = screen.getByRole('navigation', { name: "Navigation de l'espace Pro" });
+    expect(within(nav).getByRole('link', { name: /Messages, 1 non lu$/ })).toBeInTheDocument();
+  });
+
+  it('ne montre aucune pastille sans message non lu', () => {
+    mockedUseAuth.mockReturnValue(
+      authValue({ isAuthenticated: true, role: 'client', user: userFixture('client', 'Awa Diop') }),
+    );
+
+    renderLayout('/accueil', vi.fn(), 0);
+
+    const nav = screen.getByRole('navigation', { name: 'Navigation principale' });
+    expect(within(nav).getByRole('link', { name: 'Messages' })).toBeInTheDocument();
   });
 });

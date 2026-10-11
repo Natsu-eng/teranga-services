@@ -145,3 +145,21 @@ def get_avatar_storage_backend(settings: Settings | None = None) -> StorageBacke
         "Choisissez et implémentez un fournisseur cloud (bucket public, CDN) avant de "
         "l'activer via AVATAR_STORAGE_BACKEND."
     )
+
+
+def get_message_attachment_storage_backend(settings: Settings | None = None) -> StorageBackend:
+    """Stockage PRIVÉ des images jointes à la messagerie -- même régime que
+    les documents de vérification : jamais monté en StaticFiles, lu
+    uniquement par l'endpoint authentifié réservé aux deux participants
+    (`GET /conversations/{id}/messages/{message_id}/attachment`). Répertoire
+    distinct (`Settings.message_attachment_storage_local_dir`) pour qu'une
+    erreur de configuration d'un stockage n'expose jamais l'autre."""
+    settings = settings or get_settings()
+    if settings.message_attachment_storage_backend == "local":
+        return LocalStorageBackend(resolve_local_dir(settings.message_attachment_storage_local_dir))
+    raise NotImplementedError(
+        "Backend de stockage des pièces jointes "
+        f"{settings.message_attachment_storage_backend!r} non implémenté. Choisissez et "
+        "implémentez un fournisseur cloud PRIVÉ avant de l'activer via "
+        "MESSAGE_ATTACHMENT_STORAGE_BACKEND."
+    )

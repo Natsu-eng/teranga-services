@@ -13,6 +13,11 @@
  */
 import type {
   AdminVerificationListItem,
+  ChatMessage,
+  ConversationDetail,
+  ConversationParticipant,
+  ConversationSummary,
+  MessageHistory,
   AdminVerificationReview,
   AIAnalysisResult,
   Artisan,
@@ -36,8 +41,11 @@ import type {
   AdminVerificationFilters,
   ApiClient,
   ArtisanFilters,
+  ConversationFilters,
   CreateInterventionInput,
   CreateQuoteInput,
+  MessageCursor,
+  RealtimeTicket,
   CreateReviewInput,
   CreateServiceRequestInput,
   UpdateArtisanProfileInput,
@@ -212,6 +220,54 @@ interface BackendIntervention {
   decline_reason: string | null;
   quote: BackendQuote | null;
   review: BackendReview | null;
+  conversation_id?: string | null;
+  created_at: string;
+}
+
+interface BackendChatMessage {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  sender_id: string;
+  body: string;
+  contact_masked: boolean;
+  has_attachment: boolean;
+  attachment_content_type: string | null;
+  created_at: string;
+}
+
+interface BackendParticipant {
+  user_id: string;
+  role: 'client' | 'artisan';
+  display_name: string;
+  avatar_url: string | null;
+  artisan_profile_id: string | null;
+}
+
+interface BackendConversationSummary {
+  id: string;
+  intervention_id: string | null;
+  intervention_status: BackendIntervention['status'] | null;
+  trade_label: string | null;
+  other_party: BackendParticipant;
+  last_message: {
+    body: string;
+    from_me: boolean;
+    has_attachment: boolean;
+    created_at: string;
+  } | null;
+  unread_count: number;
+  last_activity_at: string;
+}
+
+interface BackendConversation {
+  id: string;
+  intervention_id: string | null;
+  intervention_status: BackendIntervention['status'] | null;
+  trade_label: string | null;
+  other_party: BackendParticipant;
+  my_last_read_seq: number;
+  can_send: boolean;
   created_at: string;
 }
 
@@ -304,7 +360,72 @@ function mapIntervention(intervention: BackendIntervention): Intervention {
     declineReason: intervention.decline_reason,
     quote: intervention.quote ? mapQuote(intervention.quote) : null,
     review: intervention.review ? mapReview(intervention.review) : null,
+    conversationId: intervention.conversation_id ?? null,
     createdAt: intervention.created_at,
+  };
+}
+
+/**
+ * Message reçu du serveur, par REST comme par le canal temps réel (même
+ * forme) -- exporté pour que la couche temps réel n'en ait pas sa copie.
+ */
+export function mapChatMessage(message: BackendChatMessage): ChatMessage {
+  return {
+    id: message.id,
+    conversationId: message.conversation_id,
+    seq: message.seq,
+    senderId: message.sender_id,
+    body: message.body,
+    contactMasked: message.contact_masked,
+    hasAttachment: message.has_attachment,
+    attachmentContentType: message.attachment_content_type,
+    createdAt: message.created_at,
+  };
+}
+
+/** Forme brute d'un message tel qu'émis par le serveur (REST et temps réel). */
+export type { BackendChatMessage };
+
+function mapParticipant(participant: BackendParticipant): ConversationParticipant {
+  return {
+    userId: participant.user_id,
+    role: participant.role,
+    displayName: participant.display_name,
+    avatarUrl: participant.avatar_url,
+    artisanProfileId: participant.artisan_profile_id,
+  };
+}
+
+function mapConversationSummary(summary: BackendConversationSummary): ConversationSummary {
+  return {
+    id: summary.id,
+    interventionId: summary.intervention_id,
+    interventionStatus: summary.intervention_status,
+    tradeLabel: summary.trade_label,
+    otherParty: mapParticipant(summary.other_party),
+    lastMessage: summary.last_message
+      ? {
+          body: summary.last_message.body,
+          fromMe: summary.last_message.from_me,
+          hasAttachment: summary.last_message.has_attachment,
+          createdAt: summary.last_message.created_at,
+        }
+      : null,
+    unreadCount: summary.unread_count,
+    lastActivityAt: summary.last_activity_at,
+  };
+}
+
+function mapConversation(conversation: BackendConversation): ConversationDetail {
+  return {
+    id: conversation.id,
+    interventionId: conversation.intervention_id,
+    interventionStatus: conversation.intervention_status,
+    tradeLabel: conversation.trade_label,
+    otherParty: mapParticipant(conversation.other_party),
+    myLastReadSeq: conversation.my_last_read_seq,
+    canSend: conversation.can_send,
+    createdAt: conversation.created_at,
   };
 }
 
@@ -787,5 +908,83 @@ export const httpApiClient: ApiClient = {
       body: { rating: input.rating, comment: input.comment },
     });
     return mapReview(review);
+  },
+
+  // ------------------------------------------------------------- Messagerie
+
+  async listConversations(filters?: ConversationFilters): Promise<ConversationSummary[]> {
+    const params = new URLSearchParams({ page_size: '50' });
+    if (filters?.artisanId) params.set('artisan_id', filters.artisanId);
+    const page = await apiRequest<BackendPage<BackendConversationSummary>>(
+      `/conversations/me?${params.toString()}`,
+    );
+    return page.items.map(mapConversationSummary);
+  },
+
+  async getUnreadMessageCount(): Promise<number> {
+    const result = await apiRequest<{ count: number }>('/conversations/me/unread-count');
+    return result.count;
+  },
+
+  async getConversation(conversationId: string): Promise<ConversationDetail> {
+    return mapConversation(
+      await apiRequest<BackendConversation>(`/conversations/${conversationId}`),
+    );
+  },
+
+  async listMessages(conversationId: string, cursor?: MessageCursor): Promise<MessageHistory> {
+    const params = new URLSearchParams();
+    if (cursor?.before !== undefined) params.set('before', String(cursor.before));
+    if (cursor?.since !== undefined) params.set('since', String(cursor.since));
+    if (cursor?.limit !== undefined) params.set('limit', String(cursor.limit));
+    const query = params.toString();
+    const history = await apiRequest<{ items: BackendChatMessage[]; has_more: boolean }>(
+      `/conversations/${conversationId}/messages${query ? `?${query}` : ''}`,
+    );
+    return { items: history.items.map(mapChatMessage), hasMore: history.has_more };
+  },
+
+  async sendMessage(conversationId: string, body: string): Promise<ChatMessage> {
+    return mapChatMessage(
+      await apiRequest<BackendChatMessage>(`/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        body: { body },
+      }),
+    );
+  },
+
+  async sendImageMessage(conversationId: string, file: File, caption: string): Promise<ChatMessage> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('caption', caption);
+    return mapChatMessage(
+      await apiRequest<BackendChatMessage>(`/conversations/${conversationId}/messages/image`, {
+        method: 'POST',
+        formData,
+      }),
+    );
+  },
+
+  async markConversationRead(
+    conversationId: string,
+    lastReadSeq: number,
+  ): Promise<ConversationDetail> {
+    return mapConversation(
+      await apiRequest<BackendConversation>(`/conversations/${conversationId}/read`, {
+        method: 'POST',
+        body: { last_read_seq: lastReadSeq },
+      }),
+    );
+  },
+
+  async getMessageAttachmentBlob(conversationId: string, messageId: string): Promise<Blob> {
+    return apiRequestBlob(`/conversations/${conversationId}/messages/${messageId}/attachment`);
+  },
+
+  async createRealtimeTicket(): Promise<RealtimeTicket> {
+    const result = await apiRequest<{ ticket: string; expires_in: number }>('/realtime/ticket', {
+      method: 'POST',
+    });
+    return { ticket: result.ticket, expiresIn: result.expires_in };
   },
 };

@@ -23,6 +23,7 @@ frontend/
 │   ├── types/                        # Types du domaine
 │   ├── data/                         # Données fictives — réservées aux tests
 │   ├── lib/api/                      # Accès aux données : contrat ApiClient, client HTTP, mock de test
+│   ├── lib/realtime/                 # Transport temps réel (WebSocket, reconnexion, statut de repli)
 │   ├── components/                   # Composants partagés (layout, ui)
 │   └── features/                     # Écrans et hooks, organisés par domaine
 ├── public/                           # Assets statiques servis tels quels
@@ -79,7 +80,9 @@ sert ; deux réglages sont indispensables :
      du front à `CORS_ORIGINS` côté backend. Les jetons passent par l'en-tête
      `Authorization` (pas de cookie), donc rien d'autre à configurer.
    - **Même origine** — laisser `VITE_API_BASE_URL` vide et placer devant le
-     front un reverse proxy qui route `/api/v1/*` vers le backend.
+     front un reverse proxy qui route `/api/v1/*` vers le backend, **y compris
+     la mise à niveau WebSocket** de `/api/v1/realtime/ws` (sans elle, la
+     messagerie fonctionne quand même, en relecture REST toutes les 5 s).
 
 **Vercel** (Root Directory = `frontend`) : [vercel.json](vercel.json) porte
 déjà le fallback SPA, le cache immuable des assets et les en-têtes de
@@ -101,6 +104,32 @@ trop stricte se voit donc avant le déploiement.
 
 Le front ne détient **aucun secret** : la configuration IA (`AI_TRIAGE_PROVIDER`,
 `MISTRAL_API_KEY`) est exclusivement côté backend. Voir [.env.example](.env.example).
+
+## Messagerie temps réel (`src/lib/realtime`, `src/features/messages`)
+
+- **REST reste la source de vérité** : l'envoi d'un message (texte ou photo)
+  passe toujours par `POST /conversations/{id}/messages[/image]`, que le
+  temps réel soit disponible ou non.
+- **Un seul WebSocket par onglet** (`RealtimeProvider`, client ou artisan
+  connecté uniquement), URL dérivée de `VITE_API_BASE_URL`
+  ([url.ts](src/lib/realtime/url.ts)) : `wss://` dès que la page ou l'API est
+  en https. Authentification par **ticket à usage unique** (60 s) demandé à
+  `POST /realtime/ticket`, transmis en sous-protocole — jamais dans l'URL,
+  jamais de cookie (pas de détournement de WebSocket intersite possible).
+- **Repli automatique** : tant que le statut n'est pas `open`, le fil ouvert
+  relit `?since=` toutes les 5 s et le badge de non-lus toutes les 30 s ;
+  reconnexion à backoff exponentiel (1 s → 30 s) ; rattrapage à chaque
+  reconnexion et retour au premier plan ; **tout s'arrête** quand l'onglet
+  passe en arrière-plan. Réglages : [config.ts](src/lib/realtime/config.ts).
+- **Envoi optimiste** : le message s'affiche aussitôt (« Envoi… »), est
+  remplacé par la version enregistrée (éventuellement masquée), ou reste
+  visible en échec avec la raison, « Réessayer » et « Supprimer ».
+- **Photos** : chargées en blob avec le jeton d'accès, URL locale révoquée
+  ensuite ; jamais d'URL publique.
+
+En dev, le proxy Vite transmet aussi le WebSocket (`ws: true`). En
+production, la CSP de [vercel.json](vercel.json) autorise `connect-src`
+`https:` et `wss:`.
 
 ## Accès aux données (`src/lib/api`)
 

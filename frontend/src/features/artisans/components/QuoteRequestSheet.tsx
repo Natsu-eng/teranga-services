@@ -15,6 +15,8 @@ interface QuoteRequestSheetProps {
   artisan: Artisan;
   open: boolean;
   onClose: () => void;
+  /** Explication affichée en tête (ex. ouvert depuis « Message »). */
+  intro?: string | null;
 }
 
 /** Prénom affiché dans les libellés (« Envoyer à Idrissa »). */
@@ -204,13 +206,23 @@ const QuoteRequestContent: React.FC<{ artisan: Artisan }> = ({ artisan }) => {
 };
 
 /** « Demander un devis » depuis la fiche artisan (client connecté). */
-export const QuoteRequestSheet: React.FC<QuoteRequestSheetProps> = ({ artisan, open, onClose }) => (
+export const QuoteRequestSheet: React.FC<QuoteRequestSheetProps> = ({
+  artisan,
+  open,
+  onClose,
+  intro,
+}) => (
   <Sheet
     open={open}
     onClose={onClose}
     title="Demander un devis"
     description={`À ${artisan.name}, artisan vérifié.`}
   >
+    {intro && (
+      <p className="mb-4 rounded-field bg-emerald-tint px-3 py-2 text-sm text-foreground">
+        {intro}
+      </p>
+    )}
     <QuoteRequestContent artisan={artisan} />
   </Sheet>
 );

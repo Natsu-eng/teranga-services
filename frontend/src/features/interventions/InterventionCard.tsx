@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Check, ReceiptText } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import { Check, MessageCircle, ReceiptText } from 'lucide-react';
+import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextAreaField, TextField } from '../../components/ui/Field';
 import { RatingInput, StarRow } from '../../components/ui/Rating';
@@ -367,6 +367,18 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
             Le client n&apos;a pas encore laissé d&apos;avis.
           </p>
         ))}
+
+      {/* Discussion rattachée à cette mise en relation (les deux parties). */}
+      {intervention.conversationId && (
+        <ButtonLink
+          to={`/messages/${intervention.conversationId}`}
+          variant="ghost"
+          size="sm"
+          leadingIcon={<MessageCircle aria-hidden className="w-4 h-4" />}
+        >
+          {role === 'artisan' ? 'Discuter avec le client' : "Discuter avec l'artisan"}
+        </ButtonLink>
+      )}
 
       {/* annulee */}
       {intervention.status === 'annulee' && (

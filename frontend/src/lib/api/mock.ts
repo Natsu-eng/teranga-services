@@ -165,6 +165,53 @@ export const mockApiClient: ApiClient = {
     return [];
   },
 
+  // Messagerie : jamais simulée (le mock est réservé aux tests, qui
+  // remplacent ces appels par les leurs).
+  async listConversations() {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async getUnreadMessageCount() {
+    await simulateNetworkLatency();
+    return 0;
+  },
+
+  async getConversation(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette conversation n'existe pas.");
+  },
+
+  async listMessages() {
+    await simulateNetworkLatency();
+    return { items: [], hasMore: false };
+  },
+
+  async sendMessage(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette conversation n'existe pas.");
+  },
+
+  async sendImageMessage(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette conversation n'existe pas.");
+  },
+
+  async markConversationRead(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette conversation n'existe pas.");
+  },
+
+  async getMessageAttachmentBlob(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Cette pièce jointe est introuvable.');
+  },
+
+  async createRealtimeTicket(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('network', 'Temps réel indisponible.');
+  },
+
   async createIntervention(): Promise<Intervention> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', "Cette demande n'existe pas.");

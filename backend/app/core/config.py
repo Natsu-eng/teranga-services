@@ -290,6 +290,59 @@ class Settings(BaseSettings):
     rate_limit_profile_media_upload_per_user_max: int = 20
     rate_limit_profile_media_upload_per_user_window_seconds: int = 600
 
+    # --- Messagerie in-app (BUILD_PLAN.md §3.2, Messagerie) -------------------
+
+    # Longueur maximale d'un message texte, en caractères (après nettoyage
+    # des espaces). Large pour décrire un problème ou un devis, sans
+    # autoriser des pavés qui dégraderaient le fil et le stockage.
+    messaging_body_max_length: int = 2000
+    # Historique : nombre de messages renvoyés par appel (défaut / plafond).
+    # Le plafond borne le coût d'une requête quel que soit le client.
+    messaging_history_page_size_default: int = 30
+    messaging_history_page_size_max: int = 100
+
+    # Rate limiting de l'envoi de messages texte, par utilisateur (fenêtre
+    # glissante, stockage RATE_LIMIT_BACKEND). 30 / minute couvre largement
+    # une conversation humaine rapide, mais bloque un script d'envoi massif.
+    rate_limit_message_send_per_user_max: int = 30
+    rate_limit_message_send_per_user_window_seconds: int = 60
+
+    # Images jointes : stockage PRIVÉ, jamais monté en StaticFiles (comme les
+    # documents de vérification) -- une photo d'intérieur ne doit être visible
+    # que des deux participants. Même principe fail-fast que STORAGE_BACKEND.
+    message_attachment_storage_backend: Literal["local"] = "local"
+    message_attachment_storage_local_dir: str = "var/message-attachments"
+    # Taille maximale du fichier ENVOYÉ (une photo de téléphone dépasse
+    # souvent 4 Mo). Ce qui est stocké est réencodé (EXIF/GPS retirés) et
+    # redimensionné, donc bien plus léger.
+    message_attachment_max_upload_bytes: int = 10 * 1024 * 1024
+    # Côté le plus long de l'image stockée, en pixels (jamais d'agrandissement) :
+    # assez pour lire un détail de fuite ou de tableau électrique.
+    message_attachment_max_side_px: int = 1600
+    # Plafond de pixels lu dans l'en-tête avant décodage (anti-bombe de
+    # décompression), même valeur que pour les médias de profil.
+    message_attachment_max_pixels: int = 50_000_000
+    # Rate limiting de l'envoi d'images, par utilisateur : chaque envoi
+    # décode, réencode et écrit un fichier -- bien plus coûteux qu'un texte.
+    rate_limit_message_attachment_per_user_max: int = 20
+    rate_limit_message_attachment_per_user_window_seconds: int = 600
+
+    # WebSocket (livraison temps réel). Authentification par TICKET : jeton
+    # signé dédié (type "ws"), à usage unique, de courte durée, obtenu par
+    # un appel REST authentifié puis transmis dans le sous-protocole
+    # WebSocket -- jamais dans l'URL (journaux), jamais l'access token lui-même.
+    ws_ticket_ttl_seconds: int = 60
+    # Battement de cœur applicatif : le serveur envoie un « ping » à cet
+    # intervalle ; sans « pong » du client avant le délai d'expiration, la
+    # connexion est considérée morte et fermée. Côté navigateur, ces pings
+    # permettent aussi de détecter une connexion silencieusement coupée.
+    ws_heartbeat_interval_seconds: float = 25.0
+    ws_heartbeat_timeout_seconds: float = 60.0
+    # Connexions WebSocket simultanées par utilisateur (plusieurs onglets ou
+    # appareils) : au-delà, la plus ancienne est fermée -- borne la mémoire
+    # occupée par un seul compte.
+    ws_max_connections_per_user: int = 5
+
     # Origine publique du backend, utilisée pour construire l'URL absolue
     # d'un avatar (`{backend_public_base_url}/static/avatars/...`). Une URL
     # relative ne suffit pas : front (Vercel) et back (Railway) sont deux

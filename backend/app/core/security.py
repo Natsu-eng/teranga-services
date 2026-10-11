@@ -1,8 +1,9 @@
 """Émission et vérification des JWT (BUILD_PLAN.md §4.2).
 
 Payload : `sub` (id utilisateur), `role`, `jti`, `iat`, `exp`, `type`
-(`"access"` ou `"refresh"`) -- le claim `type` empêche qu'un refresh token
-soit accepté là où un access token est attendu, et réciproquement.
+(`"access"`, `"refresh"` ou `"ws"`) -- le claim `type` empêche qu'un jeton
+soit accepté là où un autre type est attendu (un refresh token comme access
+token, un ticket WebSocket comme access token, etc.).
 """
 
 import uuid
@@ -20,7 +21,7 @@ from app.models.user import User
 # (ex. un attaquant qui imposerait "none" ou un algorithme asymétrique).
 _ALGORITHM = "HS256"
 
-TokenType = Literal["access", "refresh"]
+TokenType = Literal["access", "refresh", "ws"]
 
 
 class TokenPayload(TypedDict):
@@ -81,3 +82,23 @@ def decode_token(token: str, *, settings: Settings | None = None) -> TokenPayloa
     except jwt.PyJWTError as exc:
         raise TokenInvalideError() from exc
     return cast(TokenPayload, payload)
+
+
+def encode_ws_ticket(user: User, *, settings: Settings | None = None) -> tuple[str, uuid.UUID]:
+    """Ticket d'ouverture d'un WebSocket (BUILD_PLAN.md §3.2, Messagerie).
+
+    Délivré par un appel REST authentifié, il ne sert QU'À ouvrir une
+    connexion temps réel : type dédié `"ws"` (refusé partout ailleurs), durée
+    de vie très courte, et usage unique (son `jti` est consommé à la
+    connexion, voir app.services.realtime). Renvoie aussi le `jti`.
+    """
+    settings = settings or get_settings()
+    jti = uuid.uuid4()
+    token = _encode(
+        user,
+        token_type="ws",
+        ttl_seconds=settings.ws_ticket_ttl_seconds,
+        jti=jti,
+        settings=settings,
+    )
+    return token, jti
