@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
-import { ComingSoon } from './ComingSoon';
 import { EmptyState } from './EmptyState';
 import { ErrorState } from './ErrorState';
 import { Skeleton } from './Skeleton';
@@ -75,20 +73,5 @@ describe('Spinner', () => {
     render(<PageLoader />);
 
     expect(screen.getByRole('status', { name: 'Chargement' })).toBeInTheDocument();
-  });
-});
-
-describe('ComingSoon', () => {
-  it('affiche un « pas encore » honnête avec un lien de retour', () => {
-    render(
-      <MemoryRouter>
-        <ComingSoon title="La messagerie arrive bientôt" backTo="/pro" />
-      </MemoryRouter>,
-    );
-
-    expect(
-      screen.getByRole('heading', { level: 1, name: 'La messagerie arrive bientôt' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Retour/ })).toHaveAttribute('href', '/pro');
   });
 });

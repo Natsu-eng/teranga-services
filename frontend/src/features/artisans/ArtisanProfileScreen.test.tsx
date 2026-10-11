@@ -15,13 +15,17 @@ vi.mock('../requests/hooks/useMyRequests');
 vi.mock('../auth/hooks/useAuth');
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
-  return { ...actual, api: { ...actual.api, createIntervention: vi.fn() } };
+  return {
+    ...actual,
+    api: { ...actual.api, createIntervention: vi.fn(), listConversations: vi.fn() },
+  };
 });
 
 const mockedUseArtisan = vi.mocked(useArtisan);
 const mockedUseMyRequests = vi.mocked(useMyRequests);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedCreateIntervention = vi.mocked(api.createIntervention);
+const mockedListConversations = vi.mocked(api.listConversations);
 
 const artisanFixture: Artisan = {
   id: 'test-artisan',
@@ -123,6 +127,7 @@ describe('ArtisanProfileScreen', () => {
   beforeEach(() => {
     mockedUseArtisan.mockReset();
     mockedCreateIntervention.mockReset();
+    mockedListConversations.mockReset();
     mockedUseAuth.mockReturnValue(authValue({}));
     mockedUseMyRequests.mockReturnValue({
       data: [],
@@ -319,6 +324,46 @@ describe('ArtisanProfileScreen', () => {
 
       expect(screen.queryByRole('button', { name: 'Demander un devis' })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Modifier ma fiche' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Message', () => {
+    it('ouvre le fil existant avec cet artisan', async () => {
+      mockedUseAuth.mockReturnValue(signedIn('client'));
+      mockedListConversations.mockResolvedValue([
+        { id: 'fil-42' } as Awaited<ReturnType<typeof api.listConversations>>[number],
+      ]);
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+
+      expect(await screen.findByText('Page /messages/fil-42')).toBeInTheDocument();
+      expect(mockedListConversations).toHaveBeenCalledWith({ artisanId: 'test-artisan' });
+    });
+
+    it("sans mise en relation, explique et propose d'envoyer une demande (aucun canal libre)", async () => {
+      mockedUseAuth.mockReturnValue(signedIn('client'));
+      mockedListConversations.mockResolvedValue([]);
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Demander un devis' });
+      expect(
+        within(dialog).getByText(/s'ouvre dès que vous lui envoyez une demande/),
+      ).toBeInTheDocument();
+    });
+
+    it('envoie un visiteur se connecter', () => {
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Message' }));
+
+      expect(screen.getByText('Page /connexion')).toBeInTheDocument();
+      expect(mockedListConversations).not.toHaveBeenCalled();
     });
   });
 });

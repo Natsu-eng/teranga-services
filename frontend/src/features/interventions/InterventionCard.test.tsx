@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { InterventionCard } from './InterventionCard';
 import { api } from '../../lib/api';
 import type { Intervention, ServiceRequest } from '../../types';
@@ -261,6 +262,39 @@ describe('InterventionCard', () => {
 
       expect(screen.getByText('Bon travail.')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: "Publier l'avis" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('discussion', () => {
+    it('donne accès au fil rattaché, avec un libellé propre à chaque partie', () => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <InterventionCard
+            intervention={interventionFixture({ conversationId: 'fil-1' })}
+            role="client"
+            onChanged={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole('link', { name: "Discuter avec l'artisan" })).toHaveAttribute(
+        'href',
+        '/messages/fil-1',
+      );
+      unmount();
+
+      render(
+        <MemoryRouter>
+          <InterventionCard
+            intervention={interventionFixture({ conversationId: 'fil-1' })}
+            role="artisan"
+            onChanged={vi.fn()}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByRole('link', { name: 'Discuter avec le client' })).toHaveAttribute(
+        'href',
+        '/messages/fil-1',
+      );
     });
   });
 });

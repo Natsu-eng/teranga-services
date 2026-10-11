@@ -7,8 +7,9 @@ export interface IconButtonProps extends Omit<React.ComponentPropsWithRef<'butto
   /**
    * `on-dark` : posé sur un bandeau vert profond (espace Pro, carte résultat IA).
    * `danger`  : action destructive (retirer, supprimer).
+   * `brand`   : action principale d'une barre (ex. « Envoyer » un message).
    */
-  tone?: 'light' | 'on-dark' | 'danger';
+  tone?: 'light' | 'on-dark' | 'danger' | 'brand';
   size?: 'sm' | 'md';
 }
 
@@ -16,6 +17,7 @@ const ICON_BUTTON_TONES = {
   light: 'text-foreground hover:bg-surface-muted',
   'on-dark': 'text-white hover:bg-white/15',
   danger: 'text-destructive hover:bg-destructive-soft',
+  brand: 'bg-primary-emerald text-white hover:bg-primary disabled:bg-border-strong',
 } as const;
 
 /**

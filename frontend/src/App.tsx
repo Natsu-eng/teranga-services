@@ -23,6 +23,8 @@ import { MyRequestsScreen } from './features/requests/MyRequestsScreen';
 import { InterventionsScreen } from './features/interventions/InterventionsScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { MessagesScreen } from './features/messages/MessagesScreen';
+import { ConversationScreen } from './features/messages/ConversationScreen';
+import { RealtimeProvider } from './features/messages/realtime/RealtimeProvider';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 
@@ -49,101 +51,106 @@ export function AppRoutes() {
 
   return (
     <AuthProvider>
-      <Routes>
-        <Route element={<MinimalLayout />}>
-          <Route index element={<LandingScreen />} />
-          <Route path="connexion" element={<AuthEntryScreen />} />
-          <Route path="connexion/role" element={<RoleSelectScreen />} />
-          <Route path="connexion/nom" element={<NameScreen />} />
-          <Route path="connexion/telephone" element={<PhoneScreen />} />
-          <Route path="connexion/code" element={<OtpScreen />} />
-          <Route
-            path="bienvenue-artisan"
-            element={
-              <ProtectedRoute roles={ARTISAN_ONLY}>
-                <ArtisanWelcomeScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/verifications"
-            element={
-              <RequireAdminRoute>
-                <AdminVerificationQueueScreen />
-              </RequireAdminRoute>
-            }
-          />
-        </Route>
+      {/* Canal temps réel unique (messagerie), ouvert seulement si utile. */}
+      <RealtimeProvider>
+        <Routes>
+          <Route element={<MinimalLayout />}>
+            <Route index element={<LandingScreen />} />
+            <Route path="connexion" element={<AuthEntryScreen />} />
+            <Route path="connexion/role" element={<RoleSelectScreen />} />
+            <Route path="connexion/nom" element={<NameScreen />} />
+            <Route path="connexion/telephone" element={<PhoneScreen />} />
+            <Route path="connexion/code" element={<OtpScreen />} />
+            <Route
+              path="bienvenue-artisan"
+              element={
+                <ProtectedRoute roles={ARTISAN_ONLY}>
+                  <ArtisanWelcomeScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/verifications"
+              element={
+                <RequireAdminRoute>
+                  <AdminVerificationQueueScreen />
+                </RequireAdminRoute>
+              }
+            />
+          </Route>
 
-        <Route element={<SubPageLayout />}>
-          <Route path="demande" element={<DescribeProblemScreen />} />
-          <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
-          <Route
-            path="mes-demandes"
-            element={
-              <ProtectedRoute roles={CLIENT_ONLY}>
-                <MyRequestsScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="mes-interventions"
-            element={
-              <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
-                <InterventionsScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="pro/onboarding"
-            element={
-              <ProtectedRoute roles={ARTISAN_ONLY}>
-                <ArtisanOnboardingScreen />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
+          <Route element={<SubPageLayout />}>
+            <Route path="demande" element={<DescribeProblemScreen />} />
+            <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
+            <Route
+              path="mes-demandes"
+              element={
+                <ProtectedRoute roles={CLIENT_ONLY}>
+                  <MyRequestsScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="mes-interventions"
+              element={
+                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                  <InterventionsScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="pro/onboarding"
+              element={
+                <ProtectedRoute roles={ARTISAN_ONLY}>
+                  <ArtisanOnboardingScreen />
+                </ProtectedRoute>
+              }
+            />
+            {/* Fil de discussion : plein écran, saisie collée en bas. Réservé aux
+              deux participants (vérifié par le serveur, 403 sinon). */}
+            <Route
+              path="messages/:conversationId"
+              element={
+                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                  <ConversationScreen />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
 
-        <Route element={<MainLayout location={location} setLocation={setLocation} />}>
-          <Route path="accueil" element={<ClientHomeScreen />} />
-          <Route path="recherche" element={<SearchScreen />} />
-          {/* Entrée « Messages » de la navigation, et fil d'une conversation. */}
-          <Route
-            path="messages"
-            element={
-              <ProtectedRoute>
-                <MessagesScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="messages/:conversationId"
-            element={
-              <ProtectedRoute>
-                <MessagesScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="pro"
-            element={
-              <ProtectedRoute roles={ARTISAN_ONLY}>
-                <ArtisanDashboardScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="profil"
-            element={
-              <ProtectedRoute>
-                <UserProfileScreen location={location} />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
+          <Route element={<MainLayout location={location} setLocation={setLocation} />}>
+            <Route path="accueil" element={<ClientHomeScreen />} />
+            <Route path="recherche" element={<SearchScreen />} />
+            {/* Liste des discussions (entrée « Messages » de la navigation). */}
+            <Route
+              path="messages"
+              element={
+                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                  <MessagesScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="pro"
+              element={
+                <ProtectedRoute roles={ARTISAN_ONLY}>
+                  <ArtisanDashboardScreen />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="profil"
+              element={
+                <ProtectedRoute>
+                  <UserProfileScreen location={location} />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
 
-        <Route path="*" element={<NotFoundScreen />} />
-      </Routes>
+          <Route path="*" element={<NotFoundScreen />} />
+        </Routes>
+      </RealtimeProvider>
     </AuthProvider>
   );
 }

@@ -165,12 +165,21 @@ describe('routing', () => {
     expect(screen.queryByText("L'espace Artisan Pro arrive bientôt")).not.toBeInTheDocument();
   });
 
-  it('shows the honest "coming soon" state (not the old mock chat) at /messages/:conversationId once authenticated', async () => {
+  it('affiche la liste des discussions sur /messages une fois connecté', async () => {
     stubAuthenticatedSession();
 
-    renderAt('/messages/idrissa-diop');
+    renderAt('/messages');
 
-    expect(await screen.findByText('La messagerie arrive bientôt')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Messages' })).toBeInTheDocument();
+    expect(await screen.findByText('Aucune discussion pour le moment.')).toBeInTheDocument();
+  });
+
+  it('affiche un écran neutre pour un fil inaccessible (aucun indice de son existence)', async () => {
+    stubAuthenticatedSession();
+
+    renderAt('/messages/fil-d-autrui');
+
+    expect(await screen.findByText('Cette discussion est introuvable.')).toBeInTheDocument();
   });
 
   it('renders a 404 with a link back to /accueil for an unknown route', () => {
