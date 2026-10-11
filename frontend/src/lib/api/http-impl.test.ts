@@ -966,7 +966,7 @@ describe('httpApiClient', () => {
       agreed_amount_fcfa: null,
       scheduled_at: null,
       completed_at: null,
-      decline_reason: null,
+      cancellation: null,
       quote: {
         id: 'q1',
         labor_fcfa: 15000,

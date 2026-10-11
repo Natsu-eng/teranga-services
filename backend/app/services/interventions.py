@@ -238,11 +238,6 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
         scheduled_at=intervention.scheduled_at,
         completed_at=intervention.completed_at,
         cancellation=to_cancellation_out(intervention),
-        decline_reason=(
-            intervention.cancellation_reason
-            if intervention.cancellation_kind is InterventionCancellationKind.REFUS
-            else None
-        ),
         quote=QuoteOut.model_validate(intervention.quote) if intervention.quote else None,
         review=(
             ReviewOut(

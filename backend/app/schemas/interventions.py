@@ -45,11 +45,9 @@ class InterventionOut(BaseModel):
     agreed_amount_fcfa: int | None
     scheduled_at: datetime | None
     completed_at: datetime | None
+    # Clôture d'une intervention `annulee` : refus, annulation ou arbitrage,
+    # par qui et pourquoi (remplace l'ancien `decline_reason`).
     cancellation: CancellationOut | None = None
-    # Compatibilité : motif du refus par l'artisan (= `cancellation.reason`
-    # quand `cancellation.kind == "refus"`), conservé tant que des clients
-    # le lisent encore.
-    decline_reason: str | None
     quote: QuoteOut | None
     review: ReviewOut | None
     # Fil de discussion client ↔ artisan rattaché à cette intervention

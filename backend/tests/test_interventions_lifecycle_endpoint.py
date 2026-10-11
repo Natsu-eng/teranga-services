@@ -112,7 +112,6 @@ async def test_artisan_declines_intervention_reopens_the_request(
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "annulee"
-    assert body["decline_reason"] == "Indisponible cette semaine."
     # Clôture explicite : un refus de l'artisan, avec son motif.
     assert body["cancellation"]["kind"] == "refus"
     assert body["cancellation"]["by"] == "artisan"
@@ -140,7 +139,7 @@ async def test_decline_without_a_reason_is_accepted(db_session: AsyncSession) ->
         )
 
     assert response.status_code == 200
-    assert response.json()["decline_reason"] is None
+    assert response.json()["cancellation"]["reason"] is None
 
 
 async def test_accept_rejects_an_unrelated_artisan(db_session: AsyncSession) -> None:
