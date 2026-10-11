@@ -6,6 +6,7 @@ n'a besoin du graphe complet.
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from geoalchemy2.elements import WKTElement
@@ -29,6 +30,7 @@ from app.models.enums import (
     VerificationStatus,
 )
 from app.models.intervention import Intervention, Quote
+from app.models.messaging import Conversation, Message
 from app.models.payment import Payment
 from app.models.request import ServiceRequest
 from app.models.review import Review
@@ -264,3 +266,87 @@ async def make_review(
     session.add(review)
     await session.flush()
     return review
+
+
+async def make_conversation(
+    session: AsyncSession,
+    *,
+    intervention: Intervention,
+    client: User,
+    artisan_user: User,
+) -> Conversation:
+    conversation = Conversation(
+        intervention_id=intervention.id,
+        service_request_id=intervention.service_request_id,
+        client_id=client.id,
+        artisan_id=artisan_user.id,
+    )
+    session.add(conversation)
+    await session.flush()
+    return conversation
+
+
+async def make_message(
+    session: AsyncSession,
+    *,
+    conversation: Conversation,
+    sender: User,
+    body: str = "Bonjour.",
+    attachment_key: str | None = None,
+    attachment_content_type: str | None = None,
+) -> Message:
+    message = Message(
+        conversation_id=conversation.id,
+        sender_id=sender.id,
+        body=body,
+        attachment_key=attachment_key,
+        attachment_content_type=attachment_content_type,
+    )
+    session.add(message)
+    await session.flush()
+    # `seq` est attribué par Postgres (identité) : relu après le flush.
+    await session.refresh(message)
+    return message
+
+
+@dataclass
+class Engagement:
+    """Graphe minimal d'une mise en relation : les deux participants, leur
+    intervention et le fil de discussion rattaché."""
+
+    client: User
+    artisan_user: User
+    artisan: ArtisanProfile
+    intervention: Intervention
+    conversation: Conversation
+
+
+async def make_engagement(
+    session: AsyncSession,
+    *,
+    status: InterventionStatus = InterventionStatus.ACCEPTEE,
+) -> Engagement:
+    trade = await make_trade(session)
+    client = await make_user(session, role=Role.CLIENT, full_name="Awa Diop")
+    artisan_user = await make_user(session, role=Role.ARTISAN, full_name="Idrissa Fall")
+    artisan = await make_artisan_profile(session, user=artisan_user)
+    rate = await make_commission_rate(session, trade_id=trade.id)
+    request = await make_service_request(session, client=client, trade=trade)
+    intervention = await make_intervention(
+        session,
+        service_request=request,
+        client=client,
+        artisan=artisan,
+        commission_rate=rate,
+        status=status,
+    )
+    conversation = await make_conversation(
+        session, intervention=intervention, client=client, artisan_user=artisan_user
+    )
+    return Engagement(
+        client=client,
+        artisan_user=artisan_user,
+        artisan=artisan,
+        intervention=intervention,
+        conversation=conversation,
+    )
