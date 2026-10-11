@@ -2,7 +2,7 @@ import React from 'react';
 import { Briefcase, ClipboardCheck, Clock, Star, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { RoleRestricted } from '../../components/auth/RoleRestricted';
-import { Button } from '../../components/ui/Button';
+import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
@@ -178,10 +178,11 @@ export const ArtisanDashboardScreen: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <StatTile
                     icon={<Wallet className="w-5 h-5" />}
-                    label="Revenus"
+                    label="Chiffre d'affaires"
                     value={
                       stats.revenueFcfa != null ? formatFcfa(stats.revenueFcfa) : 'Non disponible'
                     }
+                    hint="Montants payés, avant commission"
                   />
                   <StatTile
                     icon={<Briefcase className="w-5 h-5" />}
@@ -208,6 +209,15 @@ export const ArtisanDashboardScreen: React.FC = () => {
                   />
                 </div>
               ) : null}
+              <ButtonLink
+                to="/pro/gains"
+                variant="outline"
+                fullWidth
+                className="mt-3"
+                leadingIcon={<Wallet aria-hidden className="w-5 h-5" />}
+              >
+                Mes gains et versements
+              </ButtonLink>
             </section>
 
             <section aria-labelledby="demandes-recues" className="space-y-4">

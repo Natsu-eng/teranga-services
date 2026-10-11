@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, MessageCircle, ReceiptText } from 'lucide-react';
+import { AlertTriangle, Check, MessageCircle, ReceiptText, XCircle } from 'lucide-react';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextAreaField, TextField } from '../../components/ui/Field';
@@ -9,6 +9,7 @@ import { ApiError, api } from '../../lib/api';
 import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
 import type { Intervention, InterventionStatus, UserRole } from '../../types';
+import { PaymentPanel } from '../payments/components/PaymentPanel';
 
 const STATUS: Record<InterventionStatus, { label: string; tone: StatusTone }> = {
   proposee: { label: 'En attente de réponse', tone: 'warning' },
@@ -69,6 +70,32 @@ const ProgressSteps: React.FC<{ current: number }> = ({ current }) => (
   </ol>
 );
 
+/** Un litige se décrit : en dessous, il ne serait pas exploitable (même borne que le serveur). */
+const DISPUTE_REASON_MIN_LENGTH = 10;
+
+function partyLabel(party: UserRole | 'admin'): string {
+  if (party === 'client') return 'par le client';
+  if (party === 'artisan') return "par l'artisan";
+  return 'par Téranga';
+}
+
+/** Comment une intervention annulée a été close, du point de vue du lecteur. */
+function cancellationText(intervention: Intervention, role: UserRole): string {
+  const cancellation = intervention.cancellation;
+  if (!cancellation || cancellation.kind === 'refus') {
+    return role === 'client'
+      ? "Cette mise en relation a été refusée par l'artisan."
+      : 'Vous avez refusé cette mise en relation.';
+  }
+  if (cancellation.kind === 'arbitrage') {
+    return 'Litige tranché par Téranga : le client a été remboursé, aucune commission prélevée.';
+  }
+  if (cancellation.by === role) return 'Vous avez annulé cette mise en relation.';
+  return cancellation.by === 'client'
+    ? 'Le client a annulé cette mise en relation.'
+    : "L'artisan a annulé cette mise en relation.";
+}
+
 interface InterventionCardProps {
   intervention: Intervention;
   role: UserRole;
@@ -93,6 +120,9 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
   const [materialsFcfa, setMaterialsFcfa] = useState('');
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  // Formulaire ouvert : annulation ou signalement d'un problème (litige).
+  const [openForm, setOpenForm] = useState<'cancel' | 'dispute' | null>(null);
+  const [formReason, setFormReason] = useState('');
 
   const runAction = async (action: () => Promise<unknown>) => {
     setActionError(null);
@@ -116,7 +146,15 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
   const totalFcfa = labor + materials;
   const status = STATUS[intervention.status];
   const step = STEP_INDEX[intervention.status];
-  const { quote } = intervention;
+  const { quote, payment, cancellation, dispute } = intervention;
+  const fundsHeld = payment?.status === 'retenu';
+  const checkoutOpen = payment?.status === 'en_attente' && payment.checkoutUrl !== null;
+  const canCancel =
+    role === 'client'
+      ? ['proposee', 'acceptee', 'en_cours'].includes(intervention.status) && !fundsHeld
+      : ['acceptee', 'en_cours'].includes(intervention.status);
+  const canDispute = intervention.status === 'en_cours';
+  const disputeReasonTooShort = formReason.trim().length < DISPUTE_REASON_MIN_LENGTH;
 
   return (
     <Card as="article" className="space-y-4">
@@ -162,6 +200,16 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
             </dd>
           </dl>
         </div>
+      )}
+
+      {/* Paiement : montants et état, formulés pour chaque partie. */}
+      {payment && (intervention.status !== 'annulee' || payment.status !== null) && (
+        <PaymentPanel
+          interventionId={intervention.id}
+          interventionStatus={intervention.status}
+          payment={payment}
+          role={role}
+        />
       )}
 
       {actionError && (
@@ -310,14 +358,31 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
             </p>
           )}
           {role === 'client' ? (
-            <Button
-              variant="brand"
-              fullWidth
-              isLoading={isSubmitting}
-              onClick={() => runAction(() => api.completeIntervention(intervention.id))}
-            >
-              Confirmer la fin des travaux
-            </Button>
+            <div className="space-y-2">
+              {fundsHeld ? (
+                <p className="text-sm text-muted-foreground">
+                  Confirmer la fin des travaux verse le paiement à l&apos;artisan.
+                </p>
+              ) : checkoutOpen ? (
+                <p className="text-sm text-muted-foreground">
+                  Un paiement en ligne est en cours : terminez-le avant de confirmer la fin des
+                  travaux.
+                </p>
+              ) : payment && payment.status !== 'reussi' ? (
+                <p className="text-sm text-muted-foreground">
+                  Sans paiement en ligne, vous réglez l&apos;artisan directement.
+                </p>
+              ) : null}
+              <Button
+                variant="brand"
+                fullWidth
+                isLoading={isSubmitting}
+                disabled={checkoutOpen}
+                onClick={() => runAction(() => api.completeIntervention(intervention.id))}
+              >
+                Confirmer la fin des travaux
+              </Button>
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               En attente de la confirmation du client.
@@ -380,14 +445,118 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
         </ButtonLink>
       )}
 
-      {/* annulee */}
+      {/* litige : l'argent est gelé jusqu'à l'arbitrage */}
+      {intervention.status === 'litige' && dispute && (
+        <div className="rounded-field bg-destructive-soft p-3 space-y-1 text-sm">
+          <p className="inline-flex items-center gap-1.5 font-semibold text-destructive">
+            <AlertTriangle aria-hidden className="w-4 h-4" />
+            Problème signalé {dispute.openedBy === role ? 'par vous' : partyLabel(dispute.openedBy)}
+          </p>
+          <p className="text-foreground">{dispute.reason}</p>
+          <p className="text-muted-foreground">
+            L&apos;argent est gelé : un conseiller Téranga examine la situation et tranchera
+            (versement à l&apos;artisan ou remboursement du client).
+          </p>
+        </div>
+      )}
+
+      {dispute?.outcome && (
+        <p className="text-sm text-muted-foreground">
+          Litige tranché par Téranga :{' '}
+          {dispute.outcome === 'libere'
+            ? "paiement versé à l'artisan."
+            : 'le client a été remboursé.'}
+          {dispute.resolutionNote ? ` ${dispute.resolutionNote}` : ''}
+        </p>
+      )}
+
+      {/* annulee : qui a clos, et pourquoi */}
       {intervention.status === 'annulee' && (
         <p className="text-sm text-muted-foreground">
-          {role === 'client'
-            ? "Cette mise en relation a été refusée par l'artisan."
-            : 'Vous avez refusé cette mise en relation.'}
-          {intervention.cancellation?.reason ? ` Motif : ${intervention.cancellation.reason}` : ''}
+          {cancellationText(intervention, role)}
+          {cancellation?.reason && cancellation.kind !== 'arbitrage'
+            ? ` Motif : ${cancellation.reason}`
+            : ''}
         </p>
+      )}
+
+      {/* Annuler / signaler un problème : jamais d'action financière sans le dire. */}
+      {openForm ? (
+        <div className="space-y-3 rounded-field bg-surface-muted p-3">
+          <p className="text-sm font-semibold text-foreground">
+            {openForm === 'cancel' ? 'Annuler la mise en relation' : 'Signaler un problème'}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {openForm === 'cancel'
+              ? fundsHeld
+                ? 'Le client sera intégralement remboursé ; aucune commission ne sera prélevée.'
+                : "L'intervention sera close et la demande à nouveau ouverte."
+              : "L'argent reste gelé jusqu'à la décision d'un conseiller Téranga. Expliquez la situation."}
+          </p>
+          <TextAreaField
+            label={openForm === 'cancel' ? "Motif de l'annulation" : 'Description du problème'}
+            value={formReason}
+            onChange={(e) => setFormReason(e.target.value)}
+            placeholder={
+              openForm === 'cancel'
+                ? 'Motif (optionnel)'
+                : `Décrivez le problème (${DISPUTE_REASON_MIN_LENGTH} caractères minimum)`
+            }
+            rows={3}
+          />
+          <div className="flex gap-2">
+            <Button
+              variant="danger"
+              className="flex-1"
+              isLoading={isSubmitting}
+              disabled={openForm === 'dispute' && disputeReasonTooShort}
+              onClick={() =>
+                runAction(() =>
+                  openForm === 'cancel'
+                    ? api.cancelIntervention(intervention.id, formReason.trim() || null)
+                    : api.openDispute(intervention.id, formReason.trim()),
+                )
+              }
+            >
+              {openForm === 'cancel' ? "Confirmer l'annulation" : 'Envoyer le signalement'}
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={isSubmitting}
+              onClick={() => {
+                setOpenForm(null);
+                setFormReason('');
+              }}
+            >
+              Retour
+            </Button>
+          </div>
+        </div>
+      ) : (
+        (canCancel || canDispute) && (
+          <div className="flex flex-wrap gap-2">
+            {canDispute && (
+              <Button
+                variant="ghost"
+                size="sm"
+                leadingIcon={<AlertTriangle aria-hidden className="w-4 h-4" />}
+                onClick={() => setOpenForm('dispute')}
+              >
+                Signaler un problème
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="danger-ghost"
+                size="sm"
+                leadingIcon={<XCircle aria-hidden className="w-4 h-4" />}
+                onClick={() => setOpenForm('cancel')}
+              >
+                Annuler
+              </Button>
+            )}
+          </div>
+        )
       )}
     </Card>
   );

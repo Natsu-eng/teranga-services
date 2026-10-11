@@ -115,6 +115,11 @@ describe('routing', () => {
     expect(await screen.findByText('Idrissa Diop')).toBeInTheDocument();
   });
 
+  it('envoie un visiteur se connecter avant tout paiement', async () => {
+    renderAt('/paiement/int-1');
+    await waitFor(() => expect(screen.getByText('Se connecter')).toBeInTheDocument());
+  });
+
   it('redirects to /connexion when visiting the (protected) chat at /messages/:conversationId without a session', async () => {
     renderAt('/messages/idrissa-diop');
     expect(await screen.findByRole('heading', { name: 'Bienvenue' })).toBeInTheDocument();
@@ -180,6 +185,25 @@ describe('routing', () => {
     renderAt('/messages/fil-d-autrui');
 
     expect(await screen.findByText('Cette discussion est introuvable.')).toBeInTheDocument();
+  });
+
+  it('sert le paiement et l’historique au client, jamais les gains Pro ni les litiges admin', async () => {
+    stubAuthenticatedSession();
+
+    const { unmount } = renderAt('/mes-paiements');
+    expect(await screen.findByText('Aucun paiement pour le moment.')).toBeInTheDocument();
+    unmount();
+
+    const payment = renderAt('/paiement/intervention-d-autrui');
+    expect(await screen.findByText('Ce paiement est introuvable.')).toBeInTheDocument();
+    payment.unmount();
+
+    const earnings = renderAt('/pro/gains');
+    expect(await screen.findByText('Cet espace est réservé aux artisans.')).toBeInTheDocument();
+    earnings.unmount();
+
+    renderAt('/admin/litiges');
+    expect(await screen.findByText('Page introuvable')).toBeInTheDocument();
   });
 
   it('renders a 404 with a link back to /accueil for an unknown route', () => {
