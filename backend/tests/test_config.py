@@ -109,3 +109,18 @@ def test_settings_default_pagination_and_search_radius(monkeypatch: MonkeyPatch)
     assert settings.pagination_page_size_default == 20
     assert settings.pagination_page_size_max == 50
     assert settings.pagination_max_page == 50
+
+
+def test_env_example_is_a_valid_configuration(monkeypatch: MonkeyPatch) -> None:
+    """Copier .env.example tel quel doit donner une configuration de dev qui
+    démarre (valeurs vides recommandées comprises)."""
+    monkeypatch.delenv("RATE_LIMIT_BACKEND", raising=False)
+
+    settings = Settings(
+        _env_file=".env.example",
+        database_url="postgresql+asyncpg://user:pass@localhost:5432/db",
+        jwt_secret="a" * 32,
+    )
+
+    assert settings.rate_limit_backend == "memory"
+    assert settings.payment_provider == "sandbox"

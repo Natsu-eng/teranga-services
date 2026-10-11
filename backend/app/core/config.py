@@ -133,6 +133,15 @@ class Settings(BaseSettings):
     # chaque redéploiement remettrait tous les compteurs à zéro.
     rate_limit_backend: Literal["memory", "postgres"] | None = None
 
+    @field_validator("rate_limit_backend", mode="before")
+    @classmethod
+    def empty_rate_limit_backend_means_auto(cls, v: object) -> object:
+        # `RATE_LIMIT_BACKEND=` (vide, la valeur recommandée de .env.example)
+        # signifie « choix automatique », pas une valeur invalide.
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @model_validator(mode="after")
     def validate_rate_limit_backend(self) -> "Settings":
         if self.rate_limit_backend is None:
