@@ -34,7 +34,7 @@ function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
 function renderScreen() {
   return render(
     <MemoryRouter>
-      <UserProfileScreen location="Dakar Plateau" />
+      <UserProfileScreen />
     </MemoryRouter>,
   );
 }

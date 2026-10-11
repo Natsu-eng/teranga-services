@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { AuthProvider } from './features/auth/AuthProvider';
+import { PlaceProvider } from './features/location/PlaceProvider';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { RequireAdminRoute } from './components/auth/RequireAdminRoute';
 import { MainLayout } from './components/layout/MainLayout';
@@ -51,143 +51,144 @@ const CLIENT_OR_ARTISAN = ['client', 'artisan'] as const;
  *                   habillés client (clair) ou Pro (vert profond) selon le rôle.
  */
 export function AppRoutes() {
-  const [location, setLocation] = useState<string>('Dakar Plateau');
-
   return (
     <AuthProvider>
-      {/* Canal temps réel unique (messagerie), ouvert seulement si utile. */}
-      <RealtimeProvider>
-        <Routes>
-          <Route element={<MinimalLayout />}>
-            <Route index element={<LandingScreen />} />
-            <Route path="connexion" element={<AuthEntryScreen />} />
-            <Route path="connexion/role" element={<RoleSelectScreen />} />
-            <Route path="connexion/nom" element={<NameScreen />} />
-            <Route path="connexion/telephone" element={<PhoneScreen />} />
-            <Route path="connexion/code" element={<OtpScreen />} />
-            <Route
-              path="bienvenue-artisan"
-              element={
-                <ProtectedRoute roles={ARTISAN_ONLY}>
-                  <ArtisanWelcomeScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="admin/verifications"
-              element={
-                <RequireAdminRoute>
-                  <AdminVerificationQueueScreen />
-                </RequireAdminRoute>
-              }
-            />
-            <Route
-              path="admin/litiges"
-              element={
-                <RequireAdminRoute>
-                  <AdminDisputesScreen />
-                </RequireAdminRoute>
-              }
-            />
-          </Route>
+      {/* Lieu d'intervention partagé : quartier de l'en-tête = lieu proposé aux demandes. */}
+      <PlaceProvider>
+        {/* Canal temps réel unique (messagerie), ouvert seulement si utile. */}
+        <RealtimeProvider>
+          <Routes>
+            <Route element={<MinimalLayout />}>
+              <Route index element={<LandingScreen />} />
+              <Route path="connexion" element={<AuthEntryScreen />} />
+              <Route path="connexion/role" element={<RoleSelectScreen />} />
+              <Route path="connexion/nom" element={<NameScreen />} />
+              <Route path="connexion/telephone" element={<PhoneScreen />} />
+              <Route path="connexion/code" element={<OtpScreen />} />
+              <Route
+                path="bienvenue-artisan"
+                element={
+                  <ProtectedRoute roles={ARTISAN_ONLY}>
+                    <ArtisanWelcomeScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="admin/verifications"
+                element={
+                  <RequireAdminRoute>
+                    <AdminVerificationQueueScreen />
+                  </RequireAdminRoute>
+                }
+              />
+              <Route
+                path="admin/litiges"
+                element={
+                  <RequireAdminRoute>
+                    <AdminDisputesScreen />
+                  </RequireAdminRoute>
+                }
+              />
+            </Route>
 
-          <Route element={<SubPageLayout />}>
-            <Route path="demande" element={<DescribeProblemScreen />} />
-            <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
-            <Route
-              path="mes-demandes"
-              element={
-                <ProtectedRoute roles={CLIENT_ONLY}>
-                  <MyRequestsScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="mes-interventions"
-              element={
-                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
-                  <InterventionsScreen />
-                </ProtectedRoute>
-              }
-            />
-            {/* Paiement d'une intervention (client) ; page de retour du fournisseur. */}
-            <Route
-              path="paiement/:interventionId"
-              element={
-                <ProtectedRoute roles={CLIENT_ONLY}>
-                  <PaymentScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="mes-paiements"
-              element={
-                <ProtectedRoute roles={CLIENT_ONLY}>
-                  <MyPaymentsScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="pro/gains"
-              element={
-                <ProtectedRoute roles={ARTISAN_ONLY}>
-                  <EarningsScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="pro/onboarding"
-              element={
-                <ProtectedRoute roles={ARTISAN_ONLY}>
-                  <ArtisanOnboardingScreen />
-                </ProtectedRoute>
-              }
-            />
-            {/* Fil de discussion : plein écran, saisie collée en bas. Réservé aux
+            <Route element={<SubPageLayout />}>
+              <Route path="demande" element={<DescribeProblemScreen />} />
+              <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
+              <Route
+                path="mes-demandes"
+                element={
+                  <ProtectedRoute roles={CLIENT_ONLY}>
+                    <MyRequestsScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="mes-interventions"
+                element={
+                  <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                    <InterventionsScreen />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Paiement d'une intervention (client) ; page de retour du fournisseur. */}
+              <Route
+                path="paiement/:interventionId"
+                element={
+                  <ProtectedRoute roles={CLIENT_ONLY}>
+                    <PaymentScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="mes-paiements"
+                element={
+                  <ProtectedRoute roles={CLIENT_ONLY}>
+                    <MyPaymentsScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="pro/gains"
+                element={
+                  <ProtectedRoute roles={ARTISAN_ONLY}>
+                    <EarningsScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="pro/onboarding"
+                element={
+                  <ProtectedRoute roles={ARTISAN_ONLY}>
+                    <ArtisanOnboardingScreen />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Fil de discussion : plein écran, saisie collée en bas. Réservé aux
               deux participants (vérifié par le serveur, 403 sinon). */}
-            <Route
-              path="messages/:conversationId"
-              element={
-                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
-                  <ConversationScreen />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+              <Route
+                path="messages/:conversationId"
+                element={
+                  <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                    <ConversationScreen />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
 
-          <Route element={<MainLayout location={location} setLocation={setLocation} />}>
-            <Route path="accueil" element={<ClientHomeScreen />} />
-            <Route path="recherche" element={<SearchScreen />} />
-            {/* Liste des discussions (entrée « Messages » de la navigation). */}
-            <Route
-              path="messages"
-              element={
-                <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
-                  <MessagesScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="pro"
-              element={
-                <ProtectedRoute roles={ARTISAN_ONLY}>
-                  <ArtisanDashboardScreen />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="profil"
-              element={
-                <ProtectedRoute>
-                  <UserProfileScreen location={location} />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+            <Route element={<MainLayout />}>
+              <Route path="accueil" element={<ClientHomeScreen />} />
+              <Route path="recherche" element={<SearchScreen />} />
+              {/* Liste des discussions (entrée « Messages » de la navigation). */}
+              <Route
+                path="messages"
+                element={
+                  <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                    <MessagesScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="pro"
+                element={
+                  <ProtectedRoute roles={ARTISAN_ONLY}>
+                    <ArtisanDashboardScreen />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="profil"
+                element={
+                  <ProtectedRoute>
+                    <UserProfileScreen />
+                  </ProtectedRoute>
+                }
+              />
+            </Route>
 
-          <Route path="*" element={<NotFoundScreen />} />
-        </Routes>
-      </RealtimeProvider>
+            <Route path="*" element={<NotFoundScreen />} />
+          </Routes>
+        </RealtimeProvider>
+      </PlaceProvider>
     </AuthProvider>
   );
 }
