@@ -8,6 +8,13 @@ import type {
   Artisan,
   ArtisanStats,
   Intervention,
+  ArtisanEarnings,
+  ClientPayment,
+  PaymentChannel,
+  PaymentOptions,
+  PaymentSummary,
+  PayoutChannel,
+  PayoutSettings,
   AIAnalysisResult,
   MyArtisanProfile,
   MyVerification,
@@ -162,6 +169,10 @@ export interface ApiClient {
   acceptQuote(interventionId: string): Promise<Intervention>;
   refuseQuote(interventionId: string): Promise<Intervention>;
   completeIntervention(id: string): Promise<Intervention>;
+  /** Annulation par une partie (règles et remboursement côté serveur). */
+  cancelIntervention(id: string, reason?: string | null): Promise<Intervention>;
+  /** Litige : gèle l'argent jusqu'à l'arbitrage d'un admin. */
+  openDispute(id: string, reason: string): Promise<Intervention>;
   createReview(interventionId: string, input: CreateReviewInput): Promise<Review>;
   listAdminVerifications(filters?: AdminVerificationFilters): Promise<AdminVerificationListItem[]>;
   getAdminVerificationDocumentBlob(verificationId: string): Promise<Blob>;
@@ -177,4 +188,17 @@ export interface ApiClient {
   markConversationRead(conversationId: string, lastReadSeq: number): Promise<ConversationDetail>;
   getMessageAttachmentBlob(conversationId: string, messageId: string): Promise<Blob>;
   createRealtimeTicket(): Promise<RealtimeTicket>;
+  // Paiements (montant TOUJOURS fixé par le serveur, jamais envoyé).
+  getPaymentOptions(): Promise<PaymentOptions>;
+  initPayment(interventionId: string, channel: PaymentChannel): Promise<PaymentSummary>;
+  listMyPayments(): Promise<ClientPayment[]>;
+  getMyEarnings(): Promise<ArtisanEarnings>;
+  getPayoutSettings(): Promise<PayoutSettings>;
+  updatePayoutSettings(channel: PayoutChannel): Promise<PayoutSettings>;
+  listAdminDisputes(filters?: { resolved?: boolean }): Promise<Intervention[]>;
+  resolveDispute(
+    interventionId: string,
+    outcome: 'libere' | 'rembourse',
+    note: string,
+  ): Promise<Intervention>;
 }

@@ -386,7 +386,7 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
           {role === 'client'
             ? "Cette mise en relation a été refusée par l'artisan."
             : 'Vous avez refusé cette mise en relation.'}
-          {intervention.declineReason ? ` Motif : ${intervention.declineReason}` : ''}
+          {intervention.cancellation?.reason ? ` Motif : ${intervention.cancellation.reason}` : ''}
         </p>
       )}
     </Card>
