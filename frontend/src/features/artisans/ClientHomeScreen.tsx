@@ -1,258 +1,155 @@
 import React, { useState } from 'react';
-import {
-  Search,
-  CircleX,
-  Sparkles,
-  ArrowRight,
-  SearchX,
-  BadgeCheck,
-  Star,
-  Map,
-  ChevronRight,
-} from 'lucide-react';
-import { Link } from 'react-router';
-import { SafeImage } from '../../components/ui/SafeImage';
-import { Skeleton } from '../../components/ui/Skeleton';
-import { ErrorState } from '../../components/ui/ErrorState';
+import { ArrowRight, Search, Sparkles, Users } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { ButtonLink } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { ChipLink } from '../../components/ui/Chip';
 import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { fieldClasses } from '../../components/ui/styles';
+import type { ArtisanFilters } from '../../lib/api/types';
+import { ArtisanCard, ArtisanCardSkeleton } from './components/ArtisanCard';
 import { useArtisans } from './hooks/useArtisans';
 import { useTrades } from './hooks/useTrades';
 
+/**
+ * Sélection affichée sur l'accueil : une première page courte, triée par
+ * note côté serveur. Constante de module = référence stable entre les
+ * rendus (useArtisans relance l'appel à chaque nouvelle référence).
+ */
+const RECOMMENDED_FILTERS: ArtisanFilters = { sort: 'rating', pageSize: 6 };
+
+/**
+ * Accueil de l'espace client (/accueil).
+ *
+ * Plus aucun filtrage en mémoire (dette AUDIT_PHASE2.md §6) : la barre de
+ * recherche et les pastilles métier mènent à /recherche, qui interroge
+ * l'API avec les filtres serveur (`q`, `trade`). L'accueil n'affiche que
+ * la sélection recommandée renvoyée par le serveur.
+ */
 export const ClientHomeScreen: React.FC = () => {
-  const { data: artisans, isLoading, error, reload } = useArtisans();
-  const { data: tradesData } = useTrades();
-  const [selectedCategory, setSelectedCategory] = useState<string>('Tout');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const navigate = useNavigate();
+  const { data: artisans, isLoading, error, reload } = useArtisans(RECOMMENDED_FILTERS);
+  const { data: trades } = useTrades();
+  const [query, setQuery] = useState('');
 
-  const categories = ['Tout', ...(tradesData ?? []).map((trade) => trade.labelFr)];
-
-  const filteredArtisans = (artisans ?? []).filter((artisan) => {
-    const matchesCategory =
-      selectedCategory === 'Tout' || artisan.trade.toLowerCase() === selectedCategory.toLowerCase();
-    const matchesSearch =
-      !searchQuery ||
-      artisan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      artisan.trade.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      artisan.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    return matchesCategory && matchesSearch;
-  });
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = query.trim();
+    navigate(trimmed ? `/recherche?q=${encodeURIComponent(trimmed)}` : '/recherche');
+  };
 
   return (
-    <main className="max-w-5xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
-      {/* Search Bar */}
-      <section className="relative">
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground w-6 h-6" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Décrivez votre besoin (ex: fuite, clim, électricité)..."
-            className="w-full h-14 pl-12 pr-4 rounded-full border-none bg-surface-muted focus:ring-2 focus:ring-primary text-base transition-all shadow-sm outline-none placeholder:text-muted-foreground-soft"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground-soft hover:text-foreground"
-            >
-              <CircleX className="w-6 h-6" />
-            </button>
-          )}
-        </div>
-      </section>
+    <main className="max-w-5xl mx-auto px-4 md:px-8 pt-2 space-y-7">
+      <h1 className="sr-only">Trouver un artisan</h1>
 
-      {/* Categories Horizontal Scroll */}
-      <section className="-mx-4 px-4 overflow-x-auto hide-scrollbar">
-        <div className="flex gap-2.5 pb-2">
-          {categories.map((cat) => {
-            const isActive = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`flex-none px-6 py-2 rounded-full font-sora text-xs font-semibold transition-all cursor-pointer ${
-                  isActive
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'bg-border-subtle text-muted-foreground hover:bg-primary-emerald hover:text-white'
-                }`}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      <form role="search" onSubmit={handleSearch} className="relative">
+        <label htmlFor="accueil-recherche" className="sr-only">
+          Rechercher un artisan
+        </label>
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground"
+        />
+        <input
+          id="accueil-recherche"
+          type="search"
+          enterKeyHint="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Décrivez votre besoin…"
+          className={fieldClasses({ className: 'h-14 pl-12 rounded-full shadow-card' })}
+        />
+      </form>
 
-      {/* AI Assistant Feature Bento Card */}
-      <section>
-        <Link
-          to="/demande"
-          className="block relative overflow-hidden rounded-3xl bg-primary-emerald p-6 md:p-8 group cursor-pointer active:scale-[0.98] transition-all shadow-md"
-        >
-          {/* Subtle Ambient Glow */}
-          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-success/20 rounded-full blur-2xl group-hover:scale-125 transition-transform"></div>
+      {trades && trades.length > 0 && (
+        <nav aria-label="Métiers" className="-mx-4 px-4 overflow-x-auto hide-scrollbar">
+          <ul className="flex gap-2 pb-2 w-max">
+            {trades.map((trade) => (
+              <li key={trade.code}>
+                <ChipLink to={`/recherche?trade=${encodeURIComponent(trade.code)}`}>
+                  {trade.labelFr}
+                </ChipLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
 
-          <div className="relative z-10 space-y-4">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-full bg-success/20 flex items-center justify-center">
-                <Sparkles className="text-success w-6 h-6" fill="currentColor" />
-              </div>
-              <span className="text-primary-emerald-foreground font-sora text-xs font-bold uppercase tracking-wider">
-                ASSISTANT IA
-              </span>
-            </div>
-
-            <h2 className="font-bold text-xl md:text-3xl text-white leading-tight max-w-md">
-              Décrivez votre problème, on vous trouve le bon artisan
-            </h2>
-
-            <div className="flex items-center gap-2 text-success font-sora text-sm font-semibold group-hover:translate-x-1 transition-transform">
-              <span>Essayer maintenant</span>
-              <ArrowRight className="w-[18px] h-[18px]" />
-            </div>
-          </div>
-        </Link>
-      </section>
-
-      {/* Recommended Artisans Section */}
-      <section className="space-y-4">
-        <div className="flex justify-between items-end">
-          <h3 className="font-bold text-xl text-primary">Artisans recommandés</h3>
-          <Link
-            to="/recherche"
-            className="text-primary font-sora text-xs font-semibold hover:underline decoration-1 underline-offset-2"
+      {/* Zone IA : surface vert très clair, signature des fonctions d'assistance. */}
+      <Card
+        tone="tint"
+        padding="lg"
+        as="section"
+        aria-labelledby="assistant-ia"
+        className="space-y-4"
+      >
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden
+            className="inline-flex w-9 h-9 items-center justify-center rounded-full bg-surface text-primary-emerald shadow-card"
           >
-            Voir tout
-          </Link>
-        </div>
-
-        <div className="space-y-3">
-          {isLoading && artisans === null ? (
-            [0, 1, 2].map((key) => (
-              <div
-                key={key}
-                className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle"
-              >
-                <Skeleton className="w-24 h-24 rounded-2xl shrink-0" />
-                <div className="flex-1 space-y-2 py-1">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-1/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-            ))
-          ) : error && artisans === null ? (
-            <ErrorState message={error.message} onRetry={reload} />
-          ) : filteredArtisans.length === 0 ? (
-            <EmptyState
-              icon={<SearchX className="text-muted-foreground-soft mb-2 w-9 h-9 mx-auto" />}
-              title="Aucun artisan ne correspond à votre recherche."
-              action={{
-                label: 'Réinitialiser les filtres',
-                onClick: () => {
-                  setSelectedCategory('Tout');
-                  setSearchQuery('');
-                },
-              }}
-            />
-          ) : (
-            filteredArtisans.map((artisan) => (
-              <Link
-                key={artisan.id}
-                to={`/artisans/${artisan.id}`}
-                className="bg-white rounded-2xl p-4 flex gap-4 artisan-shadow border border-border-subtle transition-all hover:translate-y-[-2px] hover:shadow-md cursor-pointer active:scale-[0.99]"
-              >
-                {/* Avatar */}
-                <div className="relative flex-none">
-                  <SafeImage
-                    src={artisan.avatarUrl}
-                    fallback="/images/placeholder-avatar.svg"
-                    alt={artisan.name}
-                    className="w-24 h-24 rounded-2xl object-cover"
-                  />
-                  {artisan.verified && (
-                    <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full shadow-sm">
-                      <div className="bg-primary-emerald p-1 rounded-full flex items-center justify-center">
-                        <BadgeCheck className="text-white w-[14px] h-[14px]" fill="currentColor" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Info */}
-                <div className="flex-1 flex flex-col justify-between py-0.5">
-                  <div>
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-base md:text-lg text-foreground">
-                        {artisan.name}
-                      </h4>
-                      <div className="flex items-center gap-1 bg-accent-soft/40 px-2 py-0.5 rounded-full border border-accent-soft/60">
-                        <Star className="text-accent-foreground w-[14px] h-[14px]" fill="currentColor" />
-                        <span className="text-accent-foreground font-sora text-xs font-bold">
-                          {artisan.rating}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-muted-foreground font-sora text-xs font-medium mt-0.5">
-                      {artisan.trade}
-                    </p>
-
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex items-center gap-0.5 text-muted-foreground-soft font-sora text-xs">
-                        <Map className="w-[14px] h-[14px]" />
-                        <span>{artisan.distance}</span>
-                      </div>
-                      <span className="text-muted-foreground-soft">•</span>
-                      <span className="text-muted-foreground font-sora text-xs">
-                        {artisan.reviewCount} avis
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-primary font-bold text-base">
-                      {artisan.priceBase}{' '}
-                      <span className="text-muted-foreground-soft font-normal text-xs">/base</span>
-                    </span>
-                    <ChevronRight className="text-primary-emerald w-[18px] h-[18px]" />
-                  </div>
-                </div>
-              </Link>
-            ))
-          )}
-        </div>
-      </section>
-
-      {/* Téranga Premium Banner */}
-      <section className="bg-surface-muted rounded-2xl p-5 md:p-6 flex items-center justify-between border border-border">
-        <div className="space-y-1">
-          <h4 className="font-bold text-base text-primary">Téranga Premium</h4>
-          <p className="text-muted-foreground text-xs font-sora max-w-[220px] md:max-w-md">
-            Accès prioritaire et garanties étendues sur tous vos travaux.
+            <Sparkles className="w-5 h-5" />
+          </span>
+          <p className="text-caption font-semibold uppercase tracking-[0.12em] text-primary-emerald">
+            Assistant IA
           </p>
         </div>
-        <button
-          onClick={() =>
-            alert(
-              'Téranga Premium vous offre la garantie sérénité 100% remboursement et un conseiller dédié à Dakar.',
-            )
-          }
-          className="bg-primary text-white px-4 py-2.5 rounded-full font-sora text-xs font-semibold hover:opacity-90 transition-all shrink-0 cursor-pointer"
+        <h2 id="assistant-ia" className="font-display text-display-sm font-semibold text-primary">
+          Décrivez votre problème, on vous trouve le bon artisan
+        </h2>
+        <ButtonLink
+          to="/demande"
+          variant="brand"
+          trailingIcon={<ArrowRight aria-hidden className="w-4 h-4" />}
         >
-          Découvrir
-        </button>
-      </section>
+          Essayer maintenant
+        </ButtonLink>
+      </Card>
 
-      {/* Floating Action Button for AI */}
-      <Link
-        to="/demande"
-        className="fixed right-5 bottom-20 md:bottom-24 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 z-40 cursor-pointer"
-        title="Poser votre question à l'IA"
-      >
-        <Sparkles className="w-[26px] h-[26px]" fill="currentColor" />
-      </Link>
+      <section aria-labelledby="recommandes" className="space-y-4">
+        <SectionHeader
+          id="recommandes"
+          title="Artisans recommandés"
+          action={
+            <Link
+              to="/recherche"
+              className="text-sm font-semibold text-primary-emerald underline-offset-4 hover:underline"
+            >
+              Voir tout
+            </Link>
+          }
+        />
+
+        {isLoading && artisans === null ? (
+          <div className="space-y-3" aria-busy="true">
+            {[0, 1, 2].map((key) => (
+              <ArtisanCardSkeleton key={key} />
+            ))}
+          </div>
+        ) : error && artisans === null ? (
+          <ErrorState message={error.message} onRetry={reload} />
+        ) : artisans && artisans.length === 0 ? (
+          <EmptyState
+            icon={<Users />}
+            title="Aucun artisan disponible pour le moment."
+            description="Décrivez votre besoin à notre assistant pour créer une demande."
+          >
+            <ButtonLink to="/demande" variant="outline" size="sm">
+              Décrire mon problème
+            </ButtonLink>
+          </EmptyState>
+        ) : (
+          <ul className="space-y-3">
+            {(artisans ?? []).map((artisan) => (
+              <li key={artisan.id}>
+                <ArtisanCard artisan={artisan} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 };

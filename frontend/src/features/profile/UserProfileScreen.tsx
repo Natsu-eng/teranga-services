@@ -1,236 +1,292 @@
-import React, { useState } from 'react';
-import { CheckCircle, ClipboardList, CreditCard, LogOut, Pencil, Wrench } from 'lucide-react';
+import React from 'react';
+import {
+  ChevronRight,
+  ClipboardList,
+  CreditCard,
+  ExternalLink,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Sparkles,
+  UserRoundCog,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 import { ErrorState } from '../../components/ui/ErrorState';
-import { ApiError } from '../../lib/api';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { StatusPill } from '../../components/ui/StatusPill';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { cn } from '../../lib/cn';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
-import { useArtisan } from '../artisans/hooks/useArtisan';
+import { VerificationStatusBanner } from '../artisans/VerificationStatusBanner';
+import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
+import { IdentityCard } from './components/IdentityCard';
 import { useCurrentUser } from './hooks/useCurrentUser';
+
+interface MenuLinkProps {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  description: string;
+}
+
+/** Entrée de menu : une ligne cliquable, icône + libellé + explication. */
+const MenuLink: React.FC<MenuLinkProps> = ({ to, icon: Icon, label, description }) => (
+  <li>
+    <Link
+      to={to}
+      className="flex items-center gap-3 rounded-field px-3 py-3 hover:bg-surface-muted transition-colors"
+    >
+      <span
+        aria-hidden
+        className="inline-flex w-10 h-10 shrink-0 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"
+      >
+        <Icon className="w-5 h-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-foreground">{label}</span>
+        <span className="block text-sm text-muted-foreground">{description}</span>
+      </span>
+      <ChevronRight aria-hidden className="w-5 h-5 text-muted-foreground shrink-0" />
+    </Link>
+  </li>
+);
+
+const LogoutCard: React.FC = () => {
+  const auth = useAuth();
+  const navigate = useNavigate();
+  return (
+    <Card padding="sm">
+      <Button
+        variant="danger-ghost"
+        fullWidth
+        leadingIcon={<LogOut aria-hidden className="w-5 h-5" />}
+        onClick={async () => {
+          await auth.logout();
+          navigate('/');
+        }}
+      >
+        Déconnexion
+      </Button>
+    </Card>
+  );
+};
+
+/* ------------------------------------------------------------------ Client */
+
+/** Moyens de paiement locaux, présentés pour information (aucun paiement en ligne encore). */
+const PAYMENT_METHODS = [
+  { label: 'Wave', mark: 'W', className: 'bg-brand-wave text-foreground' },
+  { label: 'Orange Money', mark: 'OM', className: 'bg-brand-orange-money text-foreground' },
+] as const;
+
+/**
+ * Profil d'un CLIENT : tout est orienté vers ses besoins de services
+ * (demandes, interventions, nouvelle demande).
+ */
+const ClientProfile: React.FC<{ name: string; location: string; phone?: string | null }> = ({
+  name,
+  location,
+  phone,
+}) => (
+  <>
+    <IdentityCard
+      name={name}
+      phone={phone}
+      subtitle={
+        <span className="inline-flex items-center gap-1">
+          <MapPin aria-hidden className="w-4 h-4" />
+          {location}
+        </span>
+      }
+      badge={<StatusPill tone="info">Compte client</StatusPill>}
+    />
+
+    <section aria-labelledby="mes-services" className="space-y-3">
+      <SectionHeader id="mes-services" title="Mes services" />
+      <Card padding="sm">
+        <ul>
+          <MenuLink
+            to="/demande"
+            icon={Sparkles}
+            label="Nouvelle demande"
+            description="Décrivez un besoin, l'assistant trouve le bon métier."
+          />
+          <MenuLink
+            to="/mes-demandes"
+            icon={ClipboardList}
+            label="Mes demandes"
+            description="Vos besoins décrits et leur avancement."
+          />
+          <MenuLink
+            to="/mes-interventions"
+            icon={Wrench}
+            label="Devis et travaux"
+            description="Devis des artisans à accepter, travaux en cours, avis à laisser."
+          />
+        </ul>
+      </Card>
+    </section>
+
+    {/*
+      Section volontairement informative : l'ancienne version proposait un
+      choix (Wave / OM / carte) qui n'était enregistré nulle part. Rien n'est
+      prétendu tant que le paiement en ligne n'existe pas.
+    */}
+    <section aria-labelledby="paiement" className="space-y-3">
+      <SectionHeader id="paiement" title="Moyens de paiement au Sénégal" />
+      <Card className="space-y-3">
+        <ul className="flex flex-wrap gap-2">
+          {PAYMENT_METHODS.map((method) => (
+            <li
+              key={method.label}
+              className="inline-flex items-center gap-2 rounded-full bg-surface-muted pl-1 pr-3 py-1 text-sm text-foreground"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'inline-flex w-7 h-7 items-center justify-center rounded-full text-xs font-bold',
+                  method.className,
+                )}
+              >
+                {method.mark}
+              </span>
+              {method.label}
+            </li>
+          ))}
+          <li className="inline-flex items-center gap-2 rounded-full bg-surface-muted pl-1 pr-3 py-1 text-sm text-foreground">
+            <span
+              aria-hidden
+              className="inline-flex w-7 h-7 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"
+            >
+              <CreditCard className="w-4 h-4" />
+            </span>
+            Carte bancaire
+          </li>
+        </ul>
+        <p className="text-sm text-muted-foreground">
+          <StatusPill tone="neutral" className="mr-2">
+            Bientôt
+          </StatusPill>
+          Le paiement dans l&apos;application arrive prochainement.
+        </p>
+      </Card>
+    </section>
+
+    <LogoutCard />
+  </>
+);
+
+/* ----------------------------------------------------------------- Artisan */
+
+/**
+ * Profil d'un ARTISAN : orienté vers son activité. Statut de vérification,
+ * accès au tableau de bord, à l'édition complète du profil Pro (photo,
+ * présentation, métiers, tarifs, documents) et à sa fiche publique.
+ * Aucun moyen de paiement client ici (sans objet pour un artisan).
+ */
+const ArtisanProfile: React.FC<{
+  name: string;
+  artisanId: string | null;
+  phone?: string | null;
+}> = ({ name, artisanId, phone }) => {
+  const { data: profile, isLoading, error, reload } = useMyArtisanProfile(artisanId);
+  const isVerified = profile?.verifiedStatus === 'verified';
+
+  return (
+    <>
+      <IdentityCard
+        name={name}
+        phone={phone}
+        avatarUrl={profile?.avatarUrl}
+        subtitle={<span>Artisan · Téranga Pro</span>}
+        badge={isVerified ? <VerifiedBadge /> : undefined}
+      />
+
+      {isLoading && !profile ? (
+        <Skeleton className="h-20 rounded-card" />
+      ) : error && !profile ? (
+        <ErrorState message={error.message} onRetry={reload} />
+      ) : profile ? (
+        <VerificationStatusBanner status={profile.verifiedStatus} />
+      ) : null}
+
+      <section aria-labelledby="mon-activite" className="space-y-3">
+        <SectionHeader id="mon-activite" title="Mon activité" />
+        <Card padding="sm">
+          <ul>
+            <MenuLink
+              to="/pro"
+              icon={LayoutDashboard}
+              label="Tableau de bord"
+              description="Disponibilité, demandes reçues, revenus."
+            />
+            <MenuLink
+              to="/pro/onboarding"
+              icon={UserRoundCog}
+              label="Modifier mon profil Pro"
+              description="Photo, présentation, métiers et tarifs, documents."
+            />
+            {artisanId && (
+              <MenuLink
+                to={`/artisans/${artisanId}`}
+                icon={ExternalLink}
+                label="Voir ma fiche publique"
+                description="Telle que les clients la voient."
+              />
+            )}
+          </ul>
+        </Card>
+      </section>
+
+      <LogoutCard />
+    </>
+  );
+};
+
+/* ----------------------------------------------------------------- Écran */
 
 interface UserProfileScreenProps {
   location: string;
 }
 
+/**
+ * Profil (/profil) : deux écrans distincts selon le rôle du compte
+ * (toujours dérivé du serveur, auth.role), chacun orienté vers son usage.
+ */
 export const UserProfileScreen: React.FC<UserProfileScreenProps> = ({ location }) => {
-  const navigate = useNavigate();
   const auth = useAuth();
-  const userRole = toDisplayRole(auth.role);
+  const role = toDisplayRole(auth.role);
   const { data: currentUser, isLoading, error, reload } = useCurrentUser();
-  const { data: proArtisan } = useArtisan(userRole === 'artisan' ? currentUser?.artisanId ?? null : null);
-  const [paymentMethod, setPaymentMethod] = useState<'wave' | 'om' | 'card'>('wave');
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [isSavingName, setIsSavingName] = useState(false);
-
-  const handleLogout = async () => {
-    await auth.logout();
-    navigate('/');
-  };
-
-  function handleStartEditingName(): void {
-    setNameDraft(currentUser?.name ?? '');
-    setNameError(null);
-    setIsEditingName(true);
-  }
-
-  async function handleSaveName(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    setNameError(null);
-    setIsSavingName(true);
-    try {
-      await auth.updateFullName(nameDraft);
-      setIsEditingName(false);
-    } catch (err) {
-      setNameError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
-    } finally {
-      setIsSavingName(false);
-    }
-  }
 
   return (
-    <main className="max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-28 space-y-6">
-      {/* User Header */}
+    <main className="max-w-3xl mx-auto px-4 md:px-8 pt-2 space-y-6">
       {isLoading && !currentUser ? (
-        <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle flex items-center gap-4">
-          <Skeleton className="w-16 h-16 rounded-full shrink-0" />
+        <Card padding="lg" className="flex items-center gap-4" aria-busy="true">
+          <Skeleton className="w-18 h-18 rounded-full shrink-0" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-5 w-40" />
             <Skeleton className="h-3 w-24" />
           </div>
-        </div>
+        </Card>
       ) : error && !currentUser ? (
         <ErrorState message={error.message} onRetry={reload} />
       ) : currentUser ? (
-        <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-primary text-primary-emerald-foreground font-bold font-sora text-xl flex items-center justify-center border-2 border-primary-emerald">
-            {currentUser.initials}
-          </div>
-          <div className="flex-1">
-            {isEditingName ? (
-              <form onSubmit={handleSaveName} className="space-y-1.5">
-                <input
-                  type="text"
-                  autoComplete="name"
-                  autoFocus
-                  minLength={2}
-                  maxLength={150}
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  className="w-full p-2 rounded-xl border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-sm font-bold text-primary outline-none"
-                />
-                {nameError && <p className="text-xs text-destructive">{nameError}</p>}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="submit"
-                    disabled={isSavingName}
-                    className="px-3 py-1 rounded-full bg-primary text-white font-sora text-xs font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-60"
-                  >
-                    {isSavingName ? 'Enregistrement...' : 'Enregistrer'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingName(false)}
-                    disabled={isSavingName}
-                    className="px-3 py-1 rounded-full text-muted-foreground font-sora text-xs font-bold cursor-pointer disabled:opacity-60"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="flex items-center gap-2">
-                <h2 className="font-bold text-xl text-primary">{currentUser.name}</h2>
-                <button
-                  type="button"
-                  onClick={handleStartEditingName}
-                  aria-label="Modifier mon nom"
-                  className="text-muted-foreground-soft hover:text-primary cursor-pointer"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            <p className="text-xs font-sora text-muted-foreground-soft">{location}</p>
-            {currentUser.verified && (
-              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full bg-accent-soft/50 text-accent-foreground font-sora text-[11px] font-bold">
-                Membre Téranga Vérifié
-              </span>
-            )}
-          </div>
-        </div>
+        role === 'artisan' ? (
+          <ArtisanProfile
+            name={currentUser.name}
+            artisanId={currentUser.artisanId}
+            phone={auth.user?.phone}
+          />
+        ) : (
+          <ClientProfile name={currentUser.name} location={location} phone={auth.user?.phone} />
+        )
       ) : null}
-
-      {/* Mode : dérivé du compte connecté (auth.role), plus un choix client — corrige le point d'audit du toggle auto-déclaré. */}
-      <div className="bg-surface-muted p-4 rounded-2xl border border-border">
-        <h4 className="font-bold text-sm text-foreground">Mode actuel</h4>
-        <p className="text-xs font-sora text-muted-foreground-soft">
-          {userRole === 'client'
-            ? 'Espace Client (Demandes de services)'
-            : `Espace Artisan Pro${proArtisan ? ` (${proArtisan.name})` : ''}`}
-        </p>
-      </div>
-
-      {/* Client-only entry points to their service_request/intervention history (Lot 12). */}
-      {userRole === 'client' && (
-        <div className="space-y-3">
-          <Link
-            to="/mes-demandes"
-            className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <ClipboardList className="text-primary w-6 h-6" />
-              <span className="font-sora text-sm font-semibold text-foreground">Mes demandes</span>
-            </div>
-          </Link>
-          <Link
-            to="/mes-interventions"
-            className="flex items-center justify-between bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle cursor-pointer hover:shadow-md transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <Wrench className="text-primary w-6 h-6" />
-              <span className="font-sora text-sm font-semibold text-foreground">
-                Mes interventions
-              </span>
-            </div>
-          </Link>
-        </div>
-      )}
-
-      {/* Payment Options (Senegal preferred) */}
-      <div className="bg-white p-6 rounded-3xl artisan-shadow border border-border-subtle space-y-4">
-        <h3 className="font-bold text-base text-primary">Moyens de paiement au Sénégal</h3>
-
-        <div className="space-y-2">
-          <label
-            onClick={() => setPaymentMethod('wave')}
-            className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
-              paymentMethod === 'wave'
-                ? 'border-primary bg-primary/5 font-bold'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-brand-wave text-white font-bold text-xs flex items-center justify-center">
-                W
-              </span>
-              <span className="text-sm font-sora">Wave Sénégal</span>
-            </div>
-            {paymentMethod === 'wave' && (
-              <CheckCircle className="text-primary w-6 h-6" />
-            )}
-          </label>
-
-          <label
-            onClick={() => setPaymentMethod('om')}
-            className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
-              paymentMethod === 'om'
-                ? 'border-primary bg-primary/5 font-bold'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-brand-orange-money text-white font-bold text-xs flex items-center justify-center">
-                OM
-              </span>
-              <span className="text-sm font-sora">Orange Money Sénégal</span>
-            </div>
-            {paymentMethod === 'om' && (
-              <CheckCircle className="text-primary w-6 h-6" />
-            )}
-          </label>
-
-          <label
-            onClick={() => setPaymentMethod('card')}
-            className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer transition-all ${
-              paymentMethod === 'card'
-                ? 'border-primary bg-primary/5 font-bold'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <CreditCard className="text-primary w-6 h-6" />
-              <span className="text-sm font-sora">Carte bancaire internationale</span>
-            </div>
-            {paymentMethod === 'card' && (
-              <CheckCircle className="text-primary w-6 h-6" />
-            )}
-          </label>
-        </div>
-      </div>
-
-      {/* Account actions */}
-      <div className="bg-white p-4 rounded-3xl artisan-shadow border border-border-subtle space-y-1">
-        <button
-          onClick={handleLogout}
-          className="w-full text-left px-4 py-3 text-sm font-sora text-destructive font-semibold flex items-center gap-2 hover:bg-destructive-soft/20 rounded-xl transition-colors cursor-pointer"
-        >
-          <LogOut className="w-6 h-6" />
-          <span>Déconnexion</span>
-        </button>
-      </div>
     </main>
   );
 };

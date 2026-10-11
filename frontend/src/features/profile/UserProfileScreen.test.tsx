@@ -4,14 +4,17 @@ import { MemoryRouter } from 'react-router';
 import { UserProfileScreen } from './UserProfileScreen';
 import { useAuth } from '../auth/hooks/useAuth';
 import { useCurrentUser } from './hooks/useCurrentUser';
+import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
 import { ApiError } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
 
 vi.mock('../auth/hooks/useAuth');
 vi.mock('./hooks/useCurrentUser');
+vi.mock('../artisans/hooks/useMyArtisanProfile');
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseCurrentUser = vi.mocked(useCurrentUser);
+const mockedUseMyArtisanProfile = vi.mocked(useMyArtisanProfile);
 
 function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
   return {
@@ -100,7 +103,9 @@ describe('UserProfileScreen', () => {
   });
 
   it("shows the backend's error message inline when the update is rejected", async () => {
-    updateFullName.mockRejectedValue(new ApiError('validation', 'Le nom est requis (au moins 2 caractères).'));
+    updateFullName.mockRejectedValue(
+      new ApiError('validation', 'Le nom est requis (au moins 2 caractères).'),
+    );
     renderScreen();
 
     fireEvent.click(screen.getByRole('button', { name: 'Modifier mon nom' }));
@@ -110,5 +115,125 @@ describe('UserProfileScreen', () => {
     expect(
       await screen.findByText('Le nom est requis (au moins 2 caractères).'),
     ).toBeInTheDocument();
+  });
+
+  describe('profil client', () => {
+    it('est orienté vers les besoins du client (demandes, interventions, nouvelle demande)', () => {
+      renderScreen();
+
+      expect(screen.getByText('Compte client')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Nouvelle demande/ })).toHaveAttribute(
+        'href',
+        '/demande',
+      );
+      expect(screen.getByRole('link', { name: /Mes demandes/ })).toHaveAttribute(
+        'href',
+        '/mes-demandes',
+      );
+      expect(screen.getByRole('link', { name: /Devis et travaux/ })).toHaveAttribute(
+        'href',
+        '/mes-interventions',
+      );
+      expect(screen.queryByRole('link', { name: /Tableau de bord/ })).not.toBeInTheDocument();
+    });
+
+    it('présente les moyens de paiement sans faux choix (aucune sélection enregistrée nulle part)', () => {
+      renderScreen();
+
+      expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument();
+      expect(screen.getByText('Bientôt')).toBeInTheDocument();
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('profil artisan', () => {
+    beforeEach(() => {
+      mockedUseAuth.mockReturnValue(authValue({ role: 'artisan', updateFullName }));
+      mockedUseCurrentUser.mockReturnValue({
+        data: {
+          id: 'user-2',
+          name: 'Idrissa Diop',
+          initials: 'ID',
+          verified: true,
+          artisanId: 'a1',
+        },
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+      });
+      mockedUseMyArtisanProfile.mockReturnValue({
+        data: {
+          id: 'a1',
+          fullName: 'Idrissa Diop',
+          bio: null,
+          yearsExperience: null,
+          avatarUrl: null,
+          coverUrl: null,
+          isAvailable: true,
+          verifiedStatus: 'pending',
+          trades: [],
+        },
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+        setData: vi.fn(),
+      });
+    });
+
+    it('est orienté vers son activité : tableau de bord, profil Pro complet, fiche publique', () => {
+      renderScreen();
+
+      expect(screen.getByRole('link', { name: /Tableau de bord/ })).toHaveAttribute('href', '/pro');
+      expect(screen.getByRole('link', { name: /Modifier mon profil Pro/ })).toHaveAttribute(
+        'href',
+        '/pro/onboarding',
+      );
+      expect(screen.getByRole('link', { name: /Voir ma fiche publique/ })).toHaveAttribute(
+        'href',
+        '/artisans/a1',
+      );
+      expect(screen.getByText('Votre compte est en cours de vérification')).toBeInTheDocument();
+    });
+
+    it('ne montre ni parcours client ni moyens de paiement', () => {
+      renderScreen();
+
+      expect(screen.queryByText('Moyens de paiement au Sénégal')).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Mes demandes/ })).not.toBeInTheDocument();
+      expect(screen.queryByText('Compte client')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('compte hérité (nom resté au numéro de téléphone)', () => {
+    beforeEach(() => {
+      mockedUseCurrentUser.mockReturnValue({
+        data: {
+          id: 'user-3',
+          name: '+221777278808',
+          initials: '+',
+          verified: true,
+          artisanId: null,
+        },
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+      });
+    });
+
+    it('n’affiche pas le numéro comme un nom et invite à en saisir un', () => {
+      renderScreen();
+
+      expect(screen.getByRole('heading', { name: 'Nom à compléter' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: /221/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Ajouter mon nom' })).toBeInTheDocument();
+    });
+
+    it('ne propose jamais le numéro comme valeur de départ du nom', () => {
+      renderScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Ajouter mon nom' }));
+
+      expect(screen.getByLabelText('Nom complet')).toHaveValue('');
+    });
   });
 });

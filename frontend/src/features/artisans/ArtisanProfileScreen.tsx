@@ -1,277 +1,358 @@
 import React, { useState } from 'react';
 import {
-  ArrowLeft,
-  Share2,
-  Heart,
-  BadgeCheck,
-  Star,
-  CheckCircle2,
-  Zap,
   Award,
+  Camera,
+  Clock,
+  MapPin,
   MessageCircle,
-  Receipt,
+  Pencil,
+  ReceiptText,
+  Share2,
+  Star,
 } from 'lucide-react';
-import { Link, useParams } from 'react-router';
-import { SafeImage } from '../../components/ui/SafeImage';
-import { Skeleton } from '../../components/ui/Skeleton';
+import { useLocation, useNavigate, useParams } from 'react-router';
+import { AppBar } from '../../components/ui/AppBar';
+import { Avatar } from '../../components/ui/Avatar';
+import { Button, ButtonLink } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { IconButton } from '../../components/ui/IconButton';
+import { Rating, StarRow } from '../../components/ui/Rating';
+import { SafeImage } from '../../components/ui/SafeImage';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { StatTile } from '../../components/ui/StatTile';
+import { StatusPill } from '../../components/ui/StatusPill';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { useAuth } from '../auth/hooks/useAuth';
+import { QuoteRequestSheet } from './components/QuoteRequestSheet';
 import { useArtisan } from './hooks/useArtisan';
 
+/** Nombre d'avis visibles avant « Voir tous les avis ». */
+const REVIEWS_PREVIEW_COUNT = 3;
+
+/**
+ * Fiche publique d'un artisan (/artisans/:id).
+ *
+ * Le badge Vérifié s'affiche ici EN GRAND : c'est le signal de confiance
+ * central. AUCUN numéro de téléphone n'est jamais affiché (protection
+ * anti-désintermédiation) : le contact passe par « Message » et
+ * « Demander un devis », dans l'application.
+ *
+ * Les actions dépendent du compte : un client demande un devis ; un
+ * visiteur est d'abord invité à se connecter ; un artisan voit seulement
+ * l'accès à l'édition de SA propre fiche (jamais de demande de devis).
+ */
 export const ArtisanProfileScreen: React.FC = () => {
   const { artisanId = '' } = useParams<{ artisanId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const auth = useAuth();
   const { data: artisan, isLoading, error, reload } = useArtisan(artisanId);
-  const [isFavorite, setIsFavorite] = useState(false);
-  const [showShareNotification, setShowShareNotification] = useState(false);
+  const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
-  const handleShare = () => {
-    navigator.clipboard?.writeText(`${window.location.origin}/artisans/${artisanId}`);
-    setShowShareNotification(true);
-    setTimeout(() => setShowShareNotification(false), 2500);
+  const isOwnProfile = auth.role === 'artisan' && auth.user?.artisanProfileId === artisanId;
+  // Seul un client (ou un visiteur, invité à se connecter) sollicite un artisan.
+  const canRequestQuote = auth.role === null || auth.role === 'client';
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}/artisans/${artisanId}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: artisan?.name, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setShareMessage('Lien du profil copié.');
+    } catch {
+      // Partage annulé par l'utilisateur, ou presse-papiers refusé : on le dit.
+      setShareMessage("Le lien n'a pas pu être copié.");
+    }
+    window.setTimeout(() => setShareMessage(null), 2500);
   };
 
+  const handleRequestQuote = () => {
+    if (!auth.isAuthenticated) {
+      // Connexion d'abord, puis retour sur cette fiche (ProtectedRoute / OtpScreen lisent `from`).
+      navigate('/connexion', { state: { from: location } });
+      return;
+    }
+    setIsQuoteOpen(true);
+  };
+
+  const reviews = artisan?.reviews ?? [];
+  const visibleReviews = showAllReviews ? reviews : reviews.slice(0, REVIEWS_PREVIEW_COUNT);
+
   return (
-    <div className="bg-background text-foreground min-h-screen pb-28">
-      {/* Top Glass Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass-card border-b border-border-strong/30 px-4 h-16 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/accueil"
-            className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
-          >
-            <ArrowLeft className="text-foreground w-6 h-6" />
-          </Link>
-          <h1 className="font-bold text-lg text-primary truncate">Profil Artisan</h1>
-        </div>
+    <>
+      <AppBar
+        title="Profil artisan"
+        backTo="/accueil"
+        actions={
+          artisan && (
+            <IconButton label="Partager le profil" onClick={handleShare}>
+              <Share2 aria-hidden className="w-5 h-5" />
+            </IconButton>
+          )
+        }
+      />
 
-        {artisan && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleShare}
-              className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors cursor-pointer"
-              title="Partager le profil"
-            >
-              <Share2 className="text-foreground w-6 h-6" />
-            </button>
-            <button
-              onClick={() => setIsFavorite(!isFavorite)}
-              className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors cursor-pointer"
-              title="Ajouter aux favoris"
-            >
-              <Heart
-                className={`w-6 h-6 ${isFavorite ? 'text-destructive' : 'text-foreground'}`}
-                {...(isFavorite ? { fill: 'currentColor' } : {})}
-              />
-            </button>
-          </div>
-        )}
-      </header>
-
-      {showShareNotification && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-primary text-white px-4 py-2 rounded-full text-xs font-sora shadow-lg animate-in fade-in slide-in-from-top-2">
-          Lien du profil copié !
+      {/* Annonce discrète du résultat du partage (lue par les lecteurs d'écran). */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {shareMessage}
+      </div>
+      {shareMessage && (
+        <div
+          aria-hidden
+          className="fixed top-20 left-1/2 -translate-x-1/2 z-50 rounded-full bg-primary px-4 py-2 text-sm text-white shadow-card-hover"
+        >
+          {shareMessage}
         </div>
       )}
 
       {isLoading && !artisan ? (
-        <main className="w-full pt-24 px-4 md:px-12 max-w-4xl mx-auto space-y-6">
-          <Skeleton className="w-full h-60 md:h-80 rounded-2xl" />
+        <main className="w-full max-w-3xl mx-auto px-4 pt-4 space-y-5" aria-busy="true">
+          <Skeleton className="w-full h-44 rounded-card" />
           <div className="space-y-2">
             <Skeleton className="h-7 w-1/2" />
             <Skeleton className="h-4 w-1/3" />
           </div>
-          <Skeleton className="h-24 w-full" />
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-24 rounded-card" />
+            <Skeleton className="h-24 rounded-card" />
+          </div>
         </main>
       ) : error && !artisan ? (
-        <main className="w-full pt-24">
+        <main className="w-full max-w-3xl mx-auto px-4 pt-6 space-y-4">
           <ErrorState message={error.message} onRetry={reload} />
+          <ButtonLink to="/accueil" variant="ghost" fullWidth>
+            Retour à l&apos;accueil
+          </ButtonLink>
         </main>
       ) : artisan ? (
-        <main className="w-full">
-          {/* Cover Photo */}
-          <section className="relative w-full h-60 md:h-80">
-            <div className="w-full h-full bg-border overflow-hidden">
+        <main className="w-full pb-32">
+          <section className="relative max-w-3xl mx-auto">
+            <div className="h-44 md:h-64 overflow-hidden md:rounded-b-sheet bg-surface-muted">
               <SafeImage
                 src={artisan.coverUrl}
                 fallback="/images/placeholder-cover.svg"
-                alt="Atelier artisan"
+                alt=""
                 className="w-full h-full object-cover"
               />
             </div>
-
-            {/* Profile Picture Overlap */}
-            <div className="absolute -bottom-14 left-4 md:left-12 ring-4 ring-background rounded-full overflow-hidden w-28 h-28 md:w-36 md:h-36 bg-white artisan-shadow">
-              <SafeImage
-                src={artisan.avatarUrl}
-                fallback="/images/placeholder-avatar.svg"
-                alt={artisan.name}
-                className="w-full h-full object-cover"
-              />
+            <div className="absolute -bottom-12 left-4 md:left-6 rounded-full ring-4 ring-background">
+              <Avatar name={artisan.name} src={artisan.avatarUrl} size="xl" />
             </div>
           </section>
 
-          {/* Basic Info */}
-          <section className="mt-16 px-4 md:px-12 max-w-4xl mx-auto">
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <h2 className="font-bold text-2xl md:text-3xl text-primary">{artisan.name}</h2>
-                {artisan.verified && (
-                  <div className="flex items-center gap-1 bg-accent-soft/40 text-accent-foreground px-2.5 py-0.5 rounded-full border border-accent-soft">
-                    <BadgeCheck className="w-[14px] h-[14px]" fill="currentColor" />
-                    <span className="text-xs font-sora font-semibold">Vérifié</span>
+          <div className="max-w-3xl mx-auto px-4 md:px-6 pt-16 space-y-7">
+            <section aria-labelledby="artisan-nom" className="space-y-3">
+              <div className="space-y-2">
+                <h2
+                  id="artisan-nom"
+                  className="font-display text-display-md font-semibold text-primary"
+                >
+                  {artisan.name}
+                </h2>
+                {artisan.verified ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <VerifiedBadge size="lg" />
+                    <span className="text-sm text-muted-foreground">
+                      Identité et documents contrôlés par Téranga
+                    </span>
                   </div>
+                ) : (
+                  <StatusPill tone="neutral">Vérification en cours</StatusPill>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-2 my-1">
-                {artisan.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-3 py-1 bg-surface-muted border border-border-strong/40 rounded-full font-sora text-xs text-muted-foreground font-medium"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center text-accent-foreground">
-                  <Star className="w-[18px] h-[18px]" fill="currentColor" />
-                  <span className="font-sora font-bold ml-1">{artisan.rating}</span>
-                </div>
-                <span>({artisan.reviewCount} avis)</span>
-                <span className="w-1 h-1 rounded-full bg-border-strong" />
-                <span>{artisan.location}</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Stats Row */}
-          <section className="mt-6 px-4 md:px-12 max-w-4xl mx-auto">
-            <div className="grid grid-cols-3 gap-4 py-5 border-y border-border-strong/30">
-              <div className="flex flex-col items-center text-center">
-                <CheckCircle2 className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
-                <span className="font-bold text-xl text-primary">{artisan.stats.chantiers}</span>
-                <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
-                  Chantiers
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                <Rating value={artisan.rating} count={artisan.reviewCount} size="md" />
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <MapPin aria-hidden className="w-4 h-4" />
+                  {artisan.location}
+                  {artisan.distance && ` · ${artisan.distance}`}
                 </span>
+                <StatusPill tone={artisan.available ? 'success' : 'neutral'}>
+                  {artisan.available ? 'Disponible' : 'Indisponible'}
+                </StatusPill>
               </div>
 
-              <div className="flex flex-col items-center text-center">
-                <Zap className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
-                <span className="font-bold text-xl text-primary">{artisan.stats.responseTime}</span>
-                <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
-                  Réponse
-                </span>
-              </div>
+              {artisan.tags.length > 0 && (
+                <ul aria-label="Métiers" className="flex flex-wrap gap-2">
+                  {artisan.tags.map((tag) => (
+                    <li
+                      key={tag}
+                      className="rounded-full bg-emerald-tint px-3 py-1 text-sm font-medium text-primary"
+                    >
+                      {tag}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-              <div className="flex flex-col items-center text-center">
-                <Award className="text-primary mb-1 w-8 h-8 md:w-9 md:h-9" />
-                <span className="font-bold text-xl text-primary">{artisan.stats.experience}</span>
-                <span className="text-[11px] font-sora text-muted-foreground uppercase tracking-wider font-semibold">
-                  D&apos;exp.
-                </span>
-              </div>
-            </div>
-          </section>
+            <section aria-label="En chiffres" className="grid grid-cols-2 gap-3">
+              <StatTile
+                icon={<Star className="w-5 h-5" />}
+                label="Avis clients"
+                value={artisan.reviewCount}
+              />
+              <StatTile
+                icon={<Award className="w-5 h-5" />}
+                label="Expérience"
+                value={artisan.stats.experience}
+              />
+              <StatTile
+                icon={<ReceiptText className="w-5 h-5" />}
+                label="Tarif indicatif"
+                value={artisan.priceBase}
+                className="col-span-2"
+              />
+            </section>
 
-          {/* Bio Section */}
-          <section className="mt-6 px-4 md:px-12 max-w-4xl mx-auto space-y-2">
-            <h3 className="font-bold text-xl text-primary">À propos</h3>
-            <p className="text-base text-muted-foreground leading-relaxed">{artisan.bio}</p>
-          </section>
+            <section aria-labelledby="a-propos" className="space-y-3">
+              <SectionHeader id="a-propos" title="À propos" />
+              <Card>
+                <p className="text-base text-muted-foreground leading-relaxed whitespace-pre-line">
+                  {artisan.bio || "Cet artisan n'a pas encore rédigé de présentation."}
+                </p>
+              </Card>
+            </section>
 
-          {/* Realisations Gallery */}
-          <section className="mt-8">
-            <div className="px-4 md:px-12 max-w-4xl mx-auto flex justify-between items-center mb-3">
-              <h3 className="font-bold text-xl text-primary">Réalisations</h3>
-              <button className="text-primary font-sora text-xs font-semibold hover:underline">
-                Voir tout
-              </button>
-            </div>
+            <section aria-labelledby="realisations" className="space-y-3">
+              <SectionHeader id="realisations" title="Réalisations" />
+              {artisan.realisations.length === 0 ? (
+                <Card tone="tint" className="flex items-center gap-3 text-sm text-foreground">
+                  <Camera aria-hidden className="w-5 h-5 text-primary-emerald shrink-0" />
+                  Aucune réalisation publiée pour le moment.
+                </Card>
+              ) : (
+                <ul className="-mx-4 px-4 flex gap-3 overflow-x-auto hide-scrollbar pb-2">
+                  {artisan.realisations.map((realisation) => (
+                    <li
+                      key={realisation.id}
+                      className="relative shrink-0 w-64 h-44 rounded-card overflow-hidden shadow-card"
+                    >
+                      <SafeImage
+                        src={realisation.imageUrl}
+                        fallback="/images/placeholder-cover.svg"
+                        alt={realisation.altText}
+                        className="w-full h-full object-cover"
+                      />
+                      <p className="absolute inset-x-0 bottom-0 bg-linear-to-t from-foreground/70 to-transparent p-3 text-sm font-semibold text-white">
+                        {realisation.title}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-            <div className="flex gap-4 overflow-x-auto hide-scrollbar px-4 md:px-12 max-w-4xl mx-auto pb-2">
-              {artisan.realisations.map((real) => (
-                <div
-                  key={real.id}
-                  className="flex-shrink-0 w-64 md:w-80 h-48 rounded-2xl overflow-hidden artisan-shadow border border-border group relative"
-                >
-                  <SafeImage
-                    src={real.imageUrl}
-                    fallback="/images/placeholder-cover.svg"
-                    alt={real.altText}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-90 p-4 flex items-end">
-                    <p className="text-white font-sora text-xs font-semibold">{real.title}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Customer Reviews */}
-          <section className="mt-8 px-4 md:px-12 max-w-4xl mx-auto space-y-4">
-            <h3 className="font-bold text-xl text-primary">Avis clients</h3>
-
-            <div className="space-y-3">
-              {artisan.reviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="p-5 bg-surface-muted rounded-2xl border border-border-strong/20 shadow-sm"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold font-sora text-sm">
-                        {rev.avatarInitials}
-                      </div>
-                      <div>
-                        <h4 className="font-sora text-sm font-bold text-foreground">{rev.author}</h4>
-                        <div className="flex text-accent-foreground text-sm">
-                          {[...Array(rev.rating)].map((_, i) => (
-                            <Star key={i} className="w-[14px] h-[14px]" fill="currentColor" />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="font-sora text-xs text-muted-foreground-soft">{rev.date}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground italic leading-relaxed">{rev.comment}</p>
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={() => alert('Affichage des 120 avis vérifiés par Téranga Services...')}
-              className="w-full py-3.5 rounded-full border-1.5 border-primary text-primary font-sora text-sm font-semibold hover:bg-surface-muted transition-colors cursor-pointer"
-            >
-              Voir les {artisan.reviewCount} avis
-            </button>
-          </section>
+            <section aria-labelledby="avis" className="space-y-3">
+              <SectionHeader id="avis" title="Avis clients" />
+              {reviews.length === 0 ? (
+                <Card tone="tint" className="text-sm text-foreground">
+                  Aucun avis pour le moment. Seul un client dont l&apos;intervention est terminée
+                  peut en déposer un.
+                </Card>
+              ) : (
+                <>
+                  <ul className="space-y-3">
+                    {visibleReviews.map((review) => (
+                      <li key={review.id}>
+                        <Card as="article" className="space-y-2">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={review.author} size="sm" decorative />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-foreground truncate">
+                                {review.author}
+                              </p>
+                              <StarRow value={review.rating} />
+                            </div>
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                              <Clock aria-hidden className="w-3.5 h-3.5" />
+                              {review.date}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            {review.comment}
+                          </p>
+                        </Card>
+                      </li>
+                    ))}
+                  </ul>
+                  {reviews.length > REVIEWS_PREVIEW_COUNT && (
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      aria-expanded={showAllReviews}
+                      onClick={() => setShowAllReviews((value) => !value)}
+                    >
+                      {showAllReviews ? 'Afficher moins d’avis' : `Voir les ${reviews.length} avis`}
+                    </Button>
+                  )}
+                </>
+              )}
+            </section>
+          </div>
         </main>
       ) : null}
 
-      {/* Bottom Sticky Action Bar */}
-      {artisan && (
-        <div className="fixed bottom-0 left-0 right-0 glass-card border-t border-border-strong/30 p-4 z-50">
-          <div className="max-w-xl mx-auto flex gap-3">
-            <Link
-              to={`/messages/${artisanId}`}
-              className="flex-1 h-14 rounded-full border-1.5 border-primary text-primary font-sora text-sm font-bold flex items-center justify-center gap-2 hover:bg-surface-muted active:scale-95 transition-all cursor-pointer"
-            >
-              <MessageCircle className="w-6 h-6" />
-              <span>Message</span>
-            </Link>
-
-            <Link
-              to={`/messages/${artisanId}`}
-              className="flex-[1.5] h-14 rounded-full bg-accent-alt text-accent-alt-foreground font-sora text-sm font-bold shadow-md flex items-center justify-center gap-2 hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-            >
-              <Receipt className="w-6 h-6" fill="currentColor" />
-              <span>Demander un devis</span>
-            </Link>
+      {artisan && (isOwnProfile || canRequestQuote) && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur-md shadow-bar px-4 pt-3 pb-safe">
+          <div className="max-w-xl mx-auto flex gap-3 pb-1">
+            {isOwnProfile ? (
+              <ButtonLink
+                to="/pro/onboarding"
+                variant="brand"
+                size="lg"
+                fullWidth
+                leadingIcon={<Pencil aria-hidden className="w-5 h-5" />}
+              >
+                Modifier ma fiche
+              </ButtonLink>
+            ) : (
+              <>
+                <ButtonLink
+                  to={`/messages/${artisanId}`}
+                  variant="outline"
+                  size="md"
+                  leadingIcon={<MessageCircle aria-hidden className="w-5 h-5" />}
+                >
+                  Message
+                </ButtonLink>
+                {/* Taille md et sans icône : les deux libellés tiennent sur une
+                    ligne dès 360 px de large (vérifié en capture). */}
+                <Button
+                  variant="primary"
+                  size="md"
+                  className="flex-1"
+                  disabled={!artisan.verified}
+                  onClick={handleRequestQuote}
+                >
+                  Demander un devis
+                </Button>
+              </>
+            )}
           </div>
+          {!isOwnProfile && !artisan.verified && (
+            <p className="max-w-xl mx-auto pb-1 text-xs text-center text-muted-foreground">
+              Cet artisan n&apos;est pas encore vérifié : il ne peut pas recevoir de demande.
+            </p>
+          )}
         </div>
       )}
-    </div>
+
+      {artisan && auth.role === 'client' && (
+        <QuoteRequestSheet
+          artisan={artisan}
+          open={isQuoteOpen}
+          onClose={() => setIsQuoteOpen(false)}
+        />
+      )}
+    </>
   );
 };

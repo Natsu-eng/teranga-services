@@ -32,7 +32,9 @@ function Probe() {
       <span data-testid="name">{auth.user?.fullName ?? ''}</span>
       <button onClick={() => void auth.requestOtp('+221771234501')}>request</button>
       <button onClick={() => void auth.login('+221771234501', '123456')}>login</button>
-      <button onClick={() => void auth.signup('+221771234501', '123456', 'artisan', 'Idrissa Diop')}>
+      <button
+        onClick={() => void auth.signup('+221771234501', '123456', 'artisan', 'Idrissa Diop')}
+      >
         signup
       </button>
       <button onClick={() => void auth.updateFullName('Nouveau Nom')}>updateFullName</button>
@@ -87,7 +89,9 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
 
     fireEvent.click(screen.getByText('request'));
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/request-otp', expect.anything()));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/request-otp', expect.anything()),
+    );
 
     fireEvent.click(screen.getByText('login'));
 
@@ -97,7 +101,9 @@ describe('AuthProvider', () => {
     expect(authStore.getAccessToken()).toBe('access-1');
     expect(authStore.getRefreshToken()).toBe('refresh-1');
 
-    const verifyCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/auth/verify-otp'));
+    const verifyCall = fetchMock.mock.calls.find(([url]) =>
+      (url as string).endsWith('/auth/verify-otp'),
+    );
     expect(verifyCall?.[1]?.body).toBe(
       JSON.stringify({ phone: '+221771234501', code: '123456', intent: 'login' }),
     );
@@ -127,7 +133,9 @@ describe('AuthProvider', () => {
     await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('true'));
     expect(screen.getByTestId('role').textContent).toBe('artisan');
 
-    const verifyCall = fetchMock.mock.calls.find(([url]) => (url as string).endsWith('/auth/verify-otp'));
+    const verifyCall = fetchMock.mock.calls.find(([url]) =>
+      (url as string).endsWith('/auth/verify-otp'),
+    );
     expect(verifyCall?.[1]?.body).toBe(
       JSON.stringify({
         phone: '+221771234501',
@@ -184,7 +192,9 @@ describe('AuthProvider', () => {
           : Promise.resolve(jsonResponse(401, { error: { code: 'TOKEN_INVALIDE', message: 'x' } }));
       }
       if (url.endsWith('/auth/refresh')) {
-        return Promise.resolve(jsonResponse(200, { access: 'fresh-access', refresh: 'fresh-refresh' }));
+        return Promise.resolve(
+          jsonResponse(200, { access: 'fresh-access', refresh: 'fresh-refresh' }),
+        );
       }
       throw new Error(`unexpected fetch: ${url}`);
     });

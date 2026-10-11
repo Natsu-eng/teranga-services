@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import type { AuthIntent, SignupRole } from '../../lib/api/auth-client';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/Field';
+import { AuthShell } from './components/AuthShell';
 
 // Alignées sur `app/core/full_name.py` (FULL_NAME_MIN_LENGTH/MAX_LENGTH) --
 // une seule source de vérité côté backend, ce contrôle local n'évite qu'un
@@ -59,41 +62,31 @@ export const NameScreen: React.FC = () => {
   };
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-20 pb-28 space-y-6">
-      <div className="space-y-2">
-        <h1 className="font-bold text-2xl text-primary">Comment vous appelez-vous ?</h1>
-        <p className="text-sm text-muted-foreground">
-          {role === 'artisan'
-            ? 'Ce nom sera affiché sur votre fiche publique, visible par les clients.'
-            : 'Ce nom sera visible par les artisans que vous contactez.'}
-        </p>
-      </div>
+    <AuthShell
+      title="Comment vous appelez-vous ?"
+      description={
+        role === 'artisan'
+          ? 'Ce nom sera affiché sur votre fiche publique, visible par les clients.'
+          : 'Ce nom sera visible par les artisans que vous contactez.'
+      }
+      onBack={() => navigate('/connexion/role', { state: { from } })}
+    >
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-6" noValidate>
+        <TextField
+          label="Nom complet"
+          type="text"
+          autoComplete="name"
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+          placeholder="Ex. Idrissa Diop"
+          maxLength={MAX_LENGTH}
+          error={error}
+        />
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-sora font-semibold text-muted-foreground">
-            Nom complet
-          </span>
-          <input
-            type="text"
-            autoComplete="name"
-            value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
-            placeholder="Ex. Idrissa Diop"
-            maxLength={MAX_LENGTH}
-            className="w-full h-14 px-4 rounded-full bg-surface-muted text-base text-foreground outline-none focus:ring-2 focus:ring-primary"
-          />
-        </label>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <button
-          type="submit"
-          className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
-        >
+        <Button type="submit" variant="brand" size="lg" fullWidth className="mt-auto">
           Continuer
-        </button>
+        </Button>
       </form>
-    </main>
+    </AuthShell>
   );
 };

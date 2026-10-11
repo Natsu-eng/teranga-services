@@ -1,310 +1,362 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, X, Camera, Mic, Sparkles, Info, ArrowRight } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router';
-import { SafeImage } from '../../components/ui/SafeImage';
-import { Skeleton } from '../../components/ui/Skeleton';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Send, Sparkles, TriangleAlert } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { AppBar } from '../../components/ui/AppBar';
+import { Avatar } from '../../components/ui/Avatar';
+import { Button, ButtonLink } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 import { ErrorState } from '../../components/ui/ErrorState';
+import { TextAreaField } from '../../components/ui/Field';
+import { SectionHeader } from '../../components/ui/SectionHeader';
+import { Skeleton } from '../../components/ui/Skeleton';
+import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { api, ApiError } from '../../lib/api';
-import { getCurrentPosition } from '../../lib/geo';
+import type { ArtisanFilters } from '../../lib/api/types';
+import { getCurrentPosition, type Coordinates } from '../../lib/geo';
+import type { AIAnalysisResult, ServiceRequest } from '../../types';
 import { useAuth } from '../auth/hooks/useAuth';
+import { ArtisanCard, ArtisanCardSkeleton } from '../artisans/components/ArtisanCard';
+import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useArtisans } from '../artisans/hooks/useArtisans';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 
+/** Longueur maximale de la description (alignée sur le champ côté serveur). */
+const MAX_LENGTH = 500;
+/** En dessous, l'IA n'a pas assez de matière : on n'appelle pas l'endpoint. */
+const MIN_ANALYSIS_LENGTH = 15;
+/**
+ * L'analyse part après une pause de frappe. L'ancien écran appelait l'IA à
+ * CHAQUE caractère, sur un endpoint public limité en débit : la limite
+ * s'épuisait en une phrase.
+ */
+const ANALYSIS_DEBOUNCE_MS = 800;
+/** Artisans montrés sous le résultat. */
+const SUGGESTED_COUNT = 3;
+
+const URGENCY: Record<AIAnalysisResult['urgencyCode'], { label: string; tone: StatusTone }> = {
+  normal: { label: 'Normale', tone: 'info' },
+  urgent: { label: 'Urgente', tone: 'warning' },
+  immediat: { label: 'Immédiate', tone: 'danger' },
+};
+
+function searchUrlFor(tradeCode: string, position: Coordinates): string {
+  return `/recherche?trade=${encodeURIComponent(tradeCode)}&lat=${position.lat}&lng=${position.lng}`;
+}
+
+/**
+ * Demande assistée par l'IA (/demande).
+ *
+ * 1. Le client décrit son problème ; l'analyse (métier, estimation,
+ *    urgence) se met à jour après chaque pause de frappe.
+ * 2. Le résultat ressort sur une carte vert profond, suivi de trois
+ *    artisans du métier détecté.
+ * 3. L'action crée la demande (POST /requests) puis :
+ *    - si l'on vient d'une fiche artisan (`?artisan=<id>`) et que le métier
+ *      détecté est le sien : la demande lui est adressée directement
+ *      (POST /interventions) ;
+ *    - sinon : recherche filtrée côté serveur sur le métier et la position.
+ *
+ * Aucune donnée simulée : ni description ni photo préremplies, ni faux
+ * enregistrement vocal (il ajoutait un texte inventé à la vraie demande).
+ */
 export const DescribeProblemScreen: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const auth = useAuth();
-  const { data: artisans, isLoading: isArtisansLoading, error: artisansError } = useArtisans();
-  const { data: aiResult, isLoading: isAnalyzing, error: analysisError, analyze } = useAnalyzeProblem();
+  const {
+    data: aiResult,
+    isLoading: isAnalyzing,
+    error: analysisError,
+    analyze,
+  } = useAnalyzeProblem();
+
+  const targetArtisanId = searchParams.get('artisan');
+  const { data: targetArtisan } = useArtisan(targetArtisanId);
+
+  const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Demande déjà créée mais non adressée à l'artisan visé (refus serveur) :
+  // on ne la recrée jamais, on propose les autres artisans du métier.
+  const [orphanRequest, setOrphanRequest] = useState<{
+    request: ServiceRequest;
+    position: Coordinates;
+  } | null>(null);
 
-  const [description, setDescription] = useState<string>(
-    "Le robinet de la cuisine fuit abondamment sous l'évier. L'eau s'écoule au niveau du joint du siphon depuis ce matin.",
-  );
-  const [photoPreview, setPhotoPreview] = useState<string | null>(
-    '/images/describe-problem-photo-exemple.jpg',
-  );
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recordingTime, setRecordingTime] = useState<number>(0);
+  const trimmed = description.trim();
+  const isDescriptionReady = trimmed.length >= MIN_ANALYSIS_LENGTH;
 
-  // Analyze the pre-filled sample description once on mount; further edits
-  // re-trigger analysis via the textarea's onChange handler below.
   useEffect(() => {
-    analyze(description);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analyze]);
+    if (trimmed.length < MIN_ANALYSIS_LENGTH) return;
+    const timer = setTimeout(() => analyze(trimmed), ANALYSIS_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [trimmed, analyze]);
 
-  // Handle Photo File Upload
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPhotoPreview(url);
+  // Trois artisans du métier détecté (aucun appel avant la première analyse).
+  const detectedTrade = aiResult?.tradeCode ?? null;
+  const suggestedFilters = useMemo<ArtisanFilters | undefined>(
+    () => (detectedTrade ? { trade: detectedTrade, pageSize: SUGGESTED_COUNT } : undefined),
+    [detectedTrade],
+  );
+  const {
+    data: suggested,
+    isLoading: isSuggestedLoading,
+    error: suggestedError,
+    reload: reloadSuggested,
+  } = useArtisans(suggestedFilters, { enabled: detectedTrade !== null });
+
+  // Relais depuis une fiche : seulement si l'artisan exerce le métier détecté.
+  const sendsToTarget =
+    targetArtisan != null &&
+    aiResult != null &&
+    targetArtisan.tradeCodes.includes(aiResult.tradeCode);
+  const targetMismatch =
+    targetArtisan != null &&
+    aiResult != null &&
+    !targetArtisan.tradeCodes.includes(aiResult.tradeCode);
+
+  // Seul un client crée une demande (POST /requests, réservé côté serveur).
+  const isWrongRole = auth.isAuthenticated && auth.role !== 'client';
+
+  const handleSubmit = async () => {
+    if (!aiResult) return;
+
+    // La création d'une demande exige d'être connecté : renvoie vers la
+    // connexion et revient sur ce parcours ensuite (OtpScreen lit `from`).
+    if (!auth.isAuthenticated) {
+      navigate('/connexion', { state: { from: location } });
+      return;
+    }
+
+    setSubmitError(null);
+    setIsSubmitting(true);
+    try {
+      const position = await getCurrentPosition();
+      const request = await api.createServiceRequest({
+        tradeCode: aiResult.tradeCode,
+        description: trimmed,
+        // L'envoi de photo n'existe pas encore côté serveur (BUILD_PLAN.md §6 Lot 11).
+        photoUrl: null,
+        location: position,
+        urgency: aiResult.urgencyCode,
+        aiEstimateMinFcfa: aiResult.priceMinFcfa,
+        aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
+      });
+
+      if (sendsToTarget && targetArtisan) {
+        try {
+          await api.createIntervention({
+            serviceRequestId: request.id,
+            artisanId: targetArtisan.id,
+          });
+          navigate('/mes-interventions', { replace: true });
+        } catch (err) {
+          // La demande existe : on le dit, et on propose les autres artisans.
+          setOrphanRequest({ request, position });
+          setSubmitError(
+            `Votre demande est enregistrée, mais n'a pas pu être envoyée à ${targetArtisan.name} : ${
+              err instanceof ApiError ? err.message : 'erreur inattendue.'
+            }`,
+          );
+        }
+        return;
+      }
+
+      // Liste réellement filtrée côté serveur sur le métier détecté par
+      // l'IA et la position -- jamais un artisan choisi au hasard
+      // (AUDIT_PHASE2.md §6).
+      navigate(searchUrlFor(aiResult.tradeCode, position));
+    } catch (err) {
+      setSubmitError(
+        err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Handle Recording Simulation
-  const toggleRecording = () => {
-    if (!isRecording) {
-      setIsRecording(true);
-      setRecordingTime(0);
-      const timer = setInterval(() => {
-        setRecordingTime((prev) => {
-          if (prev >= 10) {
-            clearInterval(timer);
-            setIsRecording(false);
-            setDescription(
-              (d) =>
-                d +
-                " [Note vocale 0:10]: 'J'ai aussi une forte odeur d'humidité sous le meuble de cuisine.'",
-            );
-            return 10;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    } else {
-      setIsRecording(false);
-    }
-  };
+  const ctaLabel = orphanRequest
+    ? 'Voir les autres artisans'
+    : isSubmitting
+      ? 'Création de la demande...'
+      : sendsToTarget && targetArtisan
+        ? `Envoyer à ${targetArtisan.name}`
+        : 'Voir les artisans';
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col pb-32">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-50 flex items-center h-16 px-4 bg-background/85 backdrop-blur-md border-b border-border">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-muted transition-colors active:scale-95 cursor-pointer"
-        >
-          <ArrowLeft className="text-foreground w-6 h-6" />
-        </button>
-        <h1 className="ml-3 font-bold text-lg md:text-xl text-primary">
-          Décrivez votre problème
-        </h1>
-      </header>
+    <>
+      <AppBar title="Décrivez votre problème" backTo="/accueil" />
 
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 pt-4 space-y-6">
-        {/* Input Textarea & Counter */}
-        <section className="space-y-3">
-          <div className="relative">
-            <textarea
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                if (e.target.value.length > 10) {
-                  analyze(e.target.value);
-                }
-              }}
-              maxLength={500}
-              placeholder="Expliquez-nous ce qui ne va pas (ex: fuite d'eau, climatiseur qui ne refroidit plus)..."
-              className="w-full h-40 p-4 rounded-2xl bg-white border border-border-strong focus:border-primary focus:ring-1 focus:ring-primary text-base text-foreground placeholder:text-muted-foreground-soft transition-all resize-none shadow-sm outline-none"
-            />
-            <div className="absolute bottom-3 right-3 text-xs text-muted-foreground-soft font-sora">
-              {description.length} / 500
+      <main className="flex-1 w-full max-w-2xl mx-auto px-4 pt-4 pb-40 space-y-6">
+        {targetArtisan && (
+          <Card tone="tint" className="flex items-center gap-3">
+            <Avatar name={targetArtisan.name} src={targetArtisan.avatarUrl} size="sm" decorative />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-muted-foreground">Demande destinée à</p>
+              <p className="font-semibold text-foreground truncate">{targetArtisan.name}</p>
             </div>
-          </div>
+            {targetArtisan.verified && <VerifiedBadge />}
+          </Card>
+        )}
 
-          {/* Photo Preview if attached */}
-          {photoPreview && (
-            <div className="relative w-full h-28 rounded-2xl overflow-hidden border border-border group">
-              <SafeImage
-                src={photoPreview}
-                fallback="/images/placeholder-cover.svg"
-                alt="Aperçu fuite"
-                className="w-full h-full object-cover"
-              />
-              <button
-                onClick={() => setPhotoPreview(null)}
-                className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1 hover:bg-black transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white px-2.5 py-0.5 rounded-full text-xs font-sora">
-                Photo jointe
-              </div>
-            </div>
-          )}
+        <TextAreaField
+          label="Votre problème"
+          value={description}
+          onChange={(event) => setDescription(event.target.value.slice(0, MAX_LENGTH))}
+          maxLength={MAX_LENGTH}
+          rows={5}
+          placeholder="Ex. : le robinet de la cuisine fuit sous l'évier depuis ce matin."
+          hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, meilleure est l'estimation.`}
+        />
 
-          {/* Media Action Buttons */}
-          <div className="flex gap-3">
-            <label className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-primary text-primary font-sora text-xs font-bold hover:bg-primary/5 active:scale-95 transition-all cursor-pointer">
-              <Camera className="w-5 h-5" />
-              <span>Ajouter une photo</span>
-              <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-            </label>
+        <section aria-labelledby="analyse-titre" aria-live="polite" className="space-y-4">
+          <h2 id="analyse-titre" className="sr-only">
+            Analyse de votre demande
+          </h2>
 
-            <button
-              onClick={toggleRecording}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full border-1.5 border-primary font-sora text-xs font-bold transition-all cursor-pointer ${
-                isRecording
-                  ? 'bg-destructive text-white border-destructive animate-pulse'
-                  : 'text-primary hover:bg-primary/5 active:scale-95'
-              }`}
-            >
-              <Mic className="w-5 h-5" />
-              <span>{isRecording ? `Enregistrement 0:0${recordingTime}` : 'Message vocal'}</span>
-            </button>
-          </div>
-        </section>
-
-        {/* AI Analysis Result Card */}
-        <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {!aiResult && isAnalyzing ? (
-            <div className="bg-white rounded-2xl p-6 space-y-4">
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-7 w-56" />
-              <Skeleton className="h-12 w-full" />
-            </div>
+            <Card tone="dark" padding="lg" className="space-y-3" aria-busy="true">
+              <p className="text-caption font-semibold uppercase tracking-[0.12em] text-accent">
+                Analyse en cours…
+              </p>
+              <div className="space-y-2 [&>div]:bg-white/15">
+                <Skeleton className="h-7 w-2/3" />
+                <Skeleton className="h-4 w-1/2" />
+                <Skeleton className="h-4 w-1/3" />
+              </div>
+            </Card>
           ) : !aiResult && analysisError ? (
-            <ErrorState message={analysisError.message} onRetry={() => analyze(description)} />
+            <ErrorState message={analysisError.message} onRetry={() => analyze(trimmed)} />
           ) : aiResult ? (
             <>
-              <div className="magic-card-glow bg-white rounded-2xl p-6 relative overflow-hidden">
-                {/* Ambient Shader Accent */}
-                <div className="absolute -top-12 -right-12 w-32 h-32 bg-success opacity-20 rounded-full blur-2xl"></div>
-
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="text-primary-emerald w-6 h-6" fill="currentColor" />
-                    <h2 className="font-sora text-xs font-bold text-primary tracking-wider uppercase">
-                      ANALYSE TERMINÉE
-                    </h2>
-                  </div>
+              {/* Le résultat ressort : carte vert profond, détails en or. */}
+              <Card tone="dark" padding="lg" className="space-y-5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="inline-flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.12em] text-accent">
+                    <Sparkles aria-hidden className="w-4 h-4" />
+                    Analyse IA
+                  </p>
                   {isAnalyzing && (
-                    <span className="text-xs font-sora text-accent-foreground animate-pulse flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-accent-foreground animate-ping" />
-                      Mise à jour IA...
-                    </span>
+                    <span className="text-xs text-primary-emerald-foreground">Mise à jour…</span>
                   )}
                 </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
-                      Métier détecté
-                    </p>
-                    <p className="font-bold text-xl md:text-2xl text-primary-emerald">{aiResult.trade}</p>
-                  </div>
-
-                  <div className="flex justify-between items-end border-t border-border-faint pt-4">
-                    <div>
-                      <p className="text-muted-foreground font-sora text-[11px] font-bold uppercase mb-1">
-                        Prix estimé
-                      </p>
-                      <p className="font-bold text-lg text-foreground">{aiResult.priceEstimate}</p>
-                      <span className="text-[10px] text-muted-foreground-soft italic block mt-0.5">
-                        (Estimation basée sur des cas similaires à Dakar)
-                      </span>
-                    </div>
-
-                    <div className="text-right">
-                      {isArtisansLoading && !artisans ? (
-                        <div className="flex items-center justify-end -space-x-3">
-                          {[0, 1, 2].map((key) => (
-                            <Skeleton key={key} className="w-10 h-10 rounded-full border-2 border-white" />
-                          ))}
-                        </div>
-                      ) : artisansError && !artisans ? (
-                        <span className="text-xs font-sora text-muted-foreground-soft">
-                          Artisans indisponibles
-                        </span>
-                      ) : (
-                        artisans && (
-                          <>
-                            <p className="text-muted-foreground font-sora text-[11px] mb-2 font-medium">
-                              {artisans.length} artisans recommandés
-                            </p>
-                            <div className="flex items-center justify-end -space-x-3">
-                              {artisans.slice(0, 3).map((art) => (
-                                <div
-                                  key={art.id}
-                                  className="w-10 h-10 rounded-full border-2 border-white overflow-hidden shadow-sm"
-                                >
-                                  <SafeImage
-                                    src={art.avatarUrl}
-                                    fallback="/images/placeholder-avatar.svg"
-                                    alt={art.name}
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                              ))}
-                              <div className="w-10 h-10 rounded-full border-2 border-white bg-border-faint text-muted-foreground flex items-center justify-center text-[10px] font-bold">
-                                +{artisans.length - 3 > 0 ? artisans.length - 3 : 5}
-                              </div>
-                            </div>
-                          </>
-                        )
-                      )}
-                    </div>
-                  </div>
+                <div className="space-y-1">
+                  <p className="text-sm text-primary-emerald-foreground">Métier détecté</p>
+                  <p className="font-display text-display-md font-semibold">{aiResult.trade}</p>
                 </div>
-              </div>
-
-              <div className="mt-3 px-1">
-                <p className="text-xs text-muted-foreground font-sora flex items-start gap-1.5">
-                  <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                  <span>{aiResult.explanation}</span>
+                <dl className="grid grid-cols-2 gap-4 border-t border-white/15 pt-4">
+                  <div className="space-y-1">
+                    <dt className="text-sm text-primary-emerald-foreground">Estimation</dt>
+                    <dd className="font-semibold">{aiResult.priceEstimate}</dd>
+                  </div>
+                  <div className="space-y-1">
+                    <dt className="text-sm text-primary-emerald-foreground">Urgence</dt>
+                    <dd>
+                      <StatusPill tone={URGENCY[aiResult.urgencyCode].tone}>
+                        {URGENCY[aiResult.urgencyCode].label}
+                      </StatusPill>
+                    </dd>
+                  </div>
+                </dl>
+                <p className="text-sm text-primary-emerald-foreground">{aiResult.explanation}</p>
+                <p className="text-xs text-primary-emerald-foreground/90">
+                  Estimation indicative basée sur des cas similaires à Dakar : le prix final est
+                  fixé par le devis de l&apos;artisan.
                 </p>
-              </div>
+              </Card>
+
+              {targetMismatch && targetArtisan && (
+                <Card tone="tint" className="flex items-start gap-3 text-sm text-foreground">
+                  <TriangleAlert aria-hidden className="w-5 h-5 text-accent-foreground shrink-0" />
+                  <span>
+                    {aiResult.trade} ne fait pas partie des métiers de {targetArtisan.name}. Votre
+                    demande vous mènera aux artisans de ce métier.
+                  </span>
+                </Card>
+              )}
+
+              {!sendsToTarget && (
+                <div className="space-y-3">
+                  <SectionHeader as="h3" title="Artisans pour ce métier" />
+                  {isSuggestedLoading && suggested === null ? (
+                    [0, 1, 2].map((key) => <ArtisanCardSkeleton key={key} />)
+                  ) : suggestedError && suggested === null ? (
+                    <ErrorState message={suggestedError.message} onRetry={reloadSuggested} />
+                  ) : suggested && suggested.length > 0 ? (
+                    <ul className="space-y-3">
+                      {suggested.slice(0, SUGGESTED_COUNT).map((artisan) => (
+                        <li key={artisan.id}>
+                          <ArtisanCard artisan={artisan} />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <Card tone="tint" className="text-sm text-foreground">
+                      Aucun artisan vérifié n&apos;est encore disponible pour ce métier. Votre
+                      demande reste enregistrée et visible dans « Mes demandes ».
+                    </Card>
+                  )}
+                </div>
+              )}
             </>
-          ) : null}
+          ) : (
+            <Card tone="tint" className="flex items-start gap-3">
+              <Sparkles aria-hidden className="w-5 h-5 text-primary-emerald shrink-0 mt-0.5" />
+              <p className="text-sm text-foreground">
+                {isDescriptionReady
+                  ? 'Analyse de votre description…'
+                  : "Décrivez votre problème en quelques phrases : notre assistant identifie le métier, estime le budget et l'urgence."}
+              </p>
+            </Card>
+          )}
         </section>
       </main>
 
-      {/* Fixed Bottom Action */}
-      <footer className="fixed bottom-0 left-0 right-0 p-4 bg-background/90 backdrop-blur-md border-t border-border z-50 pb-safe">
-        {submitError && (
-          <p className="max-w-xl mx-auto mb-2 text-sm text-destructive text-center">{submitError}</p>
-        )}
-        <button
-          onClick={async () => {
-            if (!aiResult) return;
-
-            // La création d'une demande exige d'être connecté : renvoie vers
-            // la connexion et revient sur ce parcours ensuite (même
-            // mécanisme que ProtectedRoute -- OtpScreen lit `state.from`).
-            if (!auth.isAuthenticated) {
-              navigate('/connexion', { state: { from: location } });
-              return;
-            }
-
-            setSubmitError(null);
-            setIsSubmitting(true);
-            try {
-              const position = await getCurrentPosition();
-              await api.createServiceRequest({
-                tradeCode: aiResult.tradeCode,
-                description,
-                // Upload photo réel hors périmètre (BUILD_PLAN.md §6 Lot 11) --
-                // photoPreview n'est qu'un blob local, jamais envoyé.
-                photoUrl: null,
-                location: position,
-                urgency: aiResult.urgencyCode,
-                aiEstimateMinFcfa: aiResult.priceMinFcfa,
-                aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
-              });
-              // Liste réellement filtrée côté serveur sur le métier détecté
-              // par l'IA et la position -- pas un artisan choisi au hasard
-              // (AUDIT_PHASE2.md §6).
-              navigate(
-                `/recherche?trade=${encodeURIComponent(aiResult.tradeCode)}&lat=${position.lat}&lng=${position.lng}`,
-              );
-            } catch (err) {
-              setSubmitError(
-                err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
-              );
-            } finally {
-              setIsSubmitting(false);
-            }
-          }}
-          disabled={!aiResult || isSubmitting}
-          className="w-full max-w-xl mx-auto py-4 rounded-full bg-accent text-white font-bold text-base md:text-lg shadow-lg active:scale-[0.98] transition-transform flex items-center justify-center gap-2 cursor-pointer hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          <span>{isSubmitting ? 'Création de la demande...' : 'Voir les artisans'}</span>
-          <ArrowRight className="w-6 h-6" />
-        </button>
-      </footer>
-    </div>
+      <div className="fixed bottom-0 inset-x-0 z-40 bg-surface/95 backdrop-blur-md shadow-bar px-4 pt-3 pb-safe">
+        <div className="max-w-xl mx-auto space-y-2 pb-1">
+          {submitError && (
+            <p role="alert" className="text-sm text-destructive text-center">
+              {submitError}
+            </p>
+          )}
+          {isWrongRole && (
+            <p className="text-xs text-center text-muted-foreground">
+              La création d&apos;une demande est réservée aux comptes clients.
+            </p>
+          )}
+          {orphanRequest ? (
+            <ButtonLink
+              to={searchUrlFor(orphanRequest.request.tradeCode, orphanRequest.position)}
+              variant="primary"
+              size="lg"
+              fullWidth
+              trailingIcon={<ArrowRight aria-hidden className="w-5 h-5" />}
+            >
+              {ctaLabel}
+            </ButtonLink>
+          ) : (
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              onClick={handleSubmit}
+              isLoading={isSubmitting}
+              disabled={!aiResult || !isDescriptionReady || isWrongRole}
+              trailingIcon={
+                sendsToTarget ? (
+                  <Send aria-hidden className="w-5 h-5" />
+                ) : (
+                  <ArrowRight aria-hidden className="w-5 h-5" />
+                )
+              }
+            >
+              {ctaLabel}
+            </Button>
+          )}
+        </div>
+      </div>
+    </>
   );
 };

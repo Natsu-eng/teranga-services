@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
 import { ApiError } from '../../lib/api';
 import type { AuthIntent, SignupRole } from '../../lib/api/auth-client';
+import { Button } from '../../components/ui/Button';
+import { TextField } from '../../components/ui/Field';
+import { AuthShell } from './components/AuthShell';
 import { useAuth } from './hooks/useAuth';
 
 const RESEND_DELAY_SECONDS = 30;
@@ -67,7 +70,9 @@ export const OtpScreen: React.FC = () => {
         navigate(state.from?.pathname ?? '/profil', { replace: true });
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
+      setError(
+        err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -80,59 +85,59 @@ export const OtpScreen: React.FC = () => {
       await auth.requestOtp(phone);
       setSecondsLeft(RESEND_DELAY_SECONDS);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.');
+      setError(
+        err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
+      );
     } finally {
       setIsResending(false);
     }
   };
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-20 pb-28 space-y-6">
-      <div className="space-y-2">
-        <h1 className="font-bold text-2xl text-primary">Code de vérification</h1>
-        <p className="text-sm text-muted-foreground">
-          Entrez le code à {CODE_LENGTH} chiffres envoyé au {phone}.
-        </p>
-        {import.meta.env.DEV && (
-          <p className="text-xs text-muted-foreground-soft italic">
-            En dev, le code s&apos;affiche dans la console du serveur backend (uvicorn), pas par SMS.
-          </p>
-        )}
-      </div>
+    <AuthShell
+      title="Code de vérification"
+      description={
+        <>
+          Entrez le code à {CODE_LENGTH} chiffres envoyé au{' '}
+          <span className="font-semibold text-foreground whitespace-nowrap">{phone}</span>.
+        </>
+      }
+      // Retour à la saisie du numéro, en conservant tout le contexte du parcours.
+      onBack={() => navigate('/connexion/telephone', { state: { ...state, phone: undefined } })}
+    >
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col gap-6" noValidate>
+        <TextField
+          label="Code à 6 chiffres"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={CODE_LENGTH}
+          value={code}
+          onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
+          placeholder="123456"
+          inputClassName="h-16 text-center font-display text-display-md tracking-[0.4em]"
+          hint={
+            import.meta.env.DEV
+              ? "En dev, le code s'affiche dans la console du serveur backend (uvicorn), pas par SMS."
+              : undefined
+          }
+          error={error}
+        />
 
-      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-        <label className="block space-y-1.5">
-          <span className="text-xs font-sora font-semibold text-muted-foreground">Code à 6 chiffres</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={CODE_LENGTH}
-            value={code}
-            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH))}
-            placeholder="123456"
-            className="w-full h-14 px-4 rounded-full bg-surface-muted text-center text-2xl tracking-[0.5em] text-foreground outline-none focus:ring-2 focus:ring-primary"
-          />
-        </label>
-
-        {error && <p className="text-sm text-destructive">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all disabled:opacity-60 disabled:active:scale-100 cursor-pointer"
-        >
-          {isSubmitting ? 'Vérification...' : 'Valider'}
-        </button>
+        <div className="mt-auto space-y-3">
+          <Button type="submit" variant="brand" size="lg" fullWidth isLoading={isSubmitting}>
+            {isSubmitting ? 'Vérification...' : 'Valider'}
+          </Button>
+          <Button
+            variant="ghost"
+            fullWidth
+            onClick={handleResend}
+            disabled={secondsLeft > 0 || isResending}
+          >
+            {secondsLeft > 0 ? `Renvoyer le code (${secondsLeft}s)` : 'Renvoyer le code'}
+          </Button>
+        </div>
       </form>
-
-      <button
-        onClick={handleResend}
-        disabled={secondsLeft > 0 || isResending}
-        className="w-full text-center text-sm font-sora text-primary disabled:text-muted-foreground-soft cursor-pointer disabled:cursor-not-allowed"
-      >
-        {secondsLeft > 0 ? `Renvoyer le code (${secondsLeft}s)` : 'Renvoyer le code'}
-      </button>
-    </main>
+    </AuthShell>
   );
 };

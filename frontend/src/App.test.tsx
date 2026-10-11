@@ -111,7 +111,7 @@ describe('routing', () => {
 
   it('renders the artisan profile for a known id at /artisans/:artisanId', async () => {
     renderAt('/artisans/idrissa-diop');
-    expect(screen.getByText('Profil Artisan')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Profil artisan' })).toBeInTheDocument();
     expect(await screen.findByText('Idrissa Diop')).toBeInTheDocument();
   });
 

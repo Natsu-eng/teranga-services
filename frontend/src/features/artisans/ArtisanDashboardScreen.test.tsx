@@ -155,7 +155,9 @@ describe('ArtisanDashboardScreen', () => {
 
     expect(await screen.findByText('150 000 FCFA')).toBeInTheDocument();
     expect(screen.getByText('9')).toBeInTheDocument();
-    expect(screen.getByText('4.8 (12)')).toBeInTheDocument();
+    // Note au format français, nombre d'avis en précision.
+    expect(screen.getByText('4,8')).toBeInTheDocument();
+    expect(screen.getByText('12 avis')).toBeInTheDocument();
     expect(screen.getByText('Non communiqué')).toBeInTheDocument();
   });
 
@@ -198,6 +200,7 @@ describe('ArtisanDashboardScreen', () => {
       priceBase: 'Tarif sur devis',
       priceNumber: 0,
       tags: ['Plomberie'],
+      tradeCodes: ['plomberie'],
       bio: '',
       stats: { chantiers: '12', responseTime: 'Non communiqué', experience: 'Non communiqué' },
       realisations: [],
@@ -243,7 +246,7 @@ describe('ArtisanDashboardScreen', () => {
 
     expect(await screen.findByText('Votre compte est en cours de vérification')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Compléter mon profil/ })).toBeInTheDocument();
-    expect(screen.queryByText('Mes demandes')).not.toBeInTheDocument();
+    expect(screen.queryByText('Demandes reçues')).not.toBeInTheDocument();
     expect(mockedApi.getArtisanStats).not.toHaveBeenCalled();
   });
 

@@ -6,7 +6,9 @@ import { useAsyncResource } from '../../../lib/useAsyncResource';
 // Manual trigger, not auto-fetched on mount: the caller decides when the
 // description is ready to analyze.
 export function useAnalyzeProblem() {
-  const { data, isLoading, error, run } = useAsyncResource<AIAnalysisResult>({ initialLoading: false });
+  const { data, isLoading, error, run } = useAsyncResource<AIAnalysisResult>({
+    initialLoading: false,
+  });
 
   const analyze = useCallback(
     (description: string) => {

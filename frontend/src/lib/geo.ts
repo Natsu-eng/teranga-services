@@ -4,7 +4,7 @@ export interface Coordinates {
 }
 
 // Le Plateau, Dakar — repère par défaut tant que la sélection de quartier
-// (Header.tsx) n'est pas reliée à de vraies coordonnées (BUILD_PLAN.md §5 :
+// (LocationPicker.tsx) n'est pas reliée à de vraies coordonnées (BUILD_PLAN.md §5 :
 // "aujourd'hui simulé par un sélecteur de quartier"). Utilisé uniquement en
 // secours (permission refusée, navigateur sans géolocalisation, timeout) —
 // jamais un échec bloquant.

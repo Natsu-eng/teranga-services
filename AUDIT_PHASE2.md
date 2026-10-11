@@ -444,6 +444,61 @@ Points ci-dessous traités depuis la mise à jour précédente (§3, §6) :
   images collées à la main (autorisées en `https:` uniquement), ouverture
   d'un PDF de vérification (URL `blob:`) côté admin.
 
+## Mise à jour — `feat/design-refonte`
+
+Refonte visuelle complète du front (direction « confiance chaleureuse »),
+référence : [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md). Points de cet audit
+concernés :
+
+- **§1, contrôle d'accès des routes : close.** `ProtectedRoute` vérifie
+  désormais le rôle (`roles`), aligné sur les `require_role` du backend :
+  `/pro*` et `/bienvenue-artisan` -> artisan, `/mes-demandes` -> client,
+  `/mes-interventions` -> client ou artisan. Un mauvais rôle voit un refus
+  propre (`RoleRestricted`), jamais l'écran d'un autre rôle. L'espace admin
+  reste derrière `RequireAdminRoute` (404 standard pour tout non-admin).
+- **§3, « tout se ressemble » : close.** En-tête clair et navigation 4
+  entrées côté client ; bandeau vert profond, navigation verte et or à 3
+  entrées côté Pro ; profil scindé (client orienté besoins, artisan orienté
+  activité, plus de moyens de paiement côté artisan). Vocabulaire séparé :
+  « Devis et travaux » côté client, « Demandes reçues » côté Pro (le mot
+  « interventions », terme d'artisan, n'est plus montré au client).
+- **§6, filtrage en mémoire : close.** Accueil et recherche n'utilisent plus
+  que les filtres serveur (`q`, `trade`, `min_rating`, `near`), état dans
+  l'URL, saisie avec debounce.
+- **§6, boutons factices : clos.** Retirés : « Téranga Premium »
+  (`alert()`), « Voir les X avis » (`alert()`, remplacé par un vrai
+  dépliage), « Voir tout » sans action, favori local jamais enregistré, cloche
+  avec point rouge permanent (aucune notification réelle), choix de moyen de
+  paiement enregistré nulle part (devenu informatif, « Bientôt »).
+- **Constaté pendant le lot, corrigé** :
+  - **mise en relation jamais branchée côté front** — cet audit marquait
+    `POST /interventions` « consommé », à tort : aucun appel n'existait,
+    « Demander un devis » menait à l'écran d'attente de la messagerie. La
+    fiche artisan propose désormais les demandes ouvertes compatibles (métier
+    exercé) puis crée la mise en relation ; sans demande, la demande IA
+    `/demande?artisan=<id>` l'adresse directement à cet artisan ; « Mes
+    demandes » propose « Choisir un artisan » pour une demande ouverte ;
+  - `/demande` appelait l'IA (endpoint public limité) à chaque frappe :
+    debounce 800 ms, 15 caractères minimum ; contenus simulés retirés
+    (description et photo préremplies, faux message vocal qui ajoutait un
+    texte inventé à la vraie demande) ; les 3 artisans affichés sont ceux du
+    métier détecté ;
+  - prix indicatif : `hourly_rate_fcfa` était déjà public mais ignoré
+    (« Tarif sur devis » partout) -> « Dès X FCFA/h » ;
+  - compte hérité dont le nom est resté le numéro : plus jamais affiché comme
+    nom (salutation, avatar, profil) ;
+  - `index.html` chargeait encore Google Fonts malgré la décision « zéro
+    CDN » : polices auto-hébergées (`@fontsource-variable`), CSP
+    `font-src 'self'`.
+- **Vérification** : `npm run validate` vert après chaque commit (319 tests,
+  contre 202 au départ), `npm run build` OK ; captures à 360 px (comptes du
+  seed, client et artisan) sans défilement horizontal.
+- **Reste hors périmètre** : messagerie (écran d'attente honnête), paiement
+  en ligne, réalisations (aucune donnée côté backend), pagination « charger
+  plus » de la recherche (première page seulement), revue visuelle de
+  l'espace admin en conditions réelles (aucun compte admin local utilisé
+  pour les captures).
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

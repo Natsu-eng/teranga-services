@@ -1,5 +1,9 @@
 import React from 'react';
 import { useLocation, useNavigate, type Location } from 'react-router';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
+import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
+import { AuthShell } from './components/AuthShell';
 
 /**
  * Point d'entrée du parcours auth : distingue explicitement Connexion et
@@ -14,34 +18,35 @@ export const AuthEntryScreen: React.FC = () => {
   const from = (location.state as { from?: Location } | null)?.from;
 
   return (
-    <main className="max-w-md mx-auto px-4 pt-20 pb-28 flex flex-col min-h-[calc(100vh-5rem)]">
-      <div className="space-y-2 mb-10">
-        <p className="font-sora text-xs font-semibold uppercase tracking-wider text-accent-foreground">
-          Téranga Services
+    <AuthShell
+      title="Bienvenue"
+      description="Connectez-vous à votre compte, ou créez-en un pour trouver un artisan de confiance ou développer votre activité."
+    >
+      <Card tone="tint" className="flex items-start gap-3">
+        <VerifiedBadge size="md" />
+        <p className="text-sm text-foreground">
+          Chaque artisan est vérifié par notre équipe avant de pouvoir recevoir des demandes.
         </p>
-        <h1 className="font-bold text-2xl text-primary">Bienvenue</h1>
-        <p className="text-sm text-muted-foreground">
-          Connectez-vous à votre compte, ou créez-en un pour trouver un artisan de confiance ou
-          développer votre activité.
-        </p>
-      </div>
+      </Card>
 
-      <div className="mt-auto space-y-3">
-        <button
-          type="button"
+      <div className="mt-auto pt-10 space-y-3">
+        <Button
+          variant="brand"
+          size="lg"
+          fullWidth
           onClick={() => navigate('/connexion/telephone', { state: { intent: 'login', from } })}
-          className="w-full h-14 rounded-full bg-primary text-white font-sora text-sm font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
         >
           Se connecter
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="outline"
+          size="lg"
+          fullWidth
           onClick={() => navigate('/connexion/role', { state: { from } })}
-          className="w-full h-14 rounded-full border-2 border-primary text-primary font-sora text-sm font-bold hover:bg-surface-muted active:scale-95 transition-all cursor-pointer"
         >
           Créer un compte
-        </button>
+        </Button>
       </div>
-    </main>
+    </AuthShell>
   );
 };

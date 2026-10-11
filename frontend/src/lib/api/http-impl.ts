@@ -36,11 +36,14 @@ import type {
   AdminVerificationFilters,
   ApiClient,
   ArtisanFilters,
+  CreateInterventionInput,
   CreateQuoteInput,
   CreateReviewInput,
   CreateServiceRequestInput,
   UpdateArtisanProfileInput,
 } from './types';
+import { formatFcfa } from '../format';
+import { initialsFrom } from '../initials';
 
 interface BackendTrade {
   id: string;
@@ -248,14 +251,6 @@ function formatRelativeDate(iso: string): string {
   return `Il y a ${Math.floor(diffDays / 30)} mois`;
 }
 
-function initialsFrom(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
 
 function mapReview(review: BackendReview): Review {
   return {
@@ -315,6 +310,8 @@ function mapIntervention(intervention: BackendIntervention): Intervention {
 
 function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }, reviews: Review[]): Artisan {
   const primaryTrade = item.trades[0]?.trade.label_fr ?? '';
+  const lowestRate =
+    item.trades.length > 0 ? Math.min(...item.trades.map((t) => t.hourly_rate_fcfa)) : null;
   return {
     id: item.id,
     name: item.full_name,
@@ -334,11 +331,13 @@ function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }
     // No reverse-geocoding available from a geography point -> a neutral,
     // still-true-today constant rather than a fabricated address.
     location: 'Dakar, Sénégal',
-    // No public hourly/base price exposed by the backend (Lot 9 schemas) ->
-    // neutral copy instead of inventing a number.
-    priceBase: 'Tarif sur devis',
-    priceNumber: 0,
+    // Prix indicatif réel : le tarif horaire le plus bas parmi les métiers
+    // déclarés (`hourly_rate_fcfa`, exposé publiquement par ArtisanTradeOut).
+    // Sans métier déclaré, une mention neutre plutôt qu'un montant inventé.
+    priceBase: lowestRate != null ? `Dès ${formatFcfa(lowestRate)}/h` : 'Tarif sur devis',
+    priceNumber: lowestRate ?? 0,
     tags: item.trades.map((t) => t.trade.label_fr),
+    tradeCodes: item.trades.map((t) => t.trade.code),
     bio: item.bio ?? '',
     stats: {
       // review_count is the closest public proxy for "chantiers réalisés" the
@@ -715,6 +714,20 @@ export const httpApiClient: ApiClient = {
   async listMyInterventions(): Promise<Intervention[]> {
     const page = await apiRequest<BackendPage<BackendIntervention>>('/interventions/me');
     return page.items.map(mapIntervention);
+  },
+
+  /**
+   * Mise en relation : propose une demande ouverte du client à un artisan
+   * (`POST /interventions`). Le serveur vérifie tout — demande ouverte et
+   * appartenant au client, artisan vérifié, métier exercé, zone couverte —
+   * et renvoie un message affichable en cas de refus.
+   */
+  async createIntervention(input: CreateInterventionInput): Promise<Intervention> {
+    const intervention = await apiRequest<BackendIntervention>('/interventions', {
+      method: 'POST',
+      body: { service_request_id: input.serviceRequestId, artisan_id: input.artisanId },
+    });
+    return mapIntervention(intervention);
   },
 
   async getInterventionById(id: string): Promise<Intervention> {

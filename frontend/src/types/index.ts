@@ -36,6 +36,13 @@ export interface Artisan {
   priceBase: string; // e.g. "15.000 CFA"
   priceNumber: number;
   tags: string[];
+  /**
+   * Codes métier déclarés (ex. « plomberie »), dans le même ordre que `tags`.
+   * Nécessaires pour proposer une demande de devis : le serveur refuse de
+   * mettre un client en relation avec un artisan qui n'exerce pas le métier
+   * de sa demande (ArtisanMetierNonExerce).
+   */
+  tradeCodes: string[];
   bio: string;
   stats: {
     chantiers: string; // e.g. "150+"
@@ -88,12 +95,7 @@ export interface ServiceRequest {
 }
 
 export type InterventionStatus =
-  | 'proposee'
-  | 'acceptee'
-  | 'en_cours'
-  | 'terminee'
-  | 'annulee'
-  | 'litige';
+  'proposee' | 'acceptee' | 'en_cours' | 'terminee' | 'annulee' | 'litige';
 
 export type QuoteStatus = 'propose' | 'accepte' | 'refuse' | 'expire';
 

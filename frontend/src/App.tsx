@@ -4,8 +4,8 @@ import { AuthProvider } from './features/auth/AuthProvider';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { RequireAdminRoute } from './components/auth/RequireAdminRoute';
 import { MainLayout } from './components/layout/MainLayout';
-import { NoBottomNavLayout } from './components/layout/NoBottomNavLayout';
 import { MinimalLayout } from './components/layout/MinimalLayout';
+import { SubPageLayout } from './components/layout/SubPageLayout';
 import { LandingScreen } from './features/landing/LandingScreen';
 import { AuthEntryScreen } from './features/auth/AuthEntryScreen';
 import { RoleSelectScreen } from './features/auth/RoleSelectScreen';
@@ -22,10 +22,28 @@ import { SearchScreen } from './features/artisans/SearchScreen';
 import { MyRequestsScreen } from './features/requests/MyRequestsScreen';
 import { InterventionsScreen } from './features/interventions/InterventionsScreen';
 import { UserProfileScreen } from './features/profile/UserProfileScreen';
+import { MessagesScreen } from './features/messages/MessagesScreen';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
-import { ComingSoon } from './components/ui/ComingSoon';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 
+/*
+ * Rôles autorisés par espace, alignés sur les gardes du backend
+ * (require_role) : /requests/me est réservé aux clients, /interventions/me
+ * aux clients et artisans, tout /pro aux artisans. Les routes sans `roles`
+ * (profil, messagerie) acceptent tout compte connecté. L'espace admin a sa
+ * propre garde (RequireAdminRoute, indétectable pour un non-admin).
+ */
+const ARTISAN_ONLY = ['artisan'] as const;
+const CLIENT_ONLY = ['client'] as const;
+const CLIENT_OR_ARTISAN = ['client', 'artisan'] as const;
+
+/*
+ * Trois gabarits :
+ * - MinimalLayout : pages autonomes (marketing, connexion, bienvenue, admin) ;
+ * - SubPageLayout : sous-pages avec leur propre AppBar (titre + retour) ;
+ * - MainLayout    : écrans « onglets » avec en-tête et navigation basse,
+ *                   habillés client (clair) ou Pro (vert profond) selon le rôle.
+ */
 export function AppRoutes() {
   const [location, setLocation] = useState<string>('Dakar Plateau');
 
@@ -40,6 +58,14 @@ export function AppRoutes() {
           <Route path="connexion/telephone" element={<PhoneScreen />} />
           <Route path="connexion/code" element={<OtpScreen />} />
           <Route
+            path="bienvenue-artisan"
+            element={
+              <ProtectedRoute roles={ARTISAN_ONLY}>
+                <ArtisanWelcomeScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="admin/verifications"
             element={
               <RequireAdminRoute>
@@ -49,53 +75,13 @@ export function AppRoutes() {
           />
         </Route>
 
-        <Route element={<NoBottomNavLayout location={location} setLocation={setLocation} />}>
+        <Route element={<SubPageLayout />}>
           <Route path="demande" element={<DescribeProblemScreen />} />
-        </Route>
-
-        <Route element={<MainLayout location={location} setLocation={setLocation} />}>
-          <Route path="accueil" element={<ClientHomeScreen />} />
-          <Route path="recherche" element={<SearchScreen />} />
           <Route path="artisans/:artisanId" element={<ArtisanProfileScreen />} />
-          <Route
-            path="messages/:conversationId"
-            element={
-              <ProtectedRoute>
-                <ComingSoon
-                  title="La messagerie arrive bientôt"
-                  description="Les échanges avec les artisans depuis l'application seront bientôt disponibles."
-                />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="pro"
-            element={
-              <ProtectedRoute>
-                <ArtisanDashboardScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="pro/onboarding"
-            element={
-              <ProtectedRoute>
-                <ArtisanOnboardingScreen />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="bienvenue-artisan"
-            element={
-              <ProtectedRoute>
-                <ArtisanWelcomeScreen />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="mes-demandes"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={CLIENT_ONLY}>
                 <MyRequestsScreen />
               </ProtectedRoute>
             }
@@ -103,8 +89,46 @@ export function AppRoutes() {
           <Route
             path="mes-interventions"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
                 <InterventionsScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="pro/onboarding"
+            element={
+              <ProtectedRoute roles={ARTISAN_ONLY}>
+                <ArtisanOnboardingScreen />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
+
+        <Route element={<MainLayout location={location} setLocation={setLocation} />}>
+          <Route path="accueil" element={<ClientHomeScreen />} />
+          <Route path="recherche" element={<SearchScreen />} />
+          {/* Entrée « Messages » de la navigation, et fil d'une conversation. */}
+          <Route
+            path="messages"
+            element={
+              <ProtectedRoute>
+                <MessagesScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="messages/:conversationId"
+            element={
+              <ProtectedRoute>
+                <MessagesScreen />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="pro"
+            element={
+              <ProtectedRoute roles={ARTISAN_ONLY}>
+                <ArtisanDashboardScreen />
               </ProtectedRoute>
             }
           />
