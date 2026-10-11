@@ -26,7 +26,7 @@ import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { buttonClasses } from '../../components/ui/styles';
 import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
-import { getCurrentPosition, type Coordinates } from '../../lib/geo';
+import { GeolocationError, getCurrentPosition, type Coordinates } from '../../lib/geo';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
@@ -128,6 +128,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
   const [pendingLocation, setPendingLocation] = useState<Coordinates | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
   // Trace le profil déjà servi au formulaire, pas un booléen "initialisé" --
   // ajustement d'état pendant le rendu (pattern React officiel : "Adjusting
   // state when a prop changes"), volontairement PAS un useEffect : appeler
@@ -179,9 +180,16 @@ export const ArtisanOnboardingScreen: React.FC = () => {
 
   async function handleUseCurrentLocation(): Promise<void> {
     setIsLocating(true);
+    setLocationError(null);
     try {
       const position = await getCurrentPosition();
       setPendingLocation(position);
+    } catch (err) {
+      // Jamais de position de repli silencieuse : la zone d'intervention en
+      // dépend, l'artisan doit savoir qu'elle n'a pas été mise à jour.
+      setLocationError(
+        `${err instanceof GeolocationError ? err.message : "Votre position n'a pas pu être déterminée."} Votre position enregistrée n'a pas changé.`,
+      );
     } finally {
       setIsLocating(false);
     }
@@ -472,6 +480,11 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                       ? 'Position mise à jour, prête à enregistrer'
                       : 'Utiliser ma position actuelle'}
                 </Button>
+                {locationError && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {locationError}
+                  </p>
+                )}
 
                 {actions.error && (
                   <p role="alert" className="text-sm text-destructive">

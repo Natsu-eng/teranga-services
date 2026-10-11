@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router';
 import { DescribeProblemScreen } from './DescribeProblemScreen';
 import { useArtisans } from '../artisans/hooks/useArtisans';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 import { useAuth } from '../auth/hooks/useAuth';
-import { getCurrentPosition } from '../../lib/geo';
+import { GeolocationError, getCurrentPosition } from '../../lib/geo';
+import { PlaceProvider, PLACE_STORAGE_KEY } from '../location/PlaceProvider';
+import { LocationPicker } from '../../components/layout/LocationPicker';
 import { api, ApiError } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
 import type { AIAnalysisResult, Artisan, Intervention, ServiceRequest } from '../../types';
@@ -15,12 +17,20 @@ vi.mock('../artisans/hooks/useArtisans');
 vi.mock('../artisans/hooks/useArtisan');
 vi.mock('./hooks/useAnalyzeProblem');
 vi.mock('../auth/hooks/useAuth');
-vi.mock('../../lib/geo');
+vi.mock('../../lib/geo', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/geo')>();
+  return { ...actual, getCurrentPosition: vi.fn() };
+});
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
   return {
     ...actual,
-    api: { ...actual.api, createServiceRequest: vi.fn(), createIntervention: vi.fn() },
+    api: {
+      ...actual.api,
+      createServiceRequest: vi.fn(),
+      createIntervention: vi.fn(),
+      checkArtisanCoverage: vi.fn(),
+    },
   };
 });
 
@@ -31,6 +41,10 @@ const mockedUseAnalyzeProblem = vi.mocked(useAnalyzeProblem);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedGetCurrentPosition = vi.mocked(getCurrentPosition);
 const mockedCreateServiceRequest = vi.mocked(api.createServiceRequest);
+const mockedCheckCoverage = vi.mocked(api.checkArtisanCoverage);
+
+// Centre du Plateau (lib/places.ts), quartier par défaut.
+const PLATEAU = { lat: 14.6681, lng: -17.4339 };
 
 const artisanFixture: Artisan = {
   id: 'a1',
@@ -74,6 +88,7 @@ const serviceRequestFixture: ServiceRequest = {
   description: 'Une prise ne fonctionne plus.',
   photoUrl: null,
   location: { lat: 1, lng: 2 },
+  locationLabel: null,
   urgency: 'urgent',
   aiEstimateMinFcfa: 12_000,
   aiEstimateMaxFcfa: 25_000,
@@ -103,14 +118,18 @@ function SearchParamsProbe() {
 
 function renderScreen(path = '/demande') {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/demande" element={<DescribeProblemScreen />} />
-        <Route path="/connexion" element={<div>Login screen</div>} />
-        <Route path="/recherche" element={<SearchParamsProbe />} />
-        <Route path="/mes-interventions" element={<div>Mes interventions</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <PlaceProvider>
+      {/* Le sélecteur de l'en-tête partage le lieu avec l'écran. */}
+      <LocationPicker />
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/demande" element={<DescribeProblemScreen />} />
+          <Route path="/connexion" element={<div>Login screen</div>} />
+          <Route path="/recherche" element={<SearchParamsProbe />} />
+          <Route path="/mes-interventions" element={<div>Mes interventions</div>} />
+        </Routes>
+      </MemoryRouter>
+    </PlaceProvider>,
   );
 }
 
@@ -135,7 +154,9 @@ describe('DescribeProblemScreen', () => {
       error: null,
       analyze: vi.fn(),
     });
-    mockedGetCurrentPosition.mockResolvedValue({ lat: 1, lng: 2 });
+    window.localStorage.removeItem(PLACE_STORAGE_KEY);
+    mockedGetCurrentPosition.mockReset().mockResolvedValue({ lat: 14.7225, lng: -17.4878 });
+    mockedCheckCoverage.mockReset().mockResolvedValue({ eligible: true, reason: null });
     mockedCreateServiceRequest.mockReset();
     mockedCreateServiceRequest.mockResolvedValue(serviceRequestFixture);
     mockedCreateIntervention.mockReset();
@@ -166,14 +187,17 @@ describe('DescribeProblemScreen', () => {
         urgency: 'urgent',
         aiEstimateMinFcfa: 12_000,
         aiEstimateMaxFcfa: 25_000,
-        location: { lat: 1, lng: 2 },
+        // Le lieu affiché et confirmé (quartier par défaut), pas le GPS.
+        location: PLATEAU,
+        locationLabel: 'Dakar Plateau',
       }),
     );
+    expect(mockedGetCurrentPosition).not.toHaveBeenCalled();
 
     const results = await screen.findByText(/Search results for/);
     expect(results.textContent).toContain('trade=electricite');
-    expect(results.textContent).toContain('lat=1');
-    expect(results.textContent).toContain('lng=2');
+    expect(results.textContent).toContain(`lat=${PLATEAU.lat}`);
+    expect(results.textContent).toContain(`lng=${PLATEAU.lng}`);
   });
 
   it('redirects to /connexion instead of creating a request when signed out', async () => {
@@ -297,7 +321,10 @@ describe('DescribeProblemScreen', () => {
       renderScreen('/demande?artisan=a1');
       expect(screen.getByText('Demande destinée à')).toBeInTheDocument();
       describeProblem();
-      fireEvent.click(screen.getByRole('button', { name: 'Envoyer à Maty Ndiaye' }));
+      // Le bouton s'active une fois la zone confirmée par le serveur.
+      const send = await screen.findByRole('button', { name: 'Envoyer à Maty Ndiaye' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
 
       await waitFor(() =>
         expect(mockedCreateIntervention).toHaveBeenCalledWith({
@@ -331,7 +358,10 @@ describe('DescribeProblemScreen', () => {
 
       renderScreen('/demande?artisan=a1');
       describeProblem();
-      fireEvent.click(screen.getByRole('button', { name: 'Envoyer à Maty Ndiaye' }));
+      // Le bouton s'active une fois la zone confirmée par le serveur.
+      const send = await screen.findByRole('button', { name: 'Envoyer à Maty Ndiaye' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
 
       expect(await screen.findByRole('alert')).toHaveTextContent(
         /n'intervient pas dans votre zone/,
@@ -339,6 +369,162 @@ describe('DescribeProblemScreen', () => {
       const fallback = screen.getByRole('link', { name: /Voir les autres artisans/ });
       expect(fallback.getAttribute('href')).toContain('trade=electricite');
       expect(mockedCreateServiceRequest).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("lieu de l'intervention (explicite)", () => {
+    beforeEach(() =>
+      mockedUseAuth.mockReturnValue(authValue({ isAuthenticated: true, role: 'client' })),
+    );
+
+    function submit() {
+      describeProblem();
+      fireEvent.click(screen.getByRole('button', { name: /Voir les artisans/ }));
+    }
+
+    it('affiche le lieu avant le bouton d’envoi, cohérent avec l’en-tête', () => {
+      renderScreen();
+
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent(
+        'Intervention à : Dakar Plateau',
+      );
+      expect(screen.getByLabelText('Quartier')).toHaveValue('plateau');
+    });
+
+    it('enregistre le quartier choisi, et l’en-tête suit', async () => {
+      renderScreen();
+
+      fireEvent.change(screen.getByLabelText('Quartier'), { target: { value: 'ouakam' } });
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Ouakam, Dakar');
+      // Même valeur partagée : l'en-tête affiche le même quartier.
+      expect(
+        screen.getByRole('button', { name: /Quartier :\s*Ouakam, Dakar/ }),
+      ).toBeInTheDocument();
+      submit();
+
+      await waitFor(() => expect(mockedCreateServiceRequest).toHaveBeenCalledTimes(1));
+      expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: { lat: 14.7225, lng: -17.4878 },
+          locationLabel: 'Ouakam, Dakar',
+        }),
+      );
+    });
+
+    it('le quartier choisi dans l’en-tête devient le lieu de la demande', async () => {
+      renderScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: /Quartier :\s*Dakar Plateau/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Point E, Dakar' }));
+      submit();
+
+      await waitFor(() =>
+        expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
+          expect.objectContaining({ locationLabel: 'Point E, Dakar' }),
+        ),
+      );
+    });
+
+    it('propose la position GPS sans jamais l’imposer : montrée, puis confirmée', async () => {
+      renderScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Utiliser ma position actuelle' }));
+      expect(await screen.findByText(/Position trouvée/)).toHaveTextContent(
+        /à 8 km du centre de Dakar/,
+      );
+      // Pas encore appliquée.
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar Plateau');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Utiliser cette position' }));
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Ma position actuelle');
+      submit();
+
+      await waitFor(() =>
+        expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            location: { lat: 14.7225, lng: -17.4878 },
+            locationLabel: 'Ma position actuelle',
+          }),
+        ),
+      );
+    });
+
+    it('signale une position hors de la région de Dakar et permet de la refuser', async () => {
+      mockedGetCurrentPosition.mockResolvedValue({ lat: 48.9097, lng: 2.3819 });
+      renderScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Utiliser ma position actuelle' }));
+      const found = await screen.findByRole('status');
+      expect(within(found).getByText(/hors de la région de Dakar/)).toBeInTheDocument();
+
+      fireEvent.click(within(found).getByRole('button', { name: 'Garder Dakar Plateau' }));
+      expect(screen.queryByText(/Position trouvée/)).not.toBeInTheDocument();
+      submit();
+
+      await waitFor(() =>
+        expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
+          expect.objectContaining({ location: PLATEAU, locationLabel: 'Dakar Plateau' }),
+        ),
+      );
+    });
+
+    it('dit quand la position est refusée, sans rien remplacer en silence', async () => {
+      mockedGetCurrentPosition.mockRejectedValue(new GeolocationError('denied'));
+      renderScreen();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Utiliser ma position actuelle' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        "L'accès à votre position a été refusé. Choisissez votre quartier dans la liste.",
+      );
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar Plateau');
+    });
+
+    it("vérifie la zone de l'artisan visé AVANT l'envoi et ne lui envoie rien s'il ne couvre pas le lieu", async () => {
+      mockedUseArtisan.mockReturnValue({
+        data: { ...artisanFixture, id: 'a1', name: 'Maty Ndiaye', tradeCodes: ['electricite'] },
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+        setData: vi.fn(),
+      });
+      mockedCheckCoverage.mockResolvedValue({ eligible: false, reason: 'hors_zone' });
+      renderScreen('/demande?artisan=a1');
+      describeProblem();
+
+      expect(
+        await screen.findByText(/Maty Ndiaye n'intervient pas à Dakar Plateau/),
+      ).toBeInTheDocument();
+      expect(mockedCheckCoverage).toHaveBeenCalledWith('a1', 'electricite', PLATEAU);
+      expect(
+        screen.queryByRole('button', { name: 'Envoyer à Maty Ndiaye' }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /Voir les artisans/ }));
+      expect(await screen.findByText(/Search results for/)).toBeInTheDocument();
+      expect(mockedCreateIntervention).not.toHaveBeenCalled();
+    });
+
+    it('revérifie la zone quand le client change de lieu', async () => {
+      mockedUseArtisan.mockReturnValue({
+        data: { ...artisanFixture, id: 'a1', name: 'Maty Ndiaye', tradeCodes: ['electricite'] },
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+        setData: vi.fn(),
+      });
+      mockedCheckCoverage.mockImplementation(async (_id, _trade, location) =>
+        location.lat === PLATEAU.lat
+          ? { eligible: false, reason: 'hors_zone' }
+          : { eligible: true, reason: null },
+      );
+      renderScreen('/demande?artisan=a1');
+      describeProblem();
+      await screen.findByText(/n'intervient pas à Dakar Plateau/);
+
+      fireEvent.change(screen.getByLabelText('Quartier'), { target: { value: 'ouakam' } });
+
+      expect(await screen.findByRole('button', { name: 'Envoyer à Maty Ndiaye' })).toBeEnabled();
     });
   });
 });

@@ -17,7 +17,12 @@ vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
   return {
     ...actual,
-    api: { ...actual.api, createIntervention: vi.fn(), listConversations: vi.fn() },
+    api: {
+      ...actual.api,
+      createIntervention: vi.fn(),
+      listConversations: vi.fn(),
+      listRequestEligibility: vi.fn(),
+    },
   };
 });
 
@@ -26,6 +31,7 @@ const mockedUseMyRequests = vi.mocked(useMyRequests);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedCreateIntervention = vi.mocked(api.createIntervention);
 const mockedListConversations = vi.mocked(api.listConversations);
+const mockedEligibility = vi.mocked(api.listRequestEligibility);
 
 const artisanFixture: Artisan = {
   id: 'test-artisan',
@@ -57,6 +63,7 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     description: 'Fuite sous l’évier de la cuisine.',
     photoUrl: null,
     location: { lat: 14.69, lng: -17.44 },
+    locationLabel: null,
     urgency: 'normal',
     aiEstimateMinFcfa: null,
     aiEstimateMaxFcfa: null,
@@ -128,6 +135,11 @@ describe('ArtisanProfileScreen', () => {
     mockedUseArtisan.mockReset();
     mockedCreateIntervention.mockReset();
     mockedListConversations.mockReset();
+    // Verdict du serveur par défaut : les demandes de ces tests sont dans la zone.
+    mockedEligibility.mockReset().mockResolvedValue([
+      { requestId: 'req-plomberie', eligible: true, reason: null },
+      { requestId: 'req-1', eligible: true, reason: null },
+    ]);
     mockedUseAuth.mockReturnValue(authValue({}));
     mockedUseMyRequests.mockReturnValue({
       data: [],
@@ -229,8 +241,9 @@ describe('ArtisanProfileScreen', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
 
       const dialog = screen.getByRole('dialog', { name: 'Demander un devis' });
-      expect(within(dialog).getAllByRole('radio')).toHaveLength(1);
+      expect(await within(dialog).findAllByRole('radio')).toHaveLength(1);
       expect(within(dialog).getByRole('radio')).toBeChecked();
+      expect(mockedEligibility).toHaveBeenCalledWith('test-artisan');
 
       fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer à Aissatou' }));
 
@@ -244,7 +257,7 @@ describe('ArtisanProfileScreen', () => {
       ).toHaveAttribute('href', '/mes-interventions');
     });
 
-    it('affiche le refus du serveur sans fermer le panneau', async () => {
+    it('le serveur reste le dernier rempart : son refus est affiché, panneau ouvert', async () => {
       mockedUseAuth.mockReturnValue(signedIn('client'));
       mockedUseMyRequests.mockReturnValue({
         data: [requestFixture({})],
@@ -259,7 +272,7 @@ describe('ArtisanProfileScreen', () => {
 
       renderAtArtisan(artisanFixture.id);
       fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Envoyer à Aissatou' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Envoyer à Aissatou' }));
 
       await waitFor(() =>
         expect(screen.getByRole('alert')).toHaveTextContent(
@@ -269,18 +282,103 @@ describe('ArtisanProfileScreen', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('sans demande compatible, invite à décrire le besoin pour CET artisan', () => {
+    it('sans demande compatible, invite à décrire le besoin pour CET artisan', async () => {
       mockedUseAuth.mockReturnValue(signedIn('client'));
       withArtisan();
 
       renderAtArtisan(artisanFixture.id);
       fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
 
-      expect(screen.getByRole('link', { name: 'Décrire mon besoin' })).toHaveAttribute(
+      expect(await screen.findByRole('link', { name: 'Décrire mon besoin' })).toHaveAttribute(
         'href',
         '/demande?artisan=test-artisan',
       );
       expect(mockedCreateIntervention).not.toHaveBeenCalled();
+    });
+
+    it('marque une demande hors de la zone AVANT l’envoi et ne la rend pas envoyable', async () => {
+      mockedUseAuth.mockReturnValue(signedIn('client'));
+      mockedUseMyRequests.mockReturnValue({
+        data: [
+          requestFixture({ id: 'req-paris', locationLabel: null }),
+          requestFixture({ id: 'req-ouakam', locationLabel: 'Ouakam, Dakar' }),
+        ],
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+      });
+      mockedEligibility.mockResolvedValue([
+        { requestId: 'req-paris', eligible: false, reason: 'hors_zone' },
+        { requestId: 'req-ouakam', eligible: true, reason: null },
+      ]);
+      mockedCreateIntervention.mockResolvedValue({ id: 'int-1' } as Intervention);
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
+      const dialog = screen.getByRole('dialog', { name: 'Demander un devis' });
+      const [outside, inside] = await within(dialog).findAllByRole('radio');
+
+      expect(outside).toBeDisabled();
+      expect(outside).not.toBeChecked();
+      expect(inside).toBeChecked();
+      expect(within(dialog).getByText('Hors de sa zone')).toBeInTheDocument();
+      expect(within(dialog).getByText(/Aissatou n'intervient pas à ce lieu/)).toBeInTheDocument();
+      expect(within(dialog).getByText('Lieu : position GPS enregistrée')).toBeInTheDocument();
+      expect(within(dialog).getByText('Lieu : Ouakam, Dakar')).toBeInTheDocument();
+
+      fireEvent.click(outside);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Envoyer à Aissatou' }));
+      expect(mockedCreateIntervention).toHaveBeenCalledWith({
+        serviceRequestId: 'req-ouakam',
+        artisanId: 'test-artisan',
+      });
+    });
+
+    it('sans demande dans la zone : rien d’envoyable, invitation à choisir un autre lieu', async () => {
+      mockedUseAuth.mockReturnValue(signedIn('client'));
+      mockedUseMyRequests.mockReturnValue({
+        data: [requestFixture({ id: 'req-paris' })],
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+      });
+      mockedEligibility.mockResolvedValue([
+        { requestId: 'req-paris', eligible: false, reason: 'hors_zone' },
+      ]);
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
+
+      expect(
+        await screen.findByText(/Aucune de vos demandes n'est dans la zone d'intervention/),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Envoyer à Aissatou' })).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: 'Décrire mon besoin à un autre lieu' }),
+      ).toHaveAttribute('href', '/demande?artisan=test-artisan');
+      expect(mockedCreateIntervention).not.toHaveBeenCalled();
+    });
+
+    it('sans verdict du serveur, ne propose aucun envoi à l’aveugle', async () => {
+      mockedUseAuth.mockReturnValue(signedIn('client'));
+      mockedUseMyRequests.mockReturnValue({
+        data: [requestFixture({})],
+        isLoading: false,
+        error: null,
+        reload: vi.fn(),
+      });
+      mockedEligibility.mockRejectedValue(
+        new ApiError('network', 'Impossible de contacter le serveur.'),
+      );
+      withArtisan();
+
+      renderAtArtisan(artisanFixture.id);
+      fireEvent.click(screen.getByRole('button', { name: 'Demander un devis' }));
+
+      expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Envoyer à Aissatou' })).not.toBeInTheDocument();
     });
 
     it('se ferme avec Échap', () => {

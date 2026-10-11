@@ -1,5 +1,5 @@
 import React from 'react';
-import { ClipboardList, Search } from 'lucide-react';
+import { ClipboardList, MapPin, Search, TriangleAlert } from 'lucide-react';
 import { AppBar } from '../../components/ui/AppBar';
 import { ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -8,6 +8,7 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { formatFcfa } from '../../lib/format';
+import { isInServiceRegion } from '../../lib/places';
 import type { ServiceRequest, ServiceRequestStatus } from '../../types';
 import { useMyRequests } from './hooks/useMyRequests';
 
@@ -83,7 +84,21 @@ export const MyRequestsScreen: React.FC = () => {
                     <p className="text-xs text-muted-foreground">
                       Créée le {formatDate(request.createdAt)}
                     </p>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin aria-hidden className="w-3.5 h-3.5 shrink-0" />
+                      Lieu : {request.locationLabel ?? 'position GPS enregistrée'}
+                    </p>
                   </div>
+                  {!isInServiceRegion(request.location) && (
+                    <p className="flex items-start gap-2 rounded-field bg-accent-soft p-3 text-sm text-foreground">
+                      <TriangleAlert aria-hidden className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>
+                        Cette demande est localisée hors de la région de Dakar : aucun artisan ne
+                        pourra la recevoir. Décrivez à nouveau votre besoin en choisissant le
+                        quartier des travaux.
+                      </span>
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground line-clamp-3">
                     {request.description}
                   </p>

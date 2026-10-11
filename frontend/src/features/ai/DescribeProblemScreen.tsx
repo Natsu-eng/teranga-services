@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Send, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowRight, MapPin, Send, Sparkles, TriangleAlert } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppBar } from '../../components/ui/AppBar';
 import { Avatar } from '../../components/ui/Avatar';
@@ -13,12 +13,15 @@ import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { api, ApiError } from '../../lib/api';
 import type { ArtisanFilters } from '../../lib/api/types';
-import { getCurrentPosition, type Coordinates } from '../../lib/geo';
+import type { Coordinates } from '../../lib/places';
 import type { AIAnalysisResult, ServiceRequest } from '../../types';
 import { useAuth } from '../auth/hooks/useAuth';
 import { ArtisanCard, ArtisanCardSkeleton } from '../artisans/components/ArtisanCard';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useArtisans } from '../artisans/hooks/useArtisans';
+import { PlaceSection } from '../location/PlaceSection';
+import { useArtisanCoverage } from '../location/useArtisanCoverage';
+import { usePlace } from '../location/usePlace';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 
 /** Longueur maximale de la description (alignée sur le champ côté serveur). */
@@ -51,10 +54,14 @@ function searchUrlFor(tradeCode: string, position: Coordinates): string {
  *    urgence) se met à jour après chaque pause de frappe.
  * 2. Le résultat ressort sur une carte vert profond, suivi de trois
  *    artisans du métier détecté.
- * 3. L'action crée la demande (POST /requests) puis :
- *    - si l'on vient d'une fiche artisan (`?artisan=<id>`) et que le métier
- *      détecté est le sien : la demande lui est adressée directement
- *      (POST /interventions) ;
+ * 3. Le client voit et choisit le LIEU de l'intervention (quartier, ou sa
+ *    position GPS s'il l'accepte explicitement) : c'est ce lieu confirmé
+ *    qui est enregistré, jamais une position lue en silence.
+ * 4. L'action crée la demande (POST /requests) puis :
+ *    - si l'on vient d'une fiche artisan (`?artisan=<id>`), que le métier
+ *      détecté est le sien ET que le serveur confirme qu'il couvre le lieu
+ *      choisi : la demande lui est adressée directement (POST
+ *      /interventions, qui revérifie tout) ;
  *    - sinon : recherche filtrée côté serveur sur le métier et la position.
  *
  * Aucune donnée simulée : ni description ni photo préremplies, ni faux
@@ -74,6 +81,8 @@ export const DescribeProblemScreen: React.FC = () => {
 
   const targetArtisanId = searchParams.get('artisan');
   const { data: targetArtisan } = useArtisan(targetArtisanId);
+  // Lieu partagé avec l'en-tête : le quartier affiché est celui de la demande.
+  const { place, setPlace } = usePlace();
 
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -107,11 +116,19 @@ export const DescribeProblemScreen: React.FC = () => {
     reload: reloadSuggested,
   } = useArtisans(suggestedFilters, { enabled: detectedTrade !== null });
 
-  // Relais depuis une fiche : seulement si l'artisan exerce le métier détecté.
-  const sendsToTarget =
+  // Relais depuis une fiche : seulement si l'artisan exerce le métier détecté
+  // ET couvre le lieu choisi — vérifié par le serveur AVANT l'envoi.
+  const targetTradeMatches =
     targetArtisan != null &&
     aiResult != null &&
     targetArtisan.tradeCodes.includes(aiResult.tradeCode);
+  const coverage = useArtisanCoverage(
+    targetTradeMatches && targetArtisan ? targetArtisan.id : null,
+    targetTradeMatches && aiResult ? aiResult.tradeCode : null,
+    place,
+  );
+  const targetOutOfZone = targetTradeMatches && coverage.check?.eligible === false;
+  const sendsToTarget = targetTradeMatches && !targetOutOfZone;
   const targetMismatch =
     targetArtisan != null &&
     aiResult != null &&
@@ -133,13 +150,15 @@ export const DescribeProblemScreen: React.FC = () => {
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      const position = await getCurrentPosition();
+      // Le lieu CONFIRMÉ par le client (affiché au-dessus du bouton).
+      const position: Coordinates = { lat: place.lat, lng: place.lng };
       const request = await api.createServiceRequest({
         tradeCode: aiResult.tradeCode,
         description: trimmed,
         // L'envoi de photo n'existe pas encore côté serveur (BUILD_PLAN.md §6 Lot 11).
         photoUrl: null,
         location: position,
+        locationLabel: place.label,
         urgency: aiResult.urgencyCode,
         aiEstimateMinFcfa: aiResult.priceMinFcfa,
         aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
@@ -211,6 +230,8 @@ export const DescribeProblemScreen: React.FC = () => {
           hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, meilleure est l'estimation.`}
         />
 
+        <PlaceSection place={place} onChange={setPlace} />
+
         <section aria-labelledby="analyse-titre" aria-live="polite" className="space-y-4">
           <h2 id="analyse-titre" className="sr-only">
             Analyse de votre demande
@@ -267,6 +288,19 @@ export const DescribeProblemScreen: React.FC = () => {
                 </p>
               </Card>
 
+              {targetOutOfZone && targetArtisan && (
+                <Card tone="tint" className="flex items-start gap-3 text-sm text-foreground">
+                  <TriangleAlert aria-hidden className="w-5 h-5 text-accent-foreground shrink-0" />
+                  <span>
+                    {coverage.check?.reason === 'artisan_non_verifie'
+                      ? `${targetArtisan.name} ne peut pas encore recevoir de demandes.`
+                      : `${targetArtisan.name} n'intervient pas à ${place.label}.`}{' '}
+                    Changez le lieu de l&apos;intervention, ou voyez les artisans qui couvrent ce
+                    lieu.
+                  </span>
+                </Card>
+              )}
+
               {targetMismatch && targetArtisan && (
                 <Card tone="tint" className="flex items-start gap-3 text-sm text-foreground">
                   <TriangleAlert aria-hidden className="w-5 h-5 text-accent-foreground shrink-0" />
@@ -321,6 +355,12 @@ export const DescribeProblemScreen: React.FC = () => {
               {submitError}
             </p>
           )}
+          <p className="flex items-center justify-center gap-1.5 text-sm text-foreground">
+            <MapPin aria-hidden className="w-4 h-4 text-primary-emerald" />
+            <span>
+              Intervention à : <strong className="font-semibold">{place.label}</strong>
+            </span>
+          </p>
           {isWrongRole && (
             <p className="text-xs text-center text-muted-foreground">
               La création d&apos;une demande est réservée aux comptes clients.
@@ -343,7 +383,9 @@ export const DescribeProblemScreen: React.FC = () => {
               fullWidth
               onClick={handleSubmit}
               isLoading={isSubmitting}
-              disabled={!aiResult || !isDescriptionReady || isWrongRole}
+              // Zone de l'artisan visé en cours de vérification : on attend la
+              // réponse plutôt que d'envoyer à l'aveugle.
+              disabled={!aiResult || !isDescriptionReady || isWrongRole || coverage.isChecking}
               trailingIcon={
                 sendsToTarget ? (
                   <Send aria-hidden className="w-5 h-5" />

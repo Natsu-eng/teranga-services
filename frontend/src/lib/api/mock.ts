@@ -13,6 +13,8 @@
 import { INITIAL_ARTISANS, ARTISAN_STATS_BY_ID } from '../../data/mockData';
 import type {
   AdminVerificationListItem,
+  EngagementCheck,
+  RequestEligibility,
   ArtisanEarnings,
   ClientPayment,
   PaymentOptions,
@@ -152,6 +154,7 @@ export const mockApiClient: ApiClient = {
       description: input.description,
       photoUrl: input.photoUrl ?? null,
       location: input.location,
+      locationLabel: input.locationLabel,
       urgency: input.urgency,
       aiEstimateMinFcfa: input.aiEstimateMinFcfa ?? null,
       aiEstimateMaxFcfa: input.aiEstimateMaxFcfa ?? null,
@@ -414,5 +417,15 @@ export const mockApiClient: ApiClient = {
   async resolveDispute(): Promise<Intervention> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', "Cette intervention n'existe pas.");
+  },
+
+  async listRequestEligibility(): Promise<RequestEligibility[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async checkArtisanCoverage(): Promise<EngagementCheck> {
+    await simulateNetworkLatency();
+    return { eligible: true, reason: null };
   },
 };

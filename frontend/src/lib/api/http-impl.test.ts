@@ -829,6 +829,7 @@ describe('httpApiClient', () => {
       description: 'Une prise ne fonctionne plus.',
       photo_url: null,
       location: { lat: 14.7256, lng: -17.4914 },
+      location_label: 'Ouakam, Dakar',
       urgency: 'urgent',
       ai_estimate_min_fcfa: 12000,
       ai_estimate_max_fcfa: 25000,
@@ -845,6 +846,7 @@ describe('httpApiClient', () => {
         description: 'Une prise ne fonctionne plus.',
         photoUrl: null,
         location: { lat: 14.7256, lng: -17.4914 },
+        locationLabel: 'Ouakam, Dakar',
         urgency: 'urgent',
         aiEstimateMinFcfa: 12000,
         aiEstimateMaxFcfa: 25000,
@@ -857,6 +859,7 @@ describe('httpApiClient', () => {
         description: 'Une prise ne fonctionne plus.',
         photoUrl: null,
         location: { lat: 14.7256, lng: -17.4914 },
+        locationLabel: 'Ouakam, Dakar',
         urgency: 'urgent',
         aiEstimateMinFcfa: 12000,
         aiEstimateMaxFcfa: 25000,
@@ -872,6 +875,7 @@ describe('httpApiClient', () => {
         description: 'Une prise ne fonctionne plus.',
         photo_url: null,
         location: { lat: 14.7256, lng: -17.4914 },
+        location_label: 'Ouakam, Dakar',
         urgency: 'urgent',
         ai_estimate_min_fcfa: 12000,
         ai_estimate_max_fcfa: 25000,
@@ -895,6 +899,7 @@ describe('httpApiClient', () => {
         tradeCode: 'inexistant',
         description: 'Test.',
         location: { lat: 0, lng: 0 },
+        locationLabel: 'Dakar Plateau',
         urgency: 'normal',
       });
 
@@ -902,6 +907,43 @@ describe('httpApiClient', () => {
       await expect(promise).rejects.toMatchObject({
         message: 'Le métier demandé est introuvable ou inactif.',
       });
+    });
+  });
+
+  describe('éligibilité et couverture (lieu)', () => {
+    it("lit, pour chaque demande ouverte, si l'artisan peut la recevoir", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, [
+          { request_id: 'r1', eligible: true, reason: null },
+          { request_id: 'r2', eligible: false, reason: 'hors_zone' },
+        ]),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await httpApiClient.listRequestEligibility!('a1');
+
+      expect(result).toEqual([
+        { requestId: 'r1', eligible: true, reason: null },
+        { requestId: 'r2', eligible: false, reason: 'hors_zone' },
+      ]);
+      expect(fetchMock.mock.calls[0][0]).toMatch(/\/requests\/me\/eligibility\?artisan_id=a1$/);
+    });
+
+    it('interroge la couverture d’un lieu pour un métier', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { eligible: false, reason: 'hors_zone' }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await httpApiClient.checkArtisanCoverage!('a1', 'plomberie', {
+        lat: 14.6681,
+        lng: -17.4339,
+      });
+
+      expect(result).toEqual({ eligible: false, reason: 'hors_zone' });
+      expect(fetchMock.mock.calls[0][0]).toMatch(
+        /\/artisans\/a1\/coverage\?trade=plomberie&lat=14\.6681&lng=-17\.4339$/,
+      );
     });
   });
 
