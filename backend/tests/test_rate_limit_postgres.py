@@ -162,6 +162,9 @@ async def test_out_of_range_windows_are_rejected(
 def _settings(**overrides: object) -> Settings:
     base = get_settings().model_dump()
     base.pop("rate_limit_backend")
+    # Paiement en ligne coupé : le sandbox est interdit en prod, et ces
+    # tests ne portent que sur le rate limiting.
+    base["payment_provider"] = "disabled"
     return Settings.model_validate({**base, **overrides})
 
 

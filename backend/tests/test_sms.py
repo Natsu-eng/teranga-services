@@ -14,6 +14,9 @@ def _settings(**overrides: object) -> Settings:
     base: dict[str, object] = {
         "database_url": "postgresql+asyncpg://user:pass@localhost:5432/db",
         "jwt_secret": "x" * 32,
+        # Paiement en ligne coupé : hors sujet ici (le sandbox exige un
+        # secret de webhook hors dev).
+        "payment_provider": "disabled",
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)  # type: ignore[arg-type]
