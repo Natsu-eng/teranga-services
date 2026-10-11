@@ -11,6 +11,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { StatTile } from '../../components/ui/StatTile';
 import { Switch } from '../../components/ui/Switch';
 import { formatFcfa } from '../../lib/format';
+import { greetingLine } from '../../lib/greeting';
 import { firstNameOf } from '../../lib/identity';
 import { InterventionsList } from '../interventions/InterventionsList';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
@@ -103,7 +104,7 @@ export const ArtisanDashboardScreen: React.FC = () => {
               <div className="h-8 w-48 rounded-field bg-white/15 animate-pulse" />
             ) : (
               <h1 className="font-display text-display-md font-semibold">
-                {greetingName ? `Bonjour, ${greetingName}` : 'Mon activité'}
+                {greetingName ? greetingLine(greetingName) : 'Mon activité'}
               </h1>
             )}
           </div>

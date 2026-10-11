@@ -65,8 +65,31 @@ function renderLayout(
 }
 
 describe('MainLayout — espace client', () => {
-  beforeEach(() => mockedUseAuth.mockReset());
-  afterEach(cleanup);
+  beforeEach(() => {
+    mockedUseAuth.mockReset();
+    // Heure fixée (10 h) : la salutation dépend de l'heure, pas le résultat des tests.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 12, 10, 0));
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('dit « Bonsoir » le soir', () => {
+    vi.setSystemTime(new Date(2026, 9, 12, 20, 30));
+    mockedUseAuth.mockReturnValue(
+      authValue({
+        isAuthenticated: true,
+        role: 'client',
+        user: userFixture('client', 'Dian Diallo'),
+      }),
+    );
+
+    renderLayout();
+
+    expect(screen.getByText('Bonsoir, Dian')).toBeInTheDocument();
+  });
 
   it('affiche l’en-tête clair et la navigation client à 4 entrées', () => {
     mockedUseAuth.mockReturnValue(authValue({}));

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router';
 import { useAuth } from '../../features/auth/hooks/useAuth';
+import { greetingLine } from '../../lib/greeting';
 import { firstNameOf } from '../../lib/identity';
 import { Avatar } from '../ui/Avatar';
 import { ButtonLink } from '../ui/Button';
@@ -24,7 +25,7 @@ export const ClientHeader: React.FC = () => {
         <div className="min-w-0">
           <LocationPicker />
           <p className="font-display text-display-sm font-semibold text-primary truncate">
-            {name ? `Bonjour, ${name}` : 'Bonjour'}
+            {greetingLine(name)}
           </p>
         </div>
 
