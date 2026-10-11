@@ -74,6 +74,21 @@ class PaymentSummaryOut(BaseModel):
     payout: PayoutOut | None
 
 
+class PayoutSettingsOut(BaseModel):
+    """Où l'artisan reçoit ses versements. Le numéro n'est jamais saisi :
+    c'est toujours celui de son compte, vérifié par OTP."""
+
+    channel: PayoutChannel
+    # Faux tant que l'artisan s'en remet au moyen par défaut.
+    chosen: bool
+    allowed_channels: list[PayoutChannel]
+    destination_phone: str
+
+
+class PayoutSettingsIn(BaseModel):
+    channel: PayoutChannel
+
+
 class DisputeOut(BaseModel):
     opened_by: Role
     reason: str

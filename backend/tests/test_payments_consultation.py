@@ -175,3 +175,38 @@ async def test_intervention_lists_carry_the_payment_summary(db_session: AsyncSes
     (item,) = response.json()["items"]
     assert item["payment"]["status"] == "en_attente"
     assert item["payment"]["checkout_url"]
+
+
+async def test_an_artisan_chooses_how_to_be_paid_never_where(db_session: AsyncSession) -> None:
+    engagement = await make_payable_engagement(db_session)
+    headers = auth(engagement.artisan_user)
+
+    async with client() as http:
+        default = await http.get("/api/v1/payments/me/payout-settings", headers=headers)
+        chosen = await http.put(
+            "/api/v1/payments/me/payout-settings", json={"channel": "orange_money"}, headers=headers
+        )
+        bank = await http.put(
+            "/api/v1/payments/me/payout-settings", json={"channel": "bank"}, headers=headers
+        )
+        # Un numéro fourni est ignoré : la destination est le numéro du compte.
+        with_phone = await http.put(
+            "/api/v1/payments/me/payout-settings",
+            json={"channel": "wave", "destination_phone": "+221700000000"},
+            headers=headers,
+        )
+        as_client = await http.get(
+            "/api/v1/payments/me/payout-settings", headers=auth(engagement.client)
+        )
+
+    assert default.json() == {
+        "channel": "wave",
+        "chosen": False,
+        "allowed_channels": ["wave", "orange_money"],
+        "destination_phone": engagement.artisan_user.phone,
+    }
+    assert chosen.json()["channel"] == "orange_money"
+    assert chosen.json()["chosen"] is True
+    assert bank.status_code == 422
+    assert with_phone.json()["destination_phone"] == engagement.artisan_user.phone
+    assert as_client.status_code == 403

@@ -22,6 +22,8 @@ from app.schemas.payments import (
     PaymentInitIn,
     PaymentOptionsOut,
     PaymentSummaryOut,
+    PayoutSettingsIn,
+    PayoutSettingsOut,
 )
 from app.services import payments as payments_service
 from app.services.payment_providers.base import PaymentProvider
@@ -129,6 +131,29 @@ async def get_my_earnings(
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
     )
+
+
+@router.get("/me/payout-settings", response_model=PayoutSettingsOut)
+async def get_my_payout_settings(
+    session: SessionDep,
+    settings: SettingsDep,
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> PayoutSettingsOut:
+    return await payments_service.get_payout_settings(session, user=artisan, settings=settings)
+
+
+@router.put("/me/payout-settings", response_model=PayoutSettingsOut)
+async def set_my_payout_settings(
+    payload: PayoutSettingsIn,
+    session: SessionDep,
+    settings: SettingsDep,
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> PayoutSettingsOut:
+    result = await payments_service.set_payout_settings(
+        session, user=artisan, payload=payload, settings=settings
+    )
+    await session.commit()
+    return result
 
 
 @webhooks_router.post("/payments")

@@ -59,8 +59,10 @@ from app.schemas.payments import (
     PaymentInitIn,
     PaymentOptionsOut,
     PaymentSummaryOut,
+    PayoutSettingsIn,
+    PayoutSettingsOut,
 )
-from app.services.artisans import PageHorsBornesError
+from app.services.artisans import PageHorsBornesError, get_own_profile
 from app.services.commission_calculation import compute_commission
 from app.services.identity import public_display_name
 from app.services.intervention_errors import (
@@ -731,6 +733,40 @@ async def artisan_earnings(
         items=items,
         pagination=Page.of(items, page=page, page_size=resolved, total=total).pagination,
     )
+
+
+class MoyenDeVersementIndisponibleError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="MOYEN_DE_VERSEMENT_INDISPONIBLE",
+            message="Ce moyen de versement n'est pas disponible.",
+            status_code=422,
+        )
+
+
+async def get_payout_settings(
+    session: AsyncSession, *, user: User, settings: Settings
+) -> PayoutSettingsOut:
+    profile = await get_own_profile(session, user)
+    return PayoutSettingsOut(
+        channel=profile.payout_channel or settings.payout_default_channel,
+        chosen=profile.payout_channel is not None,
+        allowed_channels=list(settings.payout_allowed_channels),
+        destination_phone=profile.user.phone,
+    )
+
+
+async def set_payout_settings(
+    session: AsyncSession, *, user: User, payload: PayoutSettingsIn, settings: Settings
+) -> PayoutSettingsOut:
+    """Choix du moyen de versement ; s'applique aux versements créés ensuite
+    (un versement déjà créé garde le moyen copié à sa création)."""
+    if payload.channel not in settings.payout_allowed_channels:
+        raise MoyenDeVersementIndisponibleError()
+    profile = await get_own_profile(session, user)
+    profile.payout_channel = payload.channel
+    await session.flush()
+    return await get_payout_settings(session, user=user, settings=settings)
 
 
 def viewer_role(intervention: Intervention, user: User) -> Role | None:
