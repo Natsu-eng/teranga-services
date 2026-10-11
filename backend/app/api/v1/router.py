@@ -8,8 +8,10 @@ from app.api.v1 import (
     conversations,
     health,
     interventions,
+    payments,
     realtime,
     requests,
+    sandbox,
     trades,
     users,
 )
@@ -25,4 +27,7 @@ router.include_router(requests.router)
 router.include_router(interventions.router)
 router.include_router(conversations.router)
 router.include_router(realtime.router)
+router.include_router(payments.router)
+router.include_router(payments.webhooks_router)
+router.include_router(sandbox.router)
 router.include_router(admin.router)

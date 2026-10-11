@@ -11,6 +11,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.enums import InterventionCancellationKind, InterventionStatus, Role
+from app.schemas.payments import DisputeOut, PaymentSummaryOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.requests import ServiceRequestOut
 from app.schemas.reviews import ReviewOut
@@ -55,4 +56,10 @@ class InterventionOut(BaseModel):
     # (messagerie). Nul seulement si l'intervention n'a pas de fil, ce que la
     # migration c0a26cec109e a rattrapé pour les interventions existantes.
     conversation_id: uuid.UUID | None = None
+    # Où en est l'argent (BUILD_PLAN.md §3.5) : total, commission au taux
+    # figé, net de l'artisan, statut du paiement et du versement. `None`
+    # tant qu'aucun devis n'est accepté. Visible des deux parties seulement
+    # (et de l'admin), comme toute l'intervention.
+    payment: PaymentSummaryOut | None = None
+    dispute: DisputeOut | None = None
     created_at: datetime

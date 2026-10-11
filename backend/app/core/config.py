@@ -369,6 +369,10 @@ class Settings(BaseSettings):
     # l'horloge du serveur : au-delà, la notification est refusée (rejeu
     # d'une vieille notification interceptée). 5 min, usage des agrégateurs.
     payment_webhook_tolerance_seconds: int = 300
+    # Taille maximale du corps d'un webhook : une notification de paiement
+    # tient en quelques Ko ; au-delà, refus avant lecture complète (un
+    # endpoint public ne doit jamais bufferiser un corps arbitraire).
+    payment_webhook_max_body_bytes: int = 64 * 1024
     # Durée de validité d'une page de paiement : au-delà, un nouveau
     # checkout est ouvert (l'ancien ne peut plus être payé).
     payment_checkout_ttl_seconds: int = 1800

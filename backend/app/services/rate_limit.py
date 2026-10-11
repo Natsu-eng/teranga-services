@@ -162,6 +162,7 @@ DOCUMENT_UPLOAD_BUCKET = "document_upload"
 PROFILE_MEDIA_UPLOAD_BUCKET = "profile_media_upload"
 MESSAGE_SEND_BUCKET = "message_send"
 MESSAGE_ATTACHMENT_BUCKET = "message_attachment"
+PAYMENT_INIT_BUCKET = "payment_init"
 
 _memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
 _postgres_limiters: dict[str, PostgresRateLimiter] = {}
@@ -217,3 +218,9 @@ def get_message_attachment_rate_limiter(settings: SettingsDep) -> RateLimiter:
     """`POST /api/v1/conversations/{id}/messages/image` -- budget distinct,
     plus serré : chaque envoi décode, réencode et écrit un fichier."""
     return _limiter_for(MESSAGE_ATTACHMENT_BUCKET, settings)
+
+
+def get_payment_init_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/payments/init` -- clé par utilisateur authentifié :
+    chaque appel peut ouvrir un checkout chez le fournisseur."""
+    return _limiter_for(PAYMENT_INIT_BUCKET, settings)
