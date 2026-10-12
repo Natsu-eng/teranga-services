@@ -80,7 +80,12 @@ from app.services.payment_providers.base import (
     ProviderEvent,
     RefundRequest,
 )
-from app.services.payment_summary import commission_fee, current_payment, is_checkout_open
+from app.services.payment_summary import (
+    commission_fee,
+    current_payment,
+    is_checkout_open,
+    online_payment_available,
+)
 from app.services.payment_summary import summarize as summarize_payment
 
 logger = logging.getLogger(__name__)
@@ -112,6 +117,18 @@ class MoyenPaiementIndisponibleError(AppError):
         super().__init__(
             code="MOYEN_DE_PAIEMENT_INDISPONIBLE",
             message="Ce moyen de paiement n'est pas disponible pour le moment.",
+            status_code=422,
+        )
+
+
+class PaiementEnLigneIndisponibleError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="PAIEMENT_EN_LIGNE_INDISPONIBLE",
+            message=(
+                "Le paiement en ligne n'est pas encore disponible : réglez l'artisan en "
+                "espèces, en main propre, et déclarez-le ici."
+            ),
             status_code=422,
         )
 
@@ -282,9 +299,10 @@ async def init_payment(
     is_cash = payload.channel is PaymentChannel.CASH
     if is_cash and not settings.payment_cash_enabled:
         raise MoyenPaiementIndisponibleError()
-    if not is_cash and (
-        provider is None or payload.channel not in settings.payment_online_channels
-    ):
+    if not is_cash and provider is None:
+        # Lancement « espèces seulement » (PAYMENT_PROVIDER=disabled).
+        raise PaiementEnLigneIndisponibleError()
+    if not is_cash and payload.channel not in settings.payment_online_channels:
         raise MoyenPaiementIndisponibleError()
 
     now = _now()
@@ -366,7 +384,11 @@ async def init_payment(
 
 
 def _summary(intervention: Intervention, settings: Settings) -> PaymentSummaryOut:
-    summary = summarize_payment(intervention, rounding=settings.commission_rounding)
+    summary = summarize_payment(
+        intervention,
+        rounding=settings.commission_rounding,
+        online_available=online_payment_available(settings),
+    )
     assert summary is not None  # appelé seulement quand un montant est convenu
     return summary
 
@@ -716,7 +738,11 @@ async def artisan_earnings(
     interventions = await interventions_repository.list_by_ids(session, ids)
     items = []
     for intervention in interventions:
-        summary = summarize_payment(intervention, rounding=settings.commission_rounding)
+        summary = summarize_payment(
+            intervention,
+            rounding=settings.commission_rounding,
+            online_available=online_payment_available(settings),
+        )
         if summary is None:
             continue
         items.append(

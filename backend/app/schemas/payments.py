@@ -72,6 +72,10 @@ class PaymentSummaryOut(BaseModel):
     released_at: datetime | None
     refunded_at: datetime | None
     payout: PayoutOut | None
+    # Le paiement en ligne (séquestre) est-il proposé sur cette plateforme ?
+    # Faux au lancement « espèces seulement » (PAYMENT_PROVIDER=disabled) :
+    # l'interface ne promet alors ni séquestre ni « payer en ligne ».
+    online_available: bool
 
 
 class PayoutSettingsOut(BaseModel):

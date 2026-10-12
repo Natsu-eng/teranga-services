@@ -7,6 +7,7 @@ la lecture fidèle de l'état enregistré.
 
 from datetime import UTC, datetime
 
+from app.core.config import Settings
 from app.models.enums import PaymentStatus, PlatformFeeKind
 from app.models.intervention import Intervention
 from app.models.payment import ACTIVE_PAYMENT_STATUSES, Payment, PlatformFee
@@ -41,8 +42,14 @@ def is_checkout_open(payment: Payment, *, now: datetime | None = None) -> bool:
     )
 
 
+def online_payment_available(settings: Settings) -> bool:
+    """Vrai si un fournisseur de paiement en ligne est actif et propose au
+    moins un moyen. Faux avec PAYMENT_PROVIDER=disabled (espèces seulement)."""
+    return settings.payment_provider != "disabled" and bool(settings.payment_online_channels)
+
+
 def summarize(
-    intervention: Intervention, *, rounding: CommissionRounding
+    intervention: Intervention, *, rounding: CommissionRounding, online_available: bool
 ) -> PaymentSummaryOut | None:
     """`None` tant qu'aucun montant n'est convenu (pas de devis accepté)."""
     amount = intervention.agreed_amount_fcfa
@@ -89,4 +96,5 @@ def summarize(
             if payout is not None
             else None
         ),
+        online_available=online_available,
     )

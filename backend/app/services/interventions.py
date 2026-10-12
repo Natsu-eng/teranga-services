@@ -80,6 +80,7 @@ from app.services.intervention_errors import (
     InterventionTransitionInvalideError,
 )
 from app.services.payment_providers.base import PaymentProvider
+from app.services.payment_summary import online_payment_available
 from app.services.payment_summary import summarize as summarize_payment
 from app.services.requests import MetierInconnuError
 from app.services.verification import compute_verified_status
@@ -275,7 +276,11 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
             else None
         ),
         conversation_id=(intervention.conversations[0].id if intervention.conversations else None),
-        payment=summarize_payment(intervention, rounding=get_settings().commission_rounding),
+        payment=summarize_payment(
+            intervention,
+            rounding=get_settings().commission_rounding,
+            online_available=online_payment_available(get_settings()),
+        ),
         dispute=(
             DisputeOut(
                 opened_by=intervention.dispute.opened_by_role,
