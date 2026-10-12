@@ -370,6 +370,12 @@ class Settings(BaseSettings):
     # création : changer cette règle ne modifie jamais une commission passée.
     commission_rounding: Literal["floor", "half_up", "ceil"] = "floor"
 
+    # Plafond de SAISIE d'un nouveau taux depuis le back-office (points de
+    # base : 3000 = 30 %). Garde-fou contre la faute de frappe (10000 au lieu
+    # de 1000) ; la base, elle, borne déjà à 0-10000. Ne touche aucun taux
+    # existant (app/services/admin_commission.py).
+    commission_rate_max_bps: int = Field(default=3000, ge=0, le=10_000)
+
     # Fournisseur de paiement actif -- LE point de bascule sandbox -> réel
     # (app/services/payment_providers/__init__.py). "sandbox" reproduit le
     # contrat d'un agrégateur (checkout hébergé, webhook signé HMAC, event id)

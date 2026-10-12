@@ -40,12 +40,18 @@ from app.schemas.admin import (
     VerificationRejectIn,
     VerificationReviewOut,
 )
+from app.schemas.admin_commission import (
+    AdminCommissionRateOut,
+    CommissionGridOut,
+    CommissionRateCreateIn,
+)
 from app.schemas.admin_overview import AdminOverviewOut
 from app.schemas.audit import AuditEntryOut
 from app.schemas.interventions import InterventionOut
 from app.schemas.pagination import Page
 from app.schemas.payments import DisputeResolveIn
 from app.services import admin_artisans as admin_artisans_service
+from app.services import admin_commission as admin_commission_service
 from app.services import admin_overview as admin_overview_service
 from app.services import admin_reviews as admin_reviews_service
 from app.services import admin_users as admin_users_service
@@ -389,6 +395,44 @@ async def restore_review(
     note. Journalisé."""
     result = await admin_reviews_service.restore_review(
         session, admin=admin, review_id=review_id, note=payload.note
+    )
+    await session.commit()
+    return result
+
+
+@router.get("/commission-rates", response_model=CommissionGridOut)
+async def get_commission_grid(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+    trade_code: Annotated[str | None, Query(max_length=50)] = None,
+) -> CommissionGridOut:
+    """Toute la grille : en vigueur, programmés, archivés, avec le nombre
+    d'interventions qui ont figé chaque taux."""
+    return await admin_commission_service.get_grid(
+        session, trade_code=trade_code, settings=settings
+    )
+
+
+@router.post("/commission-rates", response_model=AdminCommissionRateOut, status_code=201)
+async def add_commission_rate(
+    payload: CommissionRateCreateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+) -> AdminCommissionRateOut:
+    """AJOUTE un taux daté (jamais d'édition ni de suppression) ; le taux de
+    même portée en vigueur se termine où il commence. Les interventions
+    existantes gardent leur taux figé. Journalisé."""
+    result = await admin_commission_service.create_rate(
+        session,
+        admin=admin,
+        rate_bps=payload.rate_bps,
+        trade_code=payload.trade_code,
+        tier=payload.tier,
+        effective_from=payload.effective_from,
+        note=payload.note,
+        settings=settings,
     )
     await session.commit()
     return result
