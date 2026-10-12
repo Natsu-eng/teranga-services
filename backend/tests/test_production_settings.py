@@ -26,6 +26,13 @@ PRODUCTION: dict[str, object] = {
     "frontend_public_base_url": "https://teranga.sn",
     "backend_public_base_url": "https://api.teranga.sn",
     "cors_origins": ["https://teranga.sn"],
+    "storage_backend": "s3",
+    "s3_endpoint_url": "https://compte.r2.cloudflarestorage.com",
+    "s3_access_key_id": "cle-acces-de-test",
+    "s3_secret_access_key": "k8Vq2LrT9mZx4Wn7Pb3Hs6Yc1Fd5Gj0Ue",
+    "s3_private_bucket": "teranga-prive",
+    "s3_public_bucket": "teranga-public",
+    "s3_public_base_url": "https://media.teranga.sn",
 }
 
 

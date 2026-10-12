@@ -57,9 +57,11 @@ app.add_middleware(
 
 app.include_router(v1_router, prefix="/api/v1")
 
-# Seul répertoire servi statiquement -- exclusivement les avatars (données
-# publiques), jamais STORAGE_LOCAL_DIR (documents de vérification, privés).
+# Seul répertoire servi statiquement -- exclusivement les médias de profil
+# (données publiques), jamais STORAGE_LOCAL_DIR (documents de vérification,
+# privés). Seulement en stockage local : en S3, le bucket public les sert.
 # Créé eagerly : StaticFiles exige que le dossier existe au montage.
-_avatar_dir = resolve_local_dir(settings.avatar_storage_local_dir)
-_avatar_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static/avatars", StaticFiles(directory=_avatar_dir), name="avatars")
+if settings.avatar_storage_backend == "local":
+    _avatar_dir = resolve_local_dir(settings.avatar_storage_local_dir)
+    _avatar_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static/avatars", StaticFiles(directory=_avatar_dir), name="avatars")

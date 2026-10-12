@@ -328,10 +328,12 @@ class Settings(BaseSettings):
     # Stockage des fichiers privés (documents de vérification artisan --
     # onboarding). "local" (dev) écrit sur disque hors du dépôt git et hors
     # de tout répertoire servi statiquement -- voir app/services/storage.py.
-    # Un fournisseur cloud privé reste à choisir avant la prod (même
-    # principe fail-fast documenté que sms_provider/ai_triage_provider) :
-    # aucune valeur autre que "local" n'est implémentée aujourd'hui.
-    storage_backend: Literal["local"] = "local"
+    # "s3" : stockage S3-compatible (AWS S3, Cloudflare R2...), bucket PRIVÉ
+    # (app/services/s3_storage.py). C'est aussi la valeur par défaut des
+    # deux autres stockages (avatars, pièces jointes) s'ils ne sont pas
+    # précisés. En production, "local" est REFUSÉ : le disque d'un service
+    # Railway est éphémère, les fichiers seraient perdus au redéploiement.
+    storage_backend: Literal["local", "s3"] = "local"
     # Chemin (relatif au dossier backend/, ou absolu) du répertoire de
     # stockage local. Défaut "var/artisan-documents" : hors du code source
     # applicatif, ignoré par backend/.gitignore, jamais monté en StaticFiles
@@ -345,6 +347,75 @@ class Settings(BaseSettings):
     # de traitement (magic bytes, écriture disque).
     storage_max_upload_bytes: int = 8 * 1024 * 1024
 
+    # --- Stockage S3-compatible (STORAGE_BACKEND=s3, DEPLOYMENT.md) --------
+    # Point d'accès : vide pour AWS S3 ; pour Cloudflare R2,
+    # https://<ACCOUNT_ID>.r2.cloudflarestorage.com.
+    s3_endpoint_url: str | None = None
+    # Région : "auto" pour R2, la région du bucket pour AWS (ex. eu-west-3).
+    s3_region: str = "auto"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    # Bucket PRIVÉ (aucun accès public) : documents d'identité et pièces
+    # jointes, toujours servis par les endpoints authentifiés.
+    s3_private_bucket: str | None = None
+    # Bucket PUBLIC : photos de profil et couvertures seulement. Doit être
+    # DIFFÉRENT du bucket privé (refusé au démarrage sinon).
+    s3_public_bucket: str | None = None
+    # URL publique du bucket public (domaine personnalisé R2/CDN ou URL
+    # publique du bucket), en HTTPS : base des URL d'avatar renvoyées au front.
+    s3_public_base_url: str | None = None
+
+    @field_validator(
+        "avatar_storage_backend",
+        "message_attachment_storage_backend",
+        "s3_endpoint_url",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "s3_private_bucket",
+        "s3_public_bucket",
+        "s3_public_base_url",
+        mode="before",
+    )
+    @classmethod
+    def empty_storage_value_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def validate_storage(self) -> "Settings":
+        # Stockages non précisés : même fournisseur que STORAGE_BACKEND.
+        if self.avatar_storage_backend is None:
+            self.avatar_storage_backend = self.storage_backend
+        if self.message_attachment_storage_backend is None:
+            self.message_attachment_storage_backend = self.storage_backend
+
+        private_on_s3 = "s3" in (self.storage_backend, self.message_attachment_storage_backend)
+        public_on_s3 = self.avatar_storage_backend == "s3"
+        if not (private_on_s3 or public_on_s3):
+            return self
+        missing = [
+            name
+            for name, value, needed in (
+                ("S3_ACCESS_KEY_ID", self.s3_access_key_id, True),
+                ("S3_SECRET_ACCESS_KEY", self.s3_secret_access_key, True),
+                ("S3_PRIVATE_BUCKET", self.s3_private_bucket, private_on_s3),
+                ("S3_PUBLIC_BUCKET", self.s3_public_bucket, public_on_s3),
+                ("S3_PUBLIC_BASE_URL", self.s3_public_base_url, public_on_s3),
+            )
+            if needed and not value
+        ]
+        if missing:
+            raise ValueError(f"Stockage S3 incomplet, à renseigner : {', '.join(missing)}.")
+        if self.s3_private_bucket and self.s3_private_bucket == self.s3_public_bucket:
+            raise ValueError(
+                "S3_PRIVATE_BUCKET et S3_PUBLIC_BUCKET doivent être deux buckets différents : "
+                "un document d'identité ne doit jamais pouvoir se retrouver dans un bucket public."
+            )
+        if public_on_s3 and not (self.s3_public_base_url or "").startswith(("https://", "http://")):
+            raise ValueError("S3_PUBLIC_BASE_URL doit être une URL http(s) absolue.")
+        return self
+
     # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
     # (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_*. Par utilisateur
     # authentifié (pas par IP : l'endpoint exige déjà un compte artisan) --
@@ -356,9 +427,9 @@ class Settings(BaseSettings):
     # Stockage PUBLIC (photo de profil artisan) -- volontairement distinct du
     # stockage privé ci-dessus (verification.doc_url) : une photo de profil
     # est censée être visible publiquement (recherche, profil détaillé),
-    # contrairement à une CNI. Même principe fail-fast que STORAGE_BACKEND :
-    # "local" est le seul fournisseur implémenté aujourd'hui.
-    avatar_storage_backend: Literal["local"] = "local"
+    # contrairement à une CNI. Vide : même valeur que STORAGE_BACKEND. En
+    # "s3", les médias vont dans le bucket PUBLIC, jamais le privé.
+    avatar_storage_backend: Literal["local", "s3"] | None = None
     # Répertoire local, monté en lecture publique par app/main.py sous
     # /static/avatars (StaticFiles) -- jamais le même répertoire que
     # STORAGE_LOCAL_DIR (documents privés), pour ne jamais risquer de servir
@@ -415,8 +486,9 @@ class Settings(BaseSettings):
 
     # Images jointes : stockage PRIVÉ, jamais monté en StaticFiles (comme les
     # documents de vérification) -- une photo d'intérieur ne doit être visible
-    # que des deux participants. Même principe fail-fast que STORAGE_BACKEND.
-    message_attachment_storage_backend: Literal["local"] = "local"
+    # que des deux participants. Vide : même valeur que STORAGE_BACKEND ; en
+    # "s3", bucket PRIVÉ (comme les documents d'identité).
+    message_attachment_storage_backend: Literal["local", "s3"] | None = None
     message_attachment_storage_local_dir: str = "var/message-attachments"
     # Taille maximale du fichier ENVOYÉ (une photo de téléphone dépasse
     # souvent 4 Mo). Ce qui est stocké est réencodé (EXIF/GPS retirés) et
@@ -596,6 +668,21 @@ class Settings(BaseSettings):
                 "SMS_PROVIDER=unconfigured : aucun fournisseur SMS réel n'est branché, personne "
                 "ne recevrait son code de connexion (voir DEPLOYMENT.md, prérequis)."
             )
+
+        for name, backend in (
+            ("STORAGE_BACKEND", self.storage_backend),
+            ("AVATAR_STORAGE_BACKEND", self.avatar_storage_backend),
+            ("MESSAGE_ATTACHMENT_STORAGE_BACKEND", self.message_attachment_storage_backend),
+        ):
+            if backend == "local":
+                problems.append(
+                    f"{name}=local est interdit en production : le disque du service est "
+                    "éphémère, les fichiers seraient perdus au redéploiement (STORAGE_BACKEND=s3)."
+                )
+        if self.s3_public_base_url and not _is_public_https_url(self.s3_public_base_url):
+            problems.append("S3_PUBLIC_BASE_URL doit être une URL publique HTTPS.")
+        if self.s3_secret_access_key and looks_like_placeholder(self.s3_secret_access_key):
+            problems.append("S3_SECRET_ACCESS_KEY est une valeur d'exemple.")
 
         if self.ai_triage_provider == "mistral" and not (self.mistral_api_key or "").strip():
             problems.append("AI_TRIAGE_PROVIDER=mistral exige MISTRAL_API_KEY.")
