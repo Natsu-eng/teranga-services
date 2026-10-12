@@ -16,6 +16,7 @@ export const serviceRequestFixture: ServiceRequest = {
   aiEstimateMinFcfa: null,
   aiEstimateMaxFcfa: null,
   status: 'en_relation',
+  expiresAt: null,
   createdAt: '2026-10-01T00:00:00Z',
 };
 

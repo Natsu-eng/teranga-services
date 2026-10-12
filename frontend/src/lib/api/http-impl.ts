@@ -211,6 +211,7 @@ interface BackendServiceRequest {
   ai_estimate_min_fcfa: number | null;
   ai_estimate_max_fcfa: number | null;
   status: 'ouverte' | 'en_relation' | 'convertie' | 'annulee' | 'expiree';
+  expires_at?: string | null;
   created_at: string;
 }
 
@@ -425,6 +426,7 @@ function mapServiceRequest(request: BackendServiceRequest): ServiceRequest {
     aiEstimateMinFcfa: request.ai_estimate_min_fcfa,
     aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
     status: request.status,
+    expiresAt: request.expires_at ?? null,
     createdAt: request.created_at,
   };
 }

@@ -860,6 +860,8 @@ describe('httpApiClient', () => {
         aiEstimateMinFcfa: 12000,
         aiEstimateMaxFcfa: 25000,
         status: 'ouverte',
+        // Absent de la réponse (serveur antérieur) : null, jamais undefined.
+        expiresAt: null,
         createdAt: '2026-01-01T00:00:00Z',
       });
 

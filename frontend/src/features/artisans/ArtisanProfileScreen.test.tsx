@@ -68,6 +68,7 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     aiEstimateMinFcfa: null,
     aiEstimateMaxFcfa: null,
     status: 'ouverte',
+    expiresAt: null,
     createdAt: '2026-10-01T10:00:00Z',
     ...overrides,
   };

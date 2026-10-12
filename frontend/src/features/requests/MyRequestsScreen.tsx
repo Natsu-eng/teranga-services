@@ -83,7 +83,16 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, onCancelled }) => {
           </h2>
           <StatusPill tone={STATUS[request.status].tone}>{STATUS[request.status].label}</StatusPill>
         </div>
-        <p className="text-xs text-muted-foreground">Créée le {formatDate(request.createdAt)}</p>
+        <p className="text-xs text-muted-foreground">
+          Créée le {formatDate(request.createdAt)}
+          {request.expiresAt && ` · expire le ${formatDate(request.expiresAt)} sans artisan`}
+        </p>
+        {request.status === 'expiree' && (
+          <p className="text-xs text-muted-foreground">
+            Restée sans artisan trop longtemps : décrivez à nouveau votre besoin s&apos;il est
+            toujours d&apos;actualité.
+          </p>
+        )}
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin aria-hidden className="w-3.5 h-3.5 shrink-0" />
           Lieu : {request.locationLabel ?? 'position GPS enregistrée'}

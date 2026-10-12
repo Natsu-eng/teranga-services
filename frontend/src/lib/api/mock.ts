@@ -159,6 +159,7 @@ export const mockApiClient: ApiClient = {
       aiEstimateMinFcfa: input.aiEstimateMinFcfa ?? null,
       aiEstimateMaxFcfa: input.aiEstimateMaxFcfa ?? null,
       status: 'ouverte',
+      expiresAt: null,
       createdAt: new Date().toISOString(),
     };
   },

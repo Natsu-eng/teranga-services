@@ -93,6 +93,8 @@ export interface ServiceRequest {
   aiEstimateMinFcfa: number | null;
   aiEstimateMaxFcfa: number | null;
   status: ServiceRequestStatus;
+  /** Demande ouverte : date à laquelle elle expirera sans artisan (sinon null). */
+  expiresAt: string | null;
   createdAt: string;
 }
 

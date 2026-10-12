@@ -29,6 +29,7 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     aiEstimateMinFcfa: 10_000,
     aiEstimateMaxFcfa: 20_000,
     status: 'ouverte',
+    expiresAt: null,
     createdAt: '2026-10-01T10:00:00Z',
     ...overrides,
   };
@@ -220,5 +221,23 @@ describe('MyRequestsScreen', () => {
       expect(screen.getByText("Vous n'avez aucune demande en cours.")).toBeInTheDocument();
       expect(screen.getByText('Anciennes demandes (1)')).toBeInTheDocument();
     });
+  });
+
+  it('dit quand une demande ouverte expirera, et pourquoi une demande a expiré', () => {
+    mockedUseMyRequests.mockReturnValue({
+      data: [
+        requestFixture({ id: 'r1', expiresAt: '2026-11-11T10:00:00Z' }),
+        requestFixture({ id: 'r2', status: 'expiree', expiresAt: null }),
+      ],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+
+    renderScreen();
+
+    expect(screen.getByText(/expire le 11 novembre 2026 sans artisan/)).toBeInTheDocument();
+    expect(screen.getByText('Anciennes demandes (1)')).toBeInTheDocument();
+    expect(screen.getByText(/Restée sans artisan trop longtemps/)).toBeInTheDocument();
   });
 });
