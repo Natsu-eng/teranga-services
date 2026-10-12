@@ -123,6 +123,25 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, v: list[str]) -> list[str]:
+        for origin in v:
+            if "*" in origin:
+                raise ValueError(
+                    "CORS_ORIGINS ne doit jamais contenir de joker « * » : listez les origines "
+                    "exactes du front (les jetons d'accès transitent par ces appels)."
+                )
+            # Une origine = schéma + hôte (+ port), rien d'autre : le
+            # navigateur compare à l'identique, un « / » final ou un chemin
+            # ne correspondrait jamais (CORS cassé sans message clair).
+            if _origin_of(origin) != origin:
+                raise ValueError(
+                    f"CORS_ORIGINS : {origin!r} n'est pas une origine (attendu : "
+                    "https://hote[:port], sans chemin ni « / » final)."
+                )
+        return v
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:
@@ -694,9 +713,31 @@ class Settings(BaseSettings):
             if not _is_public_https_url(value):
                 problems.append(f"{name} doit être l'URL publique HTTPS du service ({value!r}).")
 
+        for origin in self.cors_origins:
+            if not _is_public_https_url(origin):
+                problems.append(f"CORS_ORIGINS : {origin!r} doit être une origine HTTPS publique.")
+        # Front et back sur deux origines (Vercel/Railway) : sans l'origine
+        # du front dans CORS_ORIGINS, le navigateur bloquerait chaque appel.
+        front = _origin_of(self.frontend_public_base_url)
+        if front != _origin_of(self.backend_public_base_url) and front not in self.cors_origins:
+            problems.append(
+                f"CORS_ORIGINS doit contenir l'origine du front ({front!r}) : front et backend "
+                "sont servis sur deux origines différentes."
+            )
+
         if problems:
             raise ValueError("Configuration de production refusée :\n- " + "\n- ".join(problems))
         return self
+
+
+def _origin_of(url: str) -> str:
+    """Origine (`schéma://hôte[:port]`) d'une URL, en minuscules ; chaîne
+    vide si ce n'est pas une URL absolue."""
+    scheme, sep, rest = url.strip().partition("://")
+    if not sep or not scheme or not rest:
+        return ""
+    host = rest.split("/", 1)[0]
+    return f"{scheme.lower()}://{host.lower()}" if host else ""
 
 
 def _is_public_https_url(value: str) -> bool:

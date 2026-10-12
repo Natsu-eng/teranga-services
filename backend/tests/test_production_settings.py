@@ -163,3 +163,38 @@ def test_app_startup_fails_cleanly_in_production_without_secrets() -> None:
     )
     assert result.returncode != 0
     assert "jwt_secret" in result.stderr
+
+
+# ---------------------------------------------------------------------- CORS
+
+
+@pytest.mark.parametrize("origins", [["*"], ["https://*.teranga.sn"]])
+def test_cors_wildcard_is_refused_everywhere(origins: list[str]) -> None:
+    with pytest.raises(ValidationError, match="joker"):
+        _settings(environment="development", cors_origins=origins)
+
+
+@pytest.mark.parametrize("origin", ["https://teranga.sn/", "https://teranga.sn/app", "teranga.sn"])
+def test_cors_entries_must_be_bare_origins(origin: str) -> None:
+    with pytest.raises(ValidationError, match="n'est pas une origine"):
+        _settings(environment="development", cors_origins=[origin])
+
+
+def test_production_cors_must_be_https_and_include_the_front() -> None:
+    with pytest.raises(ValidationError) as exc:
+        _settings(sms_provider="console", cors_origins=["http://localhost:3000"])
+    message = _problems(exc)
+    assert "CORS_ORIGINS : 'http://localhost:3000' doit être une origine HTTPS publique" in message
+    assert "CORS_ORIGINS doit contenir l'origine du front ('https://teranga.sn')" in message
+
+
+def test_same_origin_deployment_needs_no_cors() -> None:
+    """Front et API derrière la même origine (reverse proxy) : CORS vide admis."""
+    with pytest.raises(ValidationError) as exc:
+        _settings(
+            sms_provider="unconfigured",
+            cors_origins=[],
+            frontend_public_base_url="https://teranga.sn",
+            backend_public_base_url="https://teranga.sn",
+        )
+    assert "CORS_ORIGINS" not in _problems(exc)
