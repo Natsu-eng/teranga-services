@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_payment_provider, require_role
 from app.core.config import Settings, get_settings
 from app.db.session import SessionFactory, get_session, get_session_factory
-from app.models.enums import Role, VerificationStatus
+from app.models.enums import AuditAction, AuditTargetType, Role, VerificationStatus
 from app.models.user import User
 from app.schemas.admin import (
     AdminArtisanDetailOut,
@@ -29,10 +29,12 @@ from app.schemas.admin import (
     VerificationRejectIn,
     VerificationReviewOut,
 )
+from app.schemas.audit import AuditEntryOut
 from app.schemas.interventions import InterventionOut
 from app.schemas.pagination import Page
 from app.schemas.payments import DisputeResolveIn
 from app.services import admin_verification as admin_verification_service
+from app.services import audit as audit_service
 from app.services import interventions as interventions_service
 from app.services import payments as payments_service
 from app.services.file_validation import MIME_BY_TYPE
@@ -169,4 +171,30 @@ async def resolve_dispute(
     )
     return await interventions_service.get_intervention_for_admin(
         session, intervention_id=intervention_id
+    )
+
+
+@router.get("/audit", response_model=Page[AuditEntryOut])
+async def list_audit_entries(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    _admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+    action: Annotated[AuditAction | None, Query()] = None,
+    target_type: Annotated[AuditTargetType | None, Query()] = None,
+    target_id: Annotated[uuid.UUID | None, Query()] = None,
+    actor_id: Annotated[uuid.UUID | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int | None, Query(ge=1)] = None,
+) -> Page[AuditEntryOut]:
+    """Journal d'audit, du plus récent au plus ancien. LECTURE SEULE : aucune
+    route ne modifie ni ne supprime une entrée (et la base le refuse)."""
+    return await audit_service.list_entries(
+        session,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        actor_id=actor_id,
+        page=page,
+        page_size=page_size or settings.pagination_page_size_default,
+        settings=settings,
     )

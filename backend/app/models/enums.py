@@ -168,3 +168,28 @@ class MessageKind(StrEnum):
     TEXTE = "texte"
     DEVIS = "devis"
     SYSTEME = "systeme"
+
+
+class AuditAction(StrEnum):
+    """Actions sensibles inscrites au journal d'audit (append-only)."""
+
+    ADMIN_BOOTSTRAP = "admin.bootstrap"  # premier admin, par le script CLI
+    VERIFICATION_APPROVE = "verification.approve"
+    VERIFICATION_REJECT = "verification.reject"
+    DISPUTE_RESOLVE = "dispute.resolve"
+    ARTISAN_SUSPEND = "artisan.suspend"
+    ARTISAN_REACTIVATE = "artisan.reactivate"
+    USER_GRANT_ADMIN = "user.grant_admin"
+    USER_REVOKE_ADMIN = "user.revoke_admin"
+    REVIEW_HIDE = "review.hide"
+    REVIEW_RESTORE = "review.restore"
+    COMMISSION_RATE_CREATE = "commission_rate.create"
+
+
+class AuditTargetType(StrEnum):
+    VERIFICATION = "verification"
+    INTERVENTION = "intervention"
+    ARTISAN = "artisan"
+    USER = "user"
+    REVIEW = "review"
+    COMMISSION_RATE = "commission_rate"
