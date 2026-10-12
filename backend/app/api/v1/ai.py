@@ -19,6 +19,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.client_ip import client_ip
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.db.session import get_session
@@ -38,10 +39,6 @@ class TropDeDemandesIaError(AppError):
         )
 
 
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
-
-
 @router.post("/analyze", response_model=TriageResult)
 async def analyze(
     payload: AnalyzeProblemIn,
@@ -51,7 +48,7 @@ async def analyze(
     rate_limiter: Annotated[RateLimiter, Depends(get_ai_analyze_rate_limiter)],
 ) -> TriageResult:
     allowed = await rate_limiter.check(
-        f"ip:{_client_ip(request)}",
+        f"ip:{client_ip(request, settings)}",
         max_hits=settings.rate_limit_ai_analyze_per_ip_max,
         window_seconds=settings.rate_limit_ai_analyze_per_ip_window_seconds,
     )

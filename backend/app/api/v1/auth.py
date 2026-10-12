@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.client_ip import client_ip
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.phone import normalize_phone
@@ -48,10 +49,6 @@ class TropDeDemandesError(AppError):
         )
 
 
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
-
-
 @router.post("/request-otp", status_code=status.HTTP_204_NO_CONTENT)
 async def request_otp(
     payload: RequestOtpIn,
@@ -68,7 +65,7 @@ async def request_otp(
         window_seconds=settings.rate_limit_otp_per_phone_window_seconds,
     )
     ip_ok = await rate_limiter.check(
-        f"ip:{_client_ip(request)}",
+        f"ip:{client_ip(request, settings)}",
         max_hits=settings.rate_limit_otp_per_ip_max,
         window_seconds=settings.rate_limit_otp_per_ip_window_seconds,
     )
@@ -113,7 +110,7 @@ async def verify_otp(
         user,
         settings=settings,
         user_agent=request.headers.get("user-agent"),
-        ip=_client_ip(request),
+        ip=client_ip(request, settings),
     )
     user_out = await auth_service.to_user_out(session, user)
     await session.commit()
@@ -133,7 +130,7 @@ async def refresh(
             payload.refresh,
             settings=settings,
             user_agent=request.headers.get("user-agent"),
-            ip=_client_ip(request),
+            ip=client_ip(request, settings),
         )
     except AppError:
         # Persiste la révocation (rotation normale, ou révocation de

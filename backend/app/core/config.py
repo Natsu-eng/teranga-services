@@ -270,6 +270,20 @@ class Settings(BaseSettings):
             )
         return self
 
+    # Nombre de proxys de confiance devant le backend (app/core/client_ip.py).
+    # 0 : accès direct (dev) -- l'IP du client est celle de la connexion.
+    # Railway (un proxy de bordure) : 1. Indispensable au rate limiting par
+    # IP : sans lui, derrière un proxy, tous les clients partageraient l'IP
+    # du proxy. Doit être renseigné EXPLICITEMENT en production.
+    trusted_proxy_hops: int | None = Field(default=None, ge=0, le=5)
+
+    @field_validator("trusted_proxy_hops", mode="before")
+    @classmethod
+    def empty_trusted_proxy_hops_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     # Rate limiting sur /auth/request-otp, fenêtre glissante (stockage selon
     # RATE_LIMIT_BACKEND ci-dessus).
     rate_limit_otp_per_phone_max: int = 3
@@ -702,6 +716,12 @@ class Settings(BaseSettings):
             problems.append("S3_PUBLIC_BASE_URL doit être une URL publique HTTPS.")
         if self.s3_secret_access_key and looks_like_placeholder(self.s3_secret_access_key):
             problems.append("S3_SECRET_ACCESS_KEY est une valeur d'exemple.")
+
+        if self.trusted_proxy_hops is None:
+            problems.append(
+                "TRUSTED_PROXY_HOPS doit être renseigné (1 derrière le proxy Railway) : sans "
+                "lui, le rate limiting par IP verrait tous les clients comme un seul."
+            )
 
         if self.ai_triage_provider == "mistral" and not (self.mistral_api_key or "").strip():
             problems.append("AI_TRIAGE_PROVIDER=mistral exige MISTRAL_API_KEY.")

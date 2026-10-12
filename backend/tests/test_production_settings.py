@@ -26,6 +26,7 @@ PRODUCTION: dict[str, object] = {
     "frontend_public_base_url": "https://teranga.sn",
     "backend_public_base_url": "https://api.teranga.sn",
     "cors_origins": ["https://teranga.sn"],
+    "trusted_proxy_hops": 1,
     "storage_backend": "s3",
     "s3_endpoint_url": "https://compte.r2.cloudflarestorage.com",
     "s3_access_key_id": "cle-acces-de-test",
@@ -198,3 +199,9 @@ def test_same_origin_deployment_needs_no_cors() -> None:
             backend_public_base_url="https://teranga.sn",
         )
     assert "CORS_ORIGINS" not in _problems(exc)
+
+
+def test_production_requires_an_explicit_trusted_proxy_count() -> None:
+    with pytest.raises(ValidationError) as exc:
+        _settings(sms_provider="console", trusted_proxy_hops=None)
+    assert "TRUSTED_PROXY_HOPS doit être renseigné" in _problems(exc)
