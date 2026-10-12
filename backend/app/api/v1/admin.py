@@ -1,13 +1,16 @@
-"""Endpoints /api/v1/admin (BUILD_PLAN.md, espace admin).
+"""Endpoints /api/v1/admin (BUILD_PLAN.md §3.6, back-office).
 
 Toutes les routes exigent le rôle admin (`require_role(Role.ADMIN)`, même
-dépendance que le reste de l'API, Lot 8) -- jamais atteignables autrement
-(BUILD_PLAN.md §4 : `scripts/create_admin.py` est le SEUL chemin vers ce
-rôle, aucun endpoint ne l'attribue). Un client/artisan reçoit 403
+dépendance que le reste de l'API, Lot 8), relu en base à chaque requête :
+un retrait de rôle coupe l'accès immédiatement. Un client/artisan reçoit 403
 ROLE_INSUFFISANT, un anonyme 401 NON_AUTHENTIFIE -- exactement les mêmes
-erreurs génériques que n'importe quelle autre route protégée par rôle
-ailleurs dans l'API, sans détail qui distinguerait une route admin d'une
-autre pour un tiers non autorisé.
+erreurs génériques que n'importe quelle autre route protégée par rôle, sans
+détail qui distinguerait une route admin d'une autre pour un tiers.
+
+Le PREMIER admin naît uniquement du script `scripts/create_admin.py` ;
+ensuite, un admin peut promouvoir/retirer d'autres comptes
+(`/admin/users/...`), sous garde anti-verrouillage. Chaque action sensible
+est inscrite au journal d'audit en ajout seul (`GET /admin/audit`).
 """
 
 import io
@@ -26,6 +29,8 @@ from app.models.user import User
 from app.schemas.admin import (
     AdminArtisanDetailOut,
     AdminArtisanListItemOut,
+    AdminRoleChangeIn,
+    AdminUserOut,
     AdminVerificationListItemOut,
     ArtisanReactivateIn,
     ArtisanSuspendIn,
@@ -39,6 +44,7 @@ from app.schemas.pagination import Page
 from app.schemas.payments import DisputeResolveIn
 from app.services import admin_artisans as admin_artisans_service
 from app.services import admin_overview as admin_overview_service
+from app.services import admin_users as admin_users_service
 from app.services import admin_verification as admin_verification_service
 from app.services import audit as audit_service
 from app.services import interventions as interventions_service
@@ -275,3 +281,54 @@ async def get_overview(
     """Indicateurs du back-office, tous dérivés des tables métier (zéros
     honnêtes sans données, jamais de chiffre estimé)."""
     return await admin_overview_service.get_overview(session)
+
+
+@router.get("/users", response_model=Page[AdminUserOut])
+async def list_users(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+    q: Annotated[str | None, Query(max_length=100, description="Nom ou téléphone")] = None,
+    role: Annotated[Role | None, Query()] = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int | None, Query(ge=1)] = None,
+) -> Page[AdminUserOut]:
+    return await admin_users_service.list_users(
+        session,
+        viewer=admin,
+        q=q,
+        role=role,
+        page=page,
+        page_size=page_size or settings.pagination_page_size_default,
+        settings=settings,
+    )
+
+
+@router.post("/users/{user_id}/grant-admin", response_model=AdminUserOut)
+async def grant_admin(
+    user_id: uuid.UUID,
+    payload: AdminRoleChangeIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+) -> AdminUserOut:
+    """Promeut un compte CLIENT dédié au rôle admin. Journalisé."""
+    target = await admin_users_service.grant_admin(
+        session, admin=admin, user_id=user_id, note=payload.note
+    )
+    await session.commit()
+    return await admin_users_service.get_user(session, viewer=admin, user_id=target.id)
+
+
+@router.post("/users/{user_id}/revoke-admin", response_model=AdminUserOut)
+async def revoke_admin(
+    user_id: uuid.UUID,
+    payload: AdminRoleChangeIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+) -> AdminUserOut:
+    """Retire le rôle admin (jamais le sien, jamais le dernier). Journalisé."""
+    target = await admin_users_service.revoke_admin(
+        session, admin=admin, user_id=user_id, note=payload.note
+    )
+    await session.commit()
+    return await admin_users_service.get_user(session, viewer=admin, user_id=target.id)

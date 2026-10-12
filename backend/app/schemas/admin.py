@@ -14,7 +14,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ArtisanVerifiedStatus, VerificationDocType, VerificationStatus
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    Role,
+    VerificationDocType,
+    VerificationStatus,
+)
 from app.schemas.artisans import ArtisanTradeOut, VerificationDocumentOut
 from app.schemas.audit import AuditEntryOut
 
@@ -105,4 +110,24 @@ class ArtisanSuspendIn(BaseModel):
 
 
 class ArtisanReactivateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AdminUserOut(BaseModel):
+    """Un compte dans `GET /admin/users`, avec ce que l'admin peut en faire
+    — et pourquoi pas (`guard`) : les garde-fous sont visibles avant l'action."""
+
+    id: uuid.UUID
+    full_name: str
+    phone: str
+    role: Role
+    created_at: datetime
+    has_artisan_profile: bool
+    is_self: bool
+    can_grant_admin: bool
+    can_revoke_admin: bool
+    guard: str | None
+
+
+class AdminRoleChangeIn(BaseModel):
     note: str | None = Field(default=None, max_length=1000)

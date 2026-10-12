@@ -27,6 +27,7 @@ from app.schemas.admin import AdminArtisanListItemOut
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.text_search import LIKE_ESCAPE, contains_pattern
 
 # Filtre « suspendu » en plus des statuts de vérification.
 SUSPENDED_FILTER = "suspended"
@@ -50,12 +51,6 @@ class ArtisanNonSuspenduError(AppError):
         )
 
 
-def _like(term: str) -> str:
-    """Motif LIKE sûr : `%` et `_` saisis sont cherchés littéralement."""
-    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
-
-
 async def list_artisans(
     session: AsyncSession,
     *,
@@ -77,14 +72,14 @@ async def list_artisans(
     elif status is not None:
         conditions.append(ArtisanProfile.verified_status == ArtisanVerifiedStatus(status))
     if q and q.strip():
-        pattern = _like(q.strip())
+        pattern = contains_pattern(q.strip())
         conditions.append(
             exists(
                 select(User.id).where(
                     User.id == ArtisanProfile.user_id,
                     or_(
-                        User.full_name.ilike(pattern, escape="\\"),
-                        User.phone.ilike(pattern, escape="\\"),
+                        User.full_name.ilike(pattern, escape=LIKE_ESCAPE),
+                        User.phone.ilike(pattern, escape=LIKE_ESCAPE),
                     ),
                 )
             )
