@@ -24,6 +24,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       getArtisanStats: vi.fn(),
       listMyInterventions: vi.fn(),
       updateArtisanAvailability: vi.fn(),
+      listMyReviews: vi.fn(),
     },
   };
 });
@@ -56,6 +57,8 @@ const profileFixture: MyArtisanProfile = {
   coverUrl: null,
   isAvailable: true,
   verifiedStatus: 'verified',
+  isSuspended: false,
+  suspensionReason: null,
   trades: [
     {
       id: 'trade-1',
@@ -138,6 +141,7 @@ describe('ArtisanDashboardScreen', () => {
     mockedApi.getArtisanStats.mockReset().mockResolvedValue(statsFixture);
     mockedApi.listMyInterventions.mockReset().mockResolvedValue([]);
     mockedApi.updateArtisanAvailability.mockReset();
+    mockedApi.listMyReviews.mockReset().mockResolvedValue([]);
   });
 
   afterEach(cleanup);
@@ -241,6 +245,23 @@ describe('ArtisanDashboardScreen', () => {
     // ...puis annulée une fois le PATCH rejeté, avec une erreur visible.
     expect(await screen.findByText('Impossible de contacter le serveur.')).toBeInTheDocument();
     expect(await screen.findByText('Disponible')).toBeInTheDocument();
+  });
+
+  it('dit à l’artisan suspendu qu’il l’est, pourquoi, et que ses travaux en cours continuent', async () => {
+    mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
+    mockedApi.getMyArtisanProfile.mockResolvedValue({
+      ...profileFixture,
+      isSuspended: true,
+      suspensionReason: 'Plusieurs plaintes de clients vérifiées.',
+    });
+
+    renderScreen();
+
+    expect(await screen.findByText('Compte suspendu par l’équipe Téranga')).toBeInTheDocument();
+    expect(screen.getByText('Plusieurs plaintes de clients vérifiées.')).toBeInTheDocument();
+    expect(screen.getByText(/Vos interventions en cours continuent/)).toBeInTheDocument();
+    // Ses avis reçus restent consultables.
+    expect(await screen.findByText('Avis reçus')).toBeInTheDocument();
   });
 
   it('shows the onboarding state instead of stats/requests for an unverified artisan', async () => {

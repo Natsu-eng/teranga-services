@@ -1,5 +1,5 @@
 import React from 'react';
-import { Briefcase, ClipboardCheck, Clock, Star, Wallet } from 'lucide-react';
+import { Ban, Briefcase, ClipboardCheck, Clock, Star, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { RoleRestricted } from '../../components/auth/RoleRestricted';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -17,6 +17,7 @@ import { InterventionsList } from '../interventions/InterventionsList';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
+import { MyReviewsSection } from './MyReviewsSection';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
 import { useArtisanStats } from './hooks/useArtisanStats';
 import { useAvailabilityToggle } from './hooks/useAvailabilityToggle';
@@ -151,6 +152,24 @@ export const ArtisanDashboardScreen: React.FC = () => {
           <ErrorState message={profileError.message} onRetry={reloadProfile} />
         )}
 
+        {proArtisan?.isSuspended && (
+          <Card as="aside" padding="lg" role="status" className="space-y-2 bg-destructive-soft">
+            <p className="flex items-center gap-2 font-semibold text-destructive">
+              <Ban aria-hidden className="w-5 h-5" />
+              Compte suspendu par l’équipe Téranga
+            </p>
+            <p className="text-sm text-foreground">
+              Votre profil n’apparaît plus dans la recherche et vous ne recevez plus de nouvelles
+              demandes. Vos interventions en cours continuent normalement.
+            </p>
+            {proArtisan.suspensionReason && (
+              <p className="text-sm text-foreground">
+                <span className="font-semibold">Motif :</span> {proArtisan.suspensionReason}
+              </p>
+            )}
+          </Card>
+        )}
+
         {proArtisan && !isVerified ? (
           <Card padding="lg" className="space-y-4">
             <VerificationStatusBanner status={proArtisan.verifiedStatus} />
@@ -225,6 +244,8 @@ export const ArtisanDashboardScreen: React.FC = () => {
               <SectionHeader id="demandes-recues" title="Demandes reçues" />
               <InterventionsList groupByStatus emptyTitle="Aucune demande pour le moment." />
             </section>
+
+            <MyReviewsSection />
           </>
         )}
       </div>
