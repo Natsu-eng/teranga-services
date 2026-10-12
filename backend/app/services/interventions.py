@@ -329,7 +329,10 @@ async def list_request_eligibility(
     demandes du client sont lues (jamais celles d'autrui)."""
     artisan = await get_artisan_or_404(session, artisan_id)
     requests = await requests_repository.list_open_by_client(
-        session, client.id, limit=settings.pagination_page_size_max
+        session,
+        client.id,
+        created_after=requests_service.expiry_cutoff(settings),
+        limit=settings.pagination_page_size_max,
     )
     results: list[RequestEligibilityOut] = []
     for request in requests:
@@ -390,6 +393,8 @@ async def create_intervention(
         raise DemandeAutruiInterditeError()
     if request.status is not ServiceRequestStatus.OUVERTE:
         raise DemandeNonOuverteError()
+    if requests_service.is_expired(request, settings):
+        raise requests_service.DemandeExpireeError()
 
     artisan = await get_artisan_or_404(session, payload.artisan_id)
     lat, lng = location_to_lat_lng(request)

@@ -6,10 +6,11 @@ l'inverse, le repository ne connaît pas Pydantic.
 """
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.models.enums import Role, ServiceRequestStatus
 from app.models.request import ServiceRequest
@@ -61,6 +62,43 @@ class DemandeNonAnnulableError(AppError):
         )
 
 
+class DemandeExpireeError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="DEMANDE_EXPIREE",
+            message=(
+                "Cette demande est restée trop longtemps sans artisan et a expiré. "
+                "Décrivez à nouveau votre besoin pour l'envoyer."
+            ),
+            status_code=409,
+        )
+
+
+def expiry_cutoff(settings: Settings, now: datetime | None = None) -> datetime:
+    """Une demande ouverte créée avant cet instant est expirée."""
+    return (now or datetime.now(UTC)) - timedelta(days=settings.request_open_ttl_days)
+
+
+def is_expired(request: ServiceRequest, settings: Settings, now: datetime | None = None) -> bool:
+    """Règle d'expiration, appliquée d'office (lecture, éligibilité, envoi)
+    sans dépendre du passage de scripts/expire_requests.py."""
+    return request.status is ServiceRequestStatus.OUVERTE and request.created_at <= expiry_cutoff(
+        settings, now
+    )
+
+
+async def expire_stale_requests(
+    session: AsyncSession, *, settings: Settings, now: datetime | None = None
+) -> int:
+    """Enregistre `expiree` sur les demandes ouvertes périmées (script
+    d'exploitation). Renvoie le nombre de demandes expirées."""
+    count = await requests_repository.expire_open_created_before(
+        session, expiry_cutoff(settings, now)
+    )
+    await session.flush()
+    return count
+
+
 class ServiceRequestAccesInterditError(AppError):
     def __init__(self) -> None:
         super().__init__(
@@ -84,10 +122,18 @@ def _validate_ai_estimate(min_fcfa: int | None, max_fcfa: int | None) -> None:
         raise EstimationIaInvalideError()
 
 
-def to_service_request_out(request: ServiceRequest) -> ServiceRequestOut:
+def to_service_request_out(
+    request: ServiceRequest, settings: Settings | None = None
+) -> ServiceRequestOut:
     """Assemble `ServiceRequestOut` depuis une entité déjà chargée (avec
     `trade` eager-loadé) -- réutilisé par `app.services.interventions` pour
-    nicher la demande dans `InterventionOut`."""
+    nicher la demande dans `InterventionOut`.
+
+    Statut EFFECTIF : une demande ouverte périmée est rendue `expiree`,
+    même si le script ne l'a pas encore enregistré."""
+    resolved = settings or get_settings()
+    expired = is_expired(request, resolved)
+    is_open = request.status is ServiceRequestStatus.OUVERTE and not expired
     lat, lng = location_to_lat_lng(request)
     return ServiceRequestOut(
         id=request.id,
@@ -100,7 +146,10 @@ def to_service_request_out(request: ServiceRequest) -> ServiceRequestOut:
         urgency=request.urgency,
         ai_estimate_min_fcfa=request.ai_estimate_min_fcfa,
         ai_estimate_max_fcfa=request.ai_estimate_max_fcfa,
-        status=request.status,
+        status=ServiceRequestStatus.EXPIREE if expired else request.status,
+        expires_at=(
+            request.created_at + timedelta(days=resolved.request_open_ttl_days) if is_open else None
+        ),
         created_at=request.created_at,
     )
 
@@ -195,5 +244,5 @@ async def list_my_requests(
     )
     total = await requests_repository.count_by_client(session, client.id)
 
-    items = [to_service_request_out(request) for request in requests]
+    items = [to_service_request_out(request, settings) for request in requests]
     return Page.of(items, page=page, page_size=resolved_page_size, total=total)
