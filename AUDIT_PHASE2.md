@@ -585,8 +585,13 @@ concernés :
 - **Choix assumé** : aucune annulation automatique des anciennes demandes
   mal localisées — modifier les données d'un client sans qu'il le voie
   irait contre la transparence ; l'écran les signale et propose l'action.
-- **Reste hors périmètre** : expiration automatique des demandes ouvertes
-  après N jours (exige une tâche planifiée).
+- **Expiration** : une demande restée ouverte plus de
+  `REQUEST_OPEN_TTL_DAYS` jours (30) est expirée. La règle s'applique
+  d'office, sans dépendre d'une tâche planifiée : statut effectif
+  « expiree » à la lecture, exclue de l'éligibilité, envoi refusé
+  (`DEMANDE_EXPIREE`) ; chaque demande ouverte affiche « expire le … ».
+  `scripts/expire_requests.py` (quotidien) enregistre le statut en base,
+  sans jamais toucher une demande mise en relation entre-temps.
 
 ## Mise à jour — `fix/localisation-demande`
 
