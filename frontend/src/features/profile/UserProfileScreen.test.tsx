@@ -177,6 +177,8 @@ describe('UserProfileScreen', () => {
           coverUrl: null,
           isAvailable: true,
           verifiedStatus: 'pending',
+          isSuspended: false,
+          suspensionReason: null,
           trades: [],
         },
         isLoading: false,
