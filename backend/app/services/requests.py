@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.models.enums import Role
+from app.models.enums import Role, ServiceRequestStatus
 from app.models.request import ServiceRequest
 from app.models.user import User
 from app.repositories import interventions as interventions_repository
@@ -46,6 +46,18 @@ class ServiceRequestIntrouvableError(AppError):
     def __init__(self) -> None:
         super().__init__(
             code="SERVICE_REQUEST_NOT_FOUND", message="Demande introuvable.", status_code=404
+        )
+
+
+class DemandeNonAnnulableError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="DEMANDE_NON_ANNULABLE",
+            message=(
+                "Seule une demande encore ouverte peut être annulée. Si un artisan l'a déjà "
+                "reçue, annulez d'abord la mise en relation dans « Devis et travaux »."
+            ),
+            status_code=409,
         )
 
 
@@ -118,8 +130,10 @@ async def create_request(
     return to_service_request_out(request)
 
 
-async def get_request_or_404(session: AsyncSession, request_id: uuid.UUID) -> ServiceRequest:
-    request = await requests_repository.get_by_id(session, request_id)
+async def get_request_or_404(
+    session: AsyncSession, request_id: uuid.UUID, *, for_update: bool = False
+) -> ServiceRequest:
+    request = await requests_repository.get_by_id(session, request_id, for_update=for_update)
     if request is None:
         raise ServiceRequestIntrouvableError()
     return request
@@ -142,6 +156,30 @@ async def get_request_for_user(
         if is_concerned:
             return to_service_request_out(request)
     raise ServiceRequestAccesInterditError()
+
+
+async def cancel_request(
+    session: AsyncSession, *, request_id: uuid.UUID, client: User
+) -> ServiceRequestOut:
+    """Le client annule une demande qu'il ne souhaite plus voir traitée.
+
+    - Annulation, jamais suppression : la demande passe `annulee` et reste
+      dans l'historique (des mises en relation et des fils de discussion
+      peuvent la référencer, et la mesure de l'activité en dépend).
+    - Seulement une demande OUVERTE : si un artisan l'a reçue
+      (`en_relation`), le client annule d'abord la mise en relation (qui
+      règle l'argent éventuel et rouvre la demande).
+    - Seul son propriétaire peut l'annuler. Verrou de la ligne : une mise
+      en relation concurrente ne peut pas la réécrire après coup.
+    """
+    request = await get_request_or_404(session, request_id, for_update=True)
+    if request.client_id != client.id:
+        raise ServiceRequestAccesInterditError()
+    if request.status is not ServiceRequestStatus.OUVERTE:
+        raise DemandeNonAnnulableError()
+    await requests_repository.set_status(session, request, ServiceRequestStatus.ANNULEE)
+    await session.flush()
+    return to_service_request_out(request)
 
 
 async def list_my_requests(

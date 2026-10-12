@@ -381,7 +381,11 @@ async def create_intervention(
     La demande passe à `en_relation` -- elle ne peut plus recevoir d'autre
     intervention tant que celle-ci n'est pas close.
     """
-    request = await requests_service.get_request_or_404(session, payload.service_request_id)
+    # Verrou de la demande : une annulation concurrente ne peut pas être
+    # réécrite en `en_relation` (et inversement).
+    request = await requests_service.get_request_or_404(
+        session, payload.service_request_id, for_update=True
+    )
     if request.client_id != client.id:
         raise DemandeAutruiInterditeError()
     if request.status is not ServiceRequestStatus.OUVERTE:

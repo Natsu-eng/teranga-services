@@ -61,12 +61,19 @@ async def create_service_request(
     return request
 
 
-async def get_by_id(session: AsyncSession, request_id: uuid.UUID) -> ServiceRequest | None:
+async def get_by_id(
+    session: AsyncSession, request_id: uuid.UUID, *, for_update: bool = False
+) -> ServiceRequest | None:
+    """`for_update` : verrouille la ligne jusqu'à la fin de la transaction --
+    toute décision sur le STATUT d'une demande (annulation, mise en
+    relation) passe par ce verrou, donc jamais deux décisions concurrentes."""
     stmt = (
         select(ServiceRequest)
         .where(ServiceRequest.id == request_id)
         .options(joinedload(ServiceRequest.trade))
     )
+    if for_update:
+        stmt = stmt.with_for_update(of=ServiceRequest).execution_options(populate_existing=True)
     return (await session.execute(stmt)).unique().scalar_one_or_none()
 
 
