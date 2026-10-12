@@ -10,13 +10,18 @@ from app.models.enums import ReviewStatus
 from app.models.intervention import Intervention
 from app.models.review import Review
 
+# Avis visibles et comptés dans la note : publiés, et signalés EN ATTENTE de
+# décision (un signalement seul ne fait jamais disparaître une critique ;
+# seul un admin peut masquer, de façon journalisée et réversible).
+VISIBLE_REVIEW_STATUSES = (ReviewStatus.PUBLIE, ReviewStatus.SIGNALE)
 
-async def list_published_reviews(
+
+async def list_visible_reviews(
     session: AsyncSession, artisan_id: uuid.UUID, *, limit: int, offset: int
 ) -> list[Review]:
     stmt = (
         select(Review)
-        .where(Review.artisan_id == artisan_id, Review.status == ReviewStatus.PUBLIE)
+        .where(Review.artisan_id == artisan_id, Review.status.in_(VISIBLE_REVIEW_STATUSES))
         .options(joinedload(Review.author))
         .order_by(Review.created_at.desc(), Review.id)
         .limit(limit)
@@ -26,11 +31,11 @@ async def list_published_reviews(
     return list(result.unique().scalars().all())
 
 
-async def count_published_reviews(session: AsyncSession, artisan_id: uuid.UUID) -> int:
+async def count_visible_reviews(session: AsyncSession, artisan_id: uuid.UUID) -> int:
     stmt = (
         select(func.count())
         .select_from(Review)
-        .where(Review.artisan_id == artisan_id, Review.status == ReviewStatus.PUBLIE)
+        .where(Review.artisan_id == artisan_id, Review.status.in_(VISIBLE_REVIEW_STATUSES))
     )
     return (await session.execute(stmt)).scalar_one()
 

@@ -1,7 +1,8 @@
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,11 +31,25 @@ class Review(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
 
     Ne disparaît jamais en cascade : `intervention_id`/`author_id`/
     `artisan_id` sont en `ON DELETE RESTRICT`, pas `CASCADE`.
+
+    Modération (BUILD_PLAN.md §3.6) : l'artisan concerné peut SIGNALER un
+    avis une seule fois, avec un motif (`report_reason`/`reported_at`, posés
+    ensemble et conservés comme historique). Un avis signalé reste visible et
+    compté dans la note jusqu'à la décision d'un admin (masquer ou maintenir)
+    : signaler ne suffit jamais à faire disparaître une critique. Un avis
+    n'est jamais supprimé ; le masquage est réversible et journalisé.
     """
 
     __tablename__ = "review"
     __table_args__ = (
         CheckConstraint("rating >= 1 AND rating <= 5", name="rating_between_1_and_5"),
+        CheckConstraint(
+            "(report_reason IS NULL) = (reported_at IS NULL)", name="report_fields_together"
+        ),
+        # Un avis « signalé » porte toujours le motif de son signalement.
+        CheckConstraint(
+            "status <> 'signale' OR reported_at IS NOT NULL", name="signale_has_report"
+        ),
     )
 
     intervention_id: Mapped[uuid.UUID] = mapped_column(
@@ -61,6 +76,9 @@ class Review(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
         default=ReviewStatus.PUBLIE,
         index=True,
     )
+
+    report_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     intervention: Mapped["Intervention"] = relationship(back_populates="review")
     author: Mapped["User"] = relationship(back_populates="reviews_written")

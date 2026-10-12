@@ -269,6 +269,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
                 comment=intervention.review.comment,
                 author_name=public_display_name(intervention.review.author.full_name),
                 created_at=intervention.review.created_at,
+                status=intervention.review.status,
             )
             if intervention.review
             else None

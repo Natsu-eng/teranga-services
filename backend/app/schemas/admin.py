@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import (
     ArtisanVerifiedStatus,
+    ReviewStatus,
     Role,
     VerificationDocType,
     VerificationStatus,
@@ -130,4 +131,32 @@ class AdminUserOut(BaseModel):
 
 
 class AdminRoleChangeIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AdminReviewOut(BaseModel):
+    """Un avis vu par la modération : auteur RÉEL (l'admin en a besoin pour
+    juger), artisan concerné, signalement éventuel."""
+
+    id: uuid.UUID
+    rating: int
+    comment: str
+    status: ReviewStatus
+    contact_verified: bool
+    created_at: datetime
+    intervention_id: uuid.UUID
+    author_id: uuid.UUID
+    author_name: str
+    artisan_id: uuid.UUID
+    artisan_name: str
+    report_reason: str | None
+    reported_at: datetime | None
+
+
+class ReviewHideIn(BaseModel):
+    # Motif obligatoire : masquer une critique se justifie (journalisé).
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class ReviewRestoreIn(BaseModel):
     note: str | None = Field(default=None, max_length=1000)

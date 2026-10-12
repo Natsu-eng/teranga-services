@@ -77,7 +77,8 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
         nullable=False,
         default=SubscriptionTier.FREE,
     )
-    # Dénormalisé depuis `review` (avis `publie` uniquement) : un AVG() par
+    # Dénormalisé depuis `review` (avis visibles : `publie` et `signale` en attente
+    # de décision ; jamais `masque`) : un AVG() par
     # artisan sur chaque requête de liste ne tient pas à l'échelle. Recalculé
     # par `app.services.reviews.recalculate_artisan_rating`, jamais saisi
     # directement (BUILD_PLAN.md §6, Lot 9).

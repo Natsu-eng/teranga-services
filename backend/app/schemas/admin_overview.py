@@ -62,4 +62,6 @@ class AdminOverviewOut(BaseModel):
     pending_verifications: int
     # `intervention_dispute` non tranchés sur une intervention en litige.
     open_disputes: int
+    # `review` au statut `signale` : signalés par l'artisan, décision attendue.
+    reported_reviews: int
     generated_at: datetime

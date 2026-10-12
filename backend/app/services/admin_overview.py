@@ -19,11 +19,13 @@ from app.models.enums import (
     PaymentStatus,
     PlatformFeeKind,
     PlatformFeeStatus,
+    ReviewStatus,
     Role,
     VerificationStatus,
 )
 from app.models.intervention import Intervention, InterventionDispute
 from app.models.payment import Payment, PlatformFee
+from app.models.review import Review
 from app.models.user import User
 from app.schemas.admin_overview import (
     AdminOverviewOut,
@@ -97,6 +99,11 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
             .where(ArtisanProfile.deleted_at.is_(None), ArtisanProfile.suspended_at.is_not(None))
         )
     ).scalar_one()
+    reported_reviews = (
+        await session.execute(
+            select(func.count()).select_from(Review).where(Review.status == ReviewStatus.SIGNALE)
+        )
+    ).scalar_one()
     open_disputes = (
         await session.execute(
             select(func.count())
@@ -138,5 +145,6 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
         ),
         pending_verifications=pending_verifications,
         open_disputes=open_disputes,
+        reported_reviews=reported_reviews,
         generated_at=datetime.now(UTC),
     )
