@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,6 +10,7 @@ from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.security_headers import SecurityHeadersMiddleware
+from app.services.redis_backend import realtime_over_redis
 from app.services.storage import resolve_local_dir
 
 settings = get_settings()
@@ -17,7 +21,18 @@ configure_logging(settings)
 # n'a pas à être publiée, et ses scripts tiers n'ont rien à faire sur le
 # domaine de production.
 _docs_enabled = not settings.is_production
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Redis renseigné : diffusion temps réel et tickets partagés entre
+    # instances. Sinon, rien ne change (implémentations en mémoire).
+    async with realtime_over_redis(settings.redis_url):
+        yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Téranga Services API",
     docs_url="/docs" if _docs_enabled else None,
     redoc_url="/redoc" if _docs_enabled else None,

@@ -38,9 +38,9 @@ from app.services.rate_limit import (
     get_message_send_rate_limiter,
 )
 from app.services.realtime import (
-    connection_manager,
     conversation_read_event,
     message_created_event,
+    realtime_bus,
 )
 from app.services.storage import get_message_attachment_storage_backend
 
@@ -150,7 +150,7 @@ async def send_message(
     )
     await session.commit()
     # Seulement maintenant que le message est durablement enregistré.
-    await connection_manager.publish(
+    await realtime_bus().publish(
         sent.recipient_ids, message_created_event(sent.message.model_dump(mode="json"))
     )
     return sent.message
@@ -196,7 +196,7 @@ async def send_image_message(
         if sent.stored_attachment_key is not None:
             await storage.delete(sent.stored_attachment_key)
         raise
-    await connection_manager.publish(
+    await realtime_bus().publish(
         sent.recipient_ids, message_created_event(sent.message.model_dump(mode="json"))
     )
     return sent.message
@@ -239,7 +239,7 @@ async def mark_conversation_read(
     )
     await session.commit()
     # Les autres onglets / appareils du lecteur mettent leur badge à jour.
-    await connection_manager.publish(
+    await realtime_bus().publish(
         (user.id,), conversation_read_event(result.id, result.my_last_read_seq)
     )
     return result

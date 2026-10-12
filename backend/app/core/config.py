@@ -189,18 +189,41 @@ class Settings(BaseSettings):
             )
         return v
 
+    # Redis partagé (DEPLOYMENT.md). Renseigné : le rate limiting, la
+    # diffusion temps réel de la messagerie et l'usage unique des tickets
+    # WebSocket passent par Redis -- état commun à toutes les instances.
+    # Vide (dev) : repli automatique sur l'existant (mémoire du processus ;
+    # PostgreSQL pour le rate limiting hors development/test). Indispensable
+    # dès que le backend tourne sur plus d'une instance.
+    redis_url: str | None = None
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def empty_redis_url_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("redis_url")
+    @classmethod
+    def validate_redis_url(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith(("redis://", "rediss://", "unix://")):
+            raise ValueError("REDIS_URL doit commencer par redis://, rediss:// ou unix://.")
+        return v
+
     # Stockage des compteurs de TOUS les rate limitings (OTP, triage IA,
     # documents, médias de profil) -- voir app/services/rate_limit.py.
+    # - "redis" : partagé par toutes les instances, rapide (exige REDIS_URL) ;
     # - "postgres" : table `rate_limit_hit`, partagée par toutes les
-    #   instances et persistante (survit à un redémarrage/déploiement).
+    #   instances et persistante (survit à un redémarrage/déploiement) ;
     # - "memory" : état local au processus, pour le dev et les tests.
-    # Non renseigné : "memory" en development/test, "postgres" en
-    # staging/production. "memory" explicitement demandé en staging/production
-    # est REFUSÉ au démarrage
+    # Non renseigné : "redis" si REDIS_URL est renseignée, sinon "memory" en
+    # development/test et "postgres" en staging/production. "memory"
+    # explicitement demandé en staging/production est REFUSÉ au démarrage
     # (`validate_rate_limit_backend`) : derrière plusieurs instances, chacune
     # appliquerait sa propre limite (limite réelle multipliée d'autant), et
     # chaque redéploiement remettrait tous les compteurs à zéro.
-    rate_limit_backend: Literal["memory", "postgres"] | None = None
+    rate_limit_backend: Literal["memory", "postgres", "redis"] | None = None
 
     @field_validator("rate_limit_backend", mode="before")
     @classmethod
@@ -214,7 +237,12 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_rate_limit_backend(self) -> "Settings":
         if self.rate_limit_backend is None:
-            self.rate_limit_backend = "memory" if self.is_local else "postgres"
+            if self.redis_url:
+                self.rate_limit_backend = "redis"
+            else:
+                self.rate_limit_backend = "memory" if self.is_local else "postgres"
+        elif self.rate_limit_backend == "redis" and not self.redis_url:
+            raise ValueError("RATE_LIMIT_BACKEND=redis exige REDIS_URL.")
         elif self.rate_limit_backend == "memory" and not self.is_local:
             raise ValueError(
                 f"RATE_LIMIT_BACKEND=memory est interdit avec ENVIRONMENT={self.environment} : "

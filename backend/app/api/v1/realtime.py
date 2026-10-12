@@ -37,7 +37,7 @@ from app.db.session import SessionFactory, get_session_factory
 from app.models.enums import Role
 from app.models.user import User
 from app.schemas.conversations import WsTicketOut
-from app.services.realtime import connection_manager, ws_ticket_registry
+from app.services.realtime import connection_manager, ticket_store
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
 
@@ -102,7 +102,7 @@ async def _authenticate(
     if payload["type"] != "ws":
         return None
     # Usage unique : un ticket intercepté puis rejoué est refusé.
-    if not await ws_ticket_registry.consume(payload["jti"], expires_at=float(payload["exp"])):
+    if not await ticket_store().consume(payload["jti"], expires_at=float(payload["exp"])):
         return None
 
     # Session ouverte le temps de cette vérification seulement.
