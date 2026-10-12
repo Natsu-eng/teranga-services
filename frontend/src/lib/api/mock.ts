@@ -428,4 +428,9 @@ export const mockApiClient: ApiClient = {
     await simulateNetworkLatency();
     return { eligible: true, reason: null };
   },
+
+  async cancelServiceRequest(): Promise<ServiceRequest> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette demande n'existe pas.");
+  },
 };
