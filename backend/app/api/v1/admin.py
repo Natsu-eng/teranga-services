@@ -29,10 +29,12 @@ from app.schemas.admin import (
     VerificationRejectIn,
     VerificationReviewOut,
 )
+from app.schemas.admin_overview import AdminOverviewOut
 from app.schemas.audit import AuditEntryOut
 from app.schemas.interventions import InterventionOut
 from app.schemas.pagination import Page
 from app.schemas.payments import DisputeResolveIn
+from app.services import admin_overview as admin_overview_service
 from app.services import admin_verification as admin_verification_service
 from app.services import audit as audit_service
 from app.services import interventions as interventions_service
@@ -198,3 +200,13 @@ async def list_audit_entries(
         page_size=page_size or settings.pagination_page_size_default,
         settings=settings,
     )
+
+
+@router.get("/overview", response_model=AdminOverviewOut)
+async def get_overview(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _admin: Annotated[User, Depends(require_role(Role.ADMIN))],
+) -> AdminOverviewOut:
+    """Indicateurs du back-office, tous dérivés des tables métier (zéros
+    honnêtes sans données, jamais de chiffre estimé)."""
+    return await admin_overview_service.get_overview(session)
