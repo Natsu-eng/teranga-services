@@ -75,11 +75,11 @@ Détail du contenu semé et des choix de conception : voir l'en-tête de
 
 ## Bootstrap du premier admin
 
-Le rôle `admin` ne s'obtient **jamais** via l'application (aucun endpoint,
-aucun paramètre d'API) -- c'est une décision de sécurité actée
-(BUILD_PLAN.md §4.4). Le **seul** moyen de créer un admin est ce script,
-qui promeut un utilisateur **déjà inscrit** (par téléphone + OTP, comme
-n'importe quel compte) :
+Le **premier** admin ne s'obtient **jamais** via l'application (aucun
+parcours public, aucun paramètre d'API) -- décision de sécurité actée
+(BUILD_PLAN.md §4.4). Le **seul** moyen de le créer est ce script, qui
+promeut un utilisateur **déjà inscrit** (par téléphone + OTP, comme
+n'importe quel compte) et l'inscrit au journal d'audit (`admin.bootstrap`) :
 
 ```bash
 uv run python scripts/create_admin.py +221771234567
@@ -89,6 +89,10 @@ Demande une confirmation interactive avant d'agir ; `--yes` pour l'ignorer
 (scripts/CI). Refuse explicitement un numéro qui ne correspond à aucun
 compte -- ce script ne crée jamais de compte lui-même. Idempotent :
 relancer sur un numéro déjà admin est un succès silencieux, pas une erreur.
+
+Ensuite, un admin gère les autres depuis le back-office (`/admin/utilisateurs`,
+BUILD_PLAN.md §3.6) : seul un compte client dédié peut être promu, et il
+est impossible de retirer son propre rôle ou le dernier admin.
 
 ## Lancer le serveur
 
@@ -168,6 +172,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `WS_HEARTBEAT_TIMEOUT_SECONDS` | Non (`60`) | Connexion fermée (`4408`) sans signe du client pendant ce délai. |
 | `WS_MAX_CONNECTIONS_PER_USER` | Non (`5`) | Connexions simultanées par utilisateur ; au-delà, la plus ancienne est fermée (`4429`). |
 | `COMMISSION_ROUNDING` | Non (`floor`) | Arrondi de la commission : `floor` (en faveur de l'artisan), `half_up`, `ceil`. Sans effet sur les commissions déjà enregistrées. |
+| `COMMISSION_RATE_MAX_BPS` | Non (`3000`) | Plafond de saisie d'un nouveau taux dans le back-office, en points de base (3000 = 30 %) : garde-fou contre une faute de frappe. Ne modifie aucun taux existant. |
 | `PAYMENT_PROVIDER` | Non (`sandbox`) | `sandbox` (contrat d'agrégateur simulé, interdit en prod) \| `disabled` (espèces seules). Point de bascule vers un agrégateur réel. |
 | `PAYMENT_WEBHOOK_SECRET` | Hors dev | Secret HMAC des webhooks (32 caractères min.) ; en dev avec le sandbox, dérivé de `JWT_SECRET` s'il est vide. |
 | `PAYMENT_WEBHOOK_TOLERANCE_SECONDS` | Non (`300`) | Écart maximal entre l'horodatage signé d'un webhook et l'horloge serveur. |

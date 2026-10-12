@@ -146,6 +146,21 @@ production, la CSP de [vercel.json](vercel.json) autorise `connect-src`
   payer » et l'absence de frais ajoutés ; l'artisan voit prix, commission
   (taux figé) et « Vous recevez ».
 
+## Back-office admin (`src/features/admin`)
+
+- **Une coquille, une garde** : `/admin/*` est une route imbriquée sous
+  `RequireAdminRoute` > `AdminLayout` (en-tête + huit sections). Un
+  non-admin voit la 404 standard sur chacune d'elles.
+- **Le serveur décide, l'écran informe** : les garde-fous (anti-verrouillage
+  du rôle admin, motif obligatoire, plafond de taux) sont affichés avant
+  l'action et revérifiés par le serveur ; son refus s'affiche tel quel dans
+  la feuille de confirmation (`ConfirmActionSheet`).
+- **Accès HTTP** : [admin-backoffice.ts](src/lib/api/admin-backoffice.ts),
+  fusionné dans `httpApiClient` ; son contrat `AdminBackofficeApi` fait
+  partie d'`ApiClient` (un oubli ne compile pas).
+- **Espace Pro** : bandeau de suspension (avec motif) et section « Avis
+  reçus » (signalement unique, motif obligatoire).
+
 ## Accès aux données (`src/lib/api`)
 
 `api` (index.ts) **est** `httpApiClient` : il implémente tout le contrat

@@ -11,6 +11,7 @@ Plateforme sénégalaise de mise en relation entre particuliers et artisans qual
 - **Tableau de bord artisan** — suivi des revenus, des demandes entrantes et des indicateurs de performance.
 - **Profils** — fiches artisan détaillées (photo de profil et de couverture envoyées par l'artisan, avis, réalisations, statistiques) et profil client (historique des paiements).
 - **Onboarding & vérification artisan** — profil, métiers, photos et documents de vérification (CNI, selfie) en un seul parcours, revus par un espace admin dédié.
+- **Back-office admin** — vue d'ensemble aux chiffres réels, vérifications, artisans (suspension réversible), utilisateurs (rôle admin avec anti-verrouillage : jamais soi-même, jamais le dernier), modération des avis signalés, litiges, grille de commission en ajout seul (les taux figés ne bougent jamais) et journal d'audit en ajout seul, garanti par la base.
 
 ## Topologie
 

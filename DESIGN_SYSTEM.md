@@ -191,7 +191,7 @@ dépendrait de l'ordre du CSS généré).
 | | Client (et visiteur) | Pro (artisan) | Admin |
 |---|---|---|---|
 | En-tête | **Clair** : quartier + « Bonjour, Prénom » en Fraunces, avatar ou « Se connecter » | **Bandeau vert profond** : logo Téranga **Pro** (or), avatar | **Clair et neutre** : logo + mention « Admin » |
-| Navigation basse | 4 entrées (Accueil, Recherche, Messages, Profil), surface blanche, indicateur vert clair | 3 entrées (Tableau de bord, Messages, Profil), **fond vert profond, indicateur or** | Aucune (outil interne) |
+| Navigation basse | 4 entrées (Accueil, Recherche, Messages, Profil), surface blanche, indicateur vert clair | 3 entrées (Tableau de bord, Messages, Profil), **fond vert profond, indicateur or** | Aucune (outil interne) : **navigation à huit onglets sous l'en-tête** (Vue d'ensemble, Vérifications, Artisans, Utilisateurs, Avis, Litiges, Commissions, Journal), défilement horizontal sur mobile, `aria-current` sur la section courante |
 | Héros d'écran | Fond chaud, beaucoup d'air | Le bandeau se **prolonge** dans le héros (`rounded-b-sheet`), indicateurs qui le chevauchent | — |
 | AppBar de sous-page | `tone="light"` | `tone="pro"` | — |
 | Profil | Orienté **besoins** : nouvelle demande, mes demandes, devis et travaux | Orienté **activité** : vérification, tableau de bord, profil Pro, fiche publique | — |
@@ -207,6 +207,16 @@ dépendrait de l'ordre du CSS généré).
   accueil). L'espace admin passe **uniquement** par `RequireAdminRoute` :
   un non-admin voit la 404 standard, aucun indice de l'existence de
   l'espace.
+- **Back-office, garde-fous visibles** : toute action admin sensible passe
+  par une feuille de confirmation (`ConfirmActionSheet`) qui **énonce
+  l'effet exact avant d'agir** (ex. « ses interventions en cours
+  continuent »), exige le motif quand le serveur l'exige (bouton inactif
+  tant qu'il est trop court) et affiche le refus serveur en clair (« dernier
+  administrateur »…). Ce qui n'est pas permis n'est pas proposé, et la
+  raison est écrite sur la ligne (`guard`) : jamais un bouton qui échoue.
+  Rien ne se supprime : on masque, on suspend, on ajoute un taux — et le
+  journal est en lecture seule. Côté Pro, une suspension est annoncée par
+  un bandeau avec son motif, un avis signalé ou masqué porte son statut.
 - **Anti-désintermédiation** : aucun numéro de téléphone d'artisan n'est
   affiché nulle part ; le contact passe par « Message » et « Demander un
   devis ». Un nom resté au numéro (compte hérité) n'est jamais affiché comme
