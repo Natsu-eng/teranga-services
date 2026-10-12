@@ -1,3 +1,6 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -6,12 +9,35 @@ from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.security_headers import SecurityHeadersMiddleware
+from app.services.redis_backend import realtime_over_redis
 from app.services.storage import resolve_local_dir
 
 settings = get_settings()
 configure_logging(settings)
 
-app = FastAPI(title="Téranga Services API")
+# Documentation interactive (/docs, /redoc, /openapi.json) : outil de
+# développement. Désactivée en production -- la carte complète de l'API
+# n'a pas à être publiée, et ses scripts tiers n'ont rien à faire sur le
+# domaine de production.
+_docs_enabled = not settings.is_production
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Redis renseigné : diffusion temps réel et tickets partagés entre
+    # instances. Sinon, rien ne change (implémentations en mémoire).
+    async with realtime_over_redis(settings.redis_url):
+        yield
+
+
+app = FastAPI(
+    lifespan=lifespan,
+    title="Téranga Services API",
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 register_exception_handlers(app)
 
 # Origines lues depuis CORS_ORIGINS (backend/.env) — jamais de wildcard "*"
@@ -23,12 +49,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Ajouté en dernier, donc le plus à l'extérieur : les en-têtes de sécurité
+# s'appliquent à toute réponse, préflights CORS et erreurs comprises.
+app.add_middleware(
+    SecurityHeadersMiddleware, production=settings.is_production, docs_enabled=_docs_enabled
+)
 
 app.include_router(v1_router, prefix="/api/v1")
 
-# Seul répertoire servi statiquement -- exclusivement les avatars (données
-# publiques), jamais STORAGE_LOCAL_DIR (documents de vérification, privés).
+# Seul répertoire servi statiquement -- exclusivement les médias de profil
+# (données publiques), jamais STORAGE_LOCAL_DIR (documents de vérification,
+# privés). Seulement en stockage local : en S3, le bucket public les sert.
 # Créé eagerly : StaticFiles exige que le dossier existe au montage.
-_avatar_dir = resolve_local_dir(settings.avatar_storage_local_dir)
-_avatar_dir.mkdir(parents=True, exist_ok=True)
-app.mount("/static/avatars", StaticFiles(directory=_avatar_dir), name="avatars")
+if settings.avatar_storage_backend == "local":
+    _avatar_dir = resolve_local_dir(settings.avatar_storage_local_dir)
+    _avatar_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static/avatars", StaticFiles(directory=_avatar_dir), name="avatars")

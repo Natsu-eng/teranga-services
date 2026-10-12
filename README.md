@@ -24,6 +24,8 @@ Monorepo à deux services indépendants, chacun avec son propre cycle de build, 
 
 Base de données **PostgreSQL** partagée par le backend (Postgres local en dev, Railway en prod — voir [BUILD_PLAN.md](BUILD_PLAN.md)).
 
+**Mise en production** : runbook complet dans [DEPLOYMENT.md](DEPLOYMENT.md) (Railway : backend Docker, front statique, PostgreSQL + PostGIS, Redis, stockage R2/S3 ; variables, étapes, durcissement). Points à lire en premier : fournisseur SMS réel encore à brancher (bloquant), PostGIS à vérifier sur Railway, stockage objet obligatoire (disque éphémère).
+
 Le frontend est un projet **Vite pur** : en dev, le serveur Vite proxifie `/api/v1/*` vers FastAPI ; en production, `vite build` produit des fichiers statiques servis par l'hébergeur (Vercel), qui appellent directement l'API (`VITE_API_BASE_URL`). Aucun serveur Node côté front, aucun secret dans le front : l'IA, l'auth et toutes les clés vivent dans le backend. L'ancien serveur Express (`frontend/server.ts`) et son endpoint Gemini ont été retirés au Lot 13.
 
 **Lancer en local** : deux terminaux — `cd backend && uv run uvicorn app.main:app --reload --port 8000`, puis `cd frontend && npm run dev` (<http://localhost:3000>). Détail : [frontend/README.md](frontend/README.md#développement-local--lancer-les-deux-services).
@@ -36,6 +38,8 @@ teranga-services/
 ├── BUILD_PLAN.md       # document de référence Phase 2 (backend, données, API)
 ├── AUDIT.md             # audit historique
 ├── AUDIT_PHASE2.md      # audit Phase 2, journal des lots livrés
+├── DEPLOYMENT.md        # runbook de mise en production (Railway)
+├── docker-compose.dev.yml # facultatif : vrai Redis + MinIO (S3) pour essai local
 ├── frontend/             # application web — voir frontend/README.md
 └── backend/              # API FastAPI — voir backend/README.md
 ```

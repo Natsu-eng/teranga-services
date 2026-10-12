@@ -14,13 +14,16 @@ de la navigation. L'isolation est structurelle : le serveur ne pousse un
 (`publish(recipient_ids, ...)`) ; un client ne peut s'abonner à rien, il ne
 peut donc jamais recevoir le fil d'autrui.
 
-**Dette de déploiement (documentée dans BUILD_PLAN.md)** : l'état est en
-mémoire, local au processus. En instance unique (lancement), c'est exact.
-Derrière plusieurs instances (Railway multi-réplicas), un message enregistré
-par l'instance A ne serait pas poussé aux sockets ouvertes sur l'instance B
-(qui le verraient au prochain repli polling seulement) ; il faudra alors un
-bus partagé (Redis pub/sub). Même remarque pour le registre des tickets à
-usage unique ci-dessous.
+**Plusieurs instances (DEPLOYMENT.md)** : les connexions d'un utilisateur
+vivent sur l'instance qui les a acceptées. La diffusion passe donc par un
+`RealtimeBus` et l'usage unique des tickets par un `TicketStore` :
+
+- sans `REDIS_URL` (dev, instance unique) : `LocalRealtimeBus` et
+  `WsTicketRegistry`, en mémoire -- le comportement historique ;
+- avec `REDIS_URL` : `RedisRealtimeBus` (pub/sub, chaque instance livre à
+  ses propres connexions) et `RedisTicketStore` (un ticket consommé sur une
+  instance est refusé partout), branchés au démarrage de l'application
+  (`configure_realtime`, app/main.py).
 """
 
 import asyncio
@@ -131,9 +134,52 @@ class WsTicketRegistry:
             return True
 
 
-# Instances du processus (voir la dette multi-instance en tête de module).
+class RealtimeBus(Protocol):
+    async def publish(
+        self, recipient_ids: tuple[uuid.UUID, ...], event: dict[str, Any]
+    ) -> None: ...
+
+
+class TicketStore(Protocol):
+    async def consume(self, jti: str, *, expires_at: float) -> bool: ...
+
+
+class LocalRealtimeBus:
+    """Instance unique : livre directement aux connexions de ce processus."""
+
+    def __init__(self, manager: ConnectionManager) -> None:
+        self._manager = manager
+
+    async def publish(self, recipient_ids: tuple[uuid.UUID, ...], event: dict[str, Any]) -> None:
+        await self._manager.publish(recipient_ids, event)
+
+
+# Connexions de CE processus (toujours locales, par nature).
 connection_manager = ConnectionManager()
 ws_ticket_registry = WsTicketRegistry()
+
+# Implémentations actives : locales par défaut, remplacées par Redis au
+# démarrage si REDIS_URL est renseignée (voir `configure_realtime`).
+_bus: RealtimeBus = LocalRealtimeBus(connection_manager)
+_ticket_store: TicketStore = ws_ticket_registry
+
+
+def realtime_bus() -> RealtimeBus:
+    return _bus
+
+
+def ticket_store() -> TicketStore:
+    return _ticket_store
+
+
+def configure_realtime(bus: RealtimeBus, store: TicketStore) -> None:
+    global _bus, _ticket_store
+    _bus, _ticket_store = bus, store
+
+
+def reset_realtime() -> None:
+    """Retour aux implémentations locales (arrêt de l'application, tests)."""
+    configure_realtime(LocalRealtimeBus(connection_manager), ws_ticket_registry)
 
 
 def message_created_event(message: dict[str, Any]) -> dict[str, Any]:

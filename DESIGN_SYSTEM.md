@@ -230,6 +230,9 @@ dépendrait de l'ordre du CSS généré).
   passe et quand (séquestre, versement, remboursement), formulée pour la
   partie qui lit. Les espèces sont proposées avec leur conséquence (« sans
   protection du séquestre »). Aucun montant n'est calculé par le front.
+  **Lancement espèces seulement** (paiement en ligne coupé) : on ne promet
+  rien qui n'existe pas — ni séquestre, ni « payer en ligne » ; le volet
+  invite à « Déclarer le paiement en espèces » et l'écran l'explique.
 - **Messagerie, transparence d'abord** : la liste rappelle que numéros et
   e-mails sont masqués automatiquement et que les photos ne sont visibles
   que des deux participants ; un message masqué le dit aux deux parties

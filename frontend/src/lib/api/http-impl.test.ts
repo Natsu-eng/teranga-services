@@ -1403,6 +1403,7 @@ describe('httpApiClient', () => {
       released_at: null,
       refunded_at: null,
       payout: null,
+      online_available: true,
     };
 
     it("ouvre un paiement en n'envoyant QUE l'intervention et le moyen, jamais un montant", async () => {
@@ -1430,6 +1431,7 @@ describe('httpApiClient', () => {
         releasedAt: null,
         refundedAt: null,
         payout: null,
+        onlineAvailable: true,
       });
     });
 

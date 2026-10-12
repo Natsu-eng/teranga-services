@@ -22,7 +22,7 @@ class JsonFormatter(logging.Formatter):
 
 def configure_logging(settings: Settings) -> None:
     handler = logging.StreamHandler(sys.stdout)
-    if settings.app_env == "prod":
+    if settings.environment in ("staging", "production"):
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))

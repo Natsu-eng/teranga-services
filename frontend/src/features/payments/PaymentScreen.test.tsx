@@ -192,4 +192,27 @@ describe('PaymentScreen', () => {
     expect(await screen.findByRole('radio', { name: /Espèces/ })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Wave/ })).not.toBeInTheDocument();
   });
+
+  it('lancement espèces seulement : aucune promesse de séquestre, le cash fonctionne', async () => {
+    mockedApi.getPaymentOptions.mockResolvedValue({
+      onlineChannels: [],
+      cashEnabled: true,
+      currency: 'XOF',
+    });
+    mockedApi.initPayment.mockResolvedValue(
+      paymentFixture({ status: 'reussi', channel: 'cash', onlineAvailable: false }),
+    );
+    renderScreen();
+
+    expect(
+      await screen.findByText(/Le paiement en ligne n.est pas encore disponible/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Paiement en ligne protégé/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/séquestre/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('radio')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Je paierai 12 000 FCFA en espèces' }));
+
+    await waitFor(() => expect(mockedApi.initPayment).toHaveBeenCalledWith('int-1', 'cash'));
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  });
 });

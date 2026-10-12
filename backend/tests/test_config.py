@@ -124,3 +124,17 @@ def test_env_example_is_a_valid_configuration(monkeypatch: MonkeyPatch) -> None:
 
     assert settings.rate_limit_backend == "memory"
     assert settings.payment_provider == "sandbox"
+
+
+def test_env_example_documents_every_setting() -> None:
+    """.env.example est l'inventaire COMPLET des variables (DEPLOYMENT.md) :
+    tout réglage ajouté à Settings doit y figurer, et rien d'inconnu."""
+    import re
+    from pathlib import Path
+
+    example = (Path(__file__).resolve().parents[1] / ".env.example").read_text(encoding="utf-8")
+    documented = set(re.findall(r"^([A-Z][A-Z0-9_]*)=", example, re.MULTILINE))
+    fields = {name.upper() for name in Settings.model_fields}
+
+    assert fields - documented == set(), "réglages absents de .env.example"
+    assert documented - fields == set(), "variables de .env.example inconnues de Settings"

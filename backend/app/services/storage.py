@@ -3,15 +3,19 @@
 et `app.services.ai_triage_providers` : le code métier ne connaît que
 `StorageBackend`, jamais son implémentation concrète.
 
-`LocalStorageBackend` est le seul fournisseur implémenté à ce stade (dev) :
-il écrit sur disque local, hors du dépôt git (`backend/var/`, ignoré par
-`backend/.gitignore`) et jamais servi statiquement (`app.main` ne monte
-aucun `StaticFiles` -- tout accès passe par un endpoint authentifié qui lit
-via `retrieve()`). **Basculer vers un fournisseur cloud privé en prod**
-(ex. S3-compatible avec accès privé, GCS) ne demandera d'écrire qu'une
-nouvelle classe implémentant ce même Protocol et de la brancher dans
-`get_storage_backend` via `STORAGE_BACKEND=<nom>` -- aucune réécriture du
-code appelant (`app.services.documents`).
+Deux fournisseurs, choisis par `STORAGE_BACKEND` (et ses variantes par
+usage) :
+
+- `LocalStorageBackend` (dev, défaut) : disque local, hors du dépôt git
+  (`backend/var/`, ignoré par `backend/.gitignore`) ; seuls les médias
+  publics de profil sont montés en `StaticFiles` (app/main.py) ;
+- `S3StorageBackend` (app/services/s3_storage.py, OBLIGATOIRE en
+  production : le disque Railway est éphémère) : documents d'identité et
+  pièces jointes dans le bucket PRIVÉ, médias de profil dans le bucket
+  PUBLIC, deux buckets distincts.
+
+Le code appelant (`app.services.documents`, avatars, messagerie) ne connaît
+que le contrat `StorageBackend`.
 
 Le contenu est manipulé en `bytes` (jamais un vrai flux) : les documents
 concernés (CNI, selfie) sont de petits fichiers, plafonnés en taille par
@@ -26,9 +30,12 @@ manipule que des `bytes` en interne.
 import asyncio
 import logging
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from app.core.config import Settings, get_settings
+
+if TYPE_CHECKING:
+    from app.services.s3_storage import S3Client
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +73,8 @@ class LocalStorageBackend:
     de tout répertoire servi statiquement (voir docstring du module).
 
     Le déploiement en production sur Railway (BUILD_PLAN.md §1) ne conserve
-    pas de disque persistant entre déploiements -- ce backend n'est donc
-    volontairement PAS adapté à la prod en l'état ; c'est un fournisseur
-    cloud privé qui doit le remplacer avant la mise en production réelle
-    (voir `get_storage_backend`).
+    pas de disque persistant entre déploiements -- ce backend est donc
+    REFUSÉ en production (Settings) : STORAGE_BACKEND=s3 y est obligatoire.
     """
 
     def __init__(self, base_dir: Path) -> None:
@@ -119,15 +124,49 @@ def resolve_local_dir(raw: str) -> Path:
     return path
 
 
+# Préfixes (« dossiers ») par usage dans les buckets S3.
+S3_DOCUMENTS_PREFIX = "verification-documents"
+S3_ATTACHMENTS_PREFIX = "message-attachments"
+S3_PUBLIC_MEDIA_PREFIX = "profile-media"
+
+_s3_clients: dict[tuple[str | None, str | None, str], "S3Client"] = {}
+
+
+def get_s3_client(settings: Settings) -> "S3Client":
+    """Client boto3 unique par configuration (pool de connexions partagé)."""
+    from app.services.s3_storage import build_s3_client
+
+    key = (settings.s3_endpoint_url, settings.s3_access_key_id, settings.s3_region)
+    if key not in _s3_clients:
+        _s3_clients[key] = build_s3_client(settings)
+    return _s3_clients[key]
+
+
+def _unknown_backend(name: str, value: object) -> ValueError:
+    # Jamais de repli silencieux sur le disque local : une valeur inconnue
+    # (qui aurait contourné la validation de Settings) est une erreur.
+    return ValueError(f"{name}={value!r} : fournisseur de stockage inconnu (local ou s3).")
+
+
+def _s3_backend(settings: Settings, *, prefix: str, public: bool) -> StorageBackend:
+    from app.services.s3_storage import S3StorageBackend
+
+    # Le bucket découle de l'USAGE, jamais d'un réglage par appelant : un
+    # stockage privé ne peut pas viser le bucket public.
+    bucket = settings.s3_public_bucket if public else settings.s3_private_bucket
+    if not bucket:  # garanti par Settings.validate_storage ; défense en profondeur
+        raise RuntimeError("Bucket S3 non configuré.")
+    return S3StorageBackend(get_s3_client(settings), bucket=bucket, prefix=prefix, public=public)
+
+
 def get_storage_backend(settings: Settings | None = None) -> StorageBackend:
+    """Stockage PRIVÉ des documents de vérification (CNI, selfie)."""
     settings = settings or get_settings()
+    if settings.storage_backend == "s3":
+        return _s3_backend(settings, prefix=S3_DOCUMENTS_PREFIX, public=False)
     if settings.storage_backend == "local":
         return LocalStorageBackend(resolve_local_dir(settings.storage_local_dir))
-    raise NotImplementedError(
-        f"Backend de stockage {settings.storage_backend!r} non implémenté. "
-        "Choisissez et implémentez un fournisseur cloud privé (voir "
-        "app/services/storage.py) avant de l'activer via STORAGE_BACKEND."
-    )
+    raise _unknown_backend("STORAGE_BACKEND", settings.storage_backend)
 
 
 def get_avatar_storage_backend(settings: Settings | None = None) -> StorageBackend:
@@ -138,13 +177,11 @@ def get_avatar_storage_backend(settings: Settings | None = None) -> StorageBacke
     aux documents de vérification, une photo de profil est censée être
     visible publiquement (résultats de recherche, profil détaillé)."""
     settings = settings or get_settings()
+    if settings.avatar_storage_backend == "s3":
+        return _s3_backend(settings, prefix=S3_PUBLIC_MEDIA_PREFIX, public=True)
     if settings.avatar_storage_backend == "local":
         return LocalStorageBackend(resolve_local_dir(settings.avatar_storage_local_dir))
-    raise NotImplementedError(
-        f"Backend de stockage avatar {settings.avatar_storage_backend!r} non implémenté. "
-        "Choisissez et implémentez un fournisseur cloud (bucket public, CDN) avant de "
-        "l'activer via AVATAR_STORAGE_BACKEND."
-    )
+    raise _unknown_backend("AVATAR_STORAGE_BACKEND", settings.avatar_storage_backend)
 
 
 def get_message_attachment_storage_backend(settings: Settings | None = None) -> StorageBackend:
@@ -155,11 +192,10 @@ def get_message_attachment_storage_backend(settings: Settings | None = None) -> 
     distinct (`Settings.message_attachment_storage_local_dir`) pour qu'une
     erreur de configuration d'un stockage n'expose jamais l'autre."""
     settings = settings or get_settings()
+    if settings.message_attachment_storage_backend == "s3":
+        return _s3_backend(settings, prefix=S3_ATTACHMENTS_PREFIX, public=False)
     if settings.message_attachment_storage_backend == "local":
         return LocalStorageBackend(resolve_local_dir(settings.message_attachment_storage_local_dir))
-    raise NotImplementedError(
-        "Backend de stockage des pièces jointes "
-        f"{settings.message_attachment_storage_backend!r} non implémenté. Choisissez et "
-        "implémentez un fournisseur cloud PRIVÉ avant de l'activer via "
-        "MESSAGE_ATTACHMENT_STORAGE_BACKEND."
+    raise _unknown_backend(
+        "MESSAGE_ATTACHMENT_STORAGE_BACKEND", settings.message_attachment_storage_backend
     )

@@ -73,6 +73,16 @@ uv run python scripts/seed.py
 Détail du contenu semé et des choix de conception : voir l'en-tête de
 [scripts/seed.py](scripts/seed.py).
 
+Ce sont des données de **démonstration** : le script **refuse** de tourner
+en production. En production, seules les données de référence (métiers,
+taux de commission global initial, journalisé) sont semées, par un script
+sûr et idempotent :
+
+```bash
+uv run python scripts/seed_reference.py            # taux initial 10 %
+uv run python scripts/seed_reference.py --rate-bps 0
+```
+
 ## Bootstrap du premier admin
 
 Le **premier** admin ne s'obtient **jamais** via l'application (aucun
@@ -105,14 +115,37 @@ uv run uvicorn app.main:app --reload --port 8000
 - Liveness : `GET /api/v1/health`
 - Readiness (vérifie Postgres) : `GET /api/v1/health/ready`
 
+En production (`ENVIRONMENT=production`), la documentation interactive est
+désactivée et le démarrage refuse toute configuration incomplète ou de dev.
+Image Docker, configuration Railway (migrations en pré-déploiement) et
+runbook : [Dockerfile](Dockerfile), [railway.json](railway.json),
+[DEPLOYMENT.md](../DEPLOYMENT.md).
+
+## Production : replis et services partagés
+
+| Besoin | Dev (défaut, rien à configurer) | Production |
+| --- | --- | --- |
+| Rate limiting | mémoire du processus | Redis (`REDIS_URL`), sinon PostgreSQL |
+| Temps réel (diffusion, tickets WebSocket) | mémoire (instance unique) | Redis pub/sub et `SET NX` (`REDIS_URL`) — obligatoire dès 2 instances |
+| Fichiers | disque local (`backend/var/`) | S3/R2 obligatoire (`STORAGE_BACKEND=s3`) : bucket privé (CNI, pièces jointes) + bucket public (photos de profil) |
+| Paiement | sandbox | `disabled` au lancement (espèces seulement) |
+| SMS | console (code dans les logs) | fournisseur réel (**à brancher**) |
+| IP du client | connexion directe | `TRUSTED_PROXY_HOPS=1` derrière Railway |
+| En-têtes de sécurité | CSP, nosniff, X-Frame-Options, Referrer-Policy, Permissions-Policy | + HSTS |
+
+Essai local de la configuration de production (facultatif) :
+`docker compose -f ../docker-compose.dev.yml up -d` (DEPLOYMENT.md §9).
+
 ## Variables d'environnement
 
 | Variable | Requise | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | Oui | URL de connexion Postgres, driver `asyncpg` obligatoire. Aucune valeur par défaut : le démarrage échoue explicitement si absente ou malformée. |
-| `APP_ENV` | Non (`dev`) | `dev` \| `staging` \| `prod`. Contrôle le format des logs (lisible en dev, JSON en prod) et si le provider SMS console journalise le code OTP. |
+| `ENVIRONMENT` | Non (`development`) | `development` \| `test` \| `staging` \| `production` (ensemble fermé ; ancien nom `APP_ENV`, valeurs `dev`/`prod` acceptées). Format des logs (JSON hors development/test), code OTP journalisé seulement en development/test, et en production fail-fast sur toute configuration incomplète ou de dev (DEPLOYMENT.md). |
 | `LOG_LEVEL` | Non (`INFO`) | Niveau de log Python standard. |
-| `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules. Pas de wildcard. |
+| `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules : origines exactes (`https://hote[:port]`, sans chemin ni `/` final), jamais de joker (refusés au démarrage). En production : HTTPS publiques, et l'origine du front obligatoire si front et API sont sur deux origines. |
+| `TRUSTED_PROXY_HOPS` | Non (vide = 0) ; **obligatoire en production** | Nombre de proxys de confiance : l'IP du client est lue à cette position en partant de la droite de `X-Forwarded-For` (non falsifiable). Railway : `1`. |
+| `REDIS_URL` | Non (vide) | Redis partagé (`redis://`, `rediss://`) : rate limiting, diffusion temps réel, tickets WebSocket. Vide : repli mémoire (et PostgreSQL pour le rate limiting hors dev). Obligatoire dès 2 instances. |
 | `JWT_SECRET` | Oui | Secret de signature des JWT. Aucune valeur par défaut : le démarrage échoue si absent ou trop court (< 32 caractères). |
 | `JWT_ACCESS_TTL_SECONDS` | Non (`900`) | Durée de vie de l'access token (secondes). |
 | `JWT_REFRESH_TTL_SECONDS` | Non (`2592000`) | Durée de vie du refresh token (secondes, 30 jours par défaut). |
@@ -123,7 +156,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
 | `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
 | `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
-| `RATE_LIMIT_BACKEND` | Non (`memory` en dev, `postgres` sinon) | Stockage des compteurs de rate limiting : `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors dev. |
+| `RATE_LIMIT_BACKEND` | Non (`redis` si `REDIS_URL`, sinon `memory` en development/test et `postgres` ailleurs) | Stockage des compteurs de rate limiting : `redis`, `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors development/test. |
 | `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
 | `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
@@ -141,12 +174,16 @@ uv run uvicorn app.main:app --reload --port 8000
 | `MISTRAL_TIMEOUT_SECONDS` | Non (`10`) | Timeout explicite sur l'appel Mistral (secondes) -- au-delà, fallback heuristique. |
 | `RATE_LIMIT_AI_ANALYZE_PER_IP_MAX` | Non (`20`) | Nombre max de `POST /ai/analyze` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_AI_ANALYZE_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
-| `STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Fournisseur de stockage des documents de vérification -- voir [Onboarding artisan](#onboarding-artisan-profil-métiers-documents). |
+| `STORAGE_BACKEND` | Non (`local`) ; `s3` **obligatoire en production** | `local` (disque, dev) ou `s3` (R2, S3). Fournisseur de tous les fichiers (documents, médias de profil, pièces jointes) sauf variante -- voir [Onboarding artisan](#onboarding-artisan-profil-métiers-documents). `local` refusé en production (disque éphémère). |
+| `S3_ENDPOINT_URL`, `S3_REGION` | Si `s3` | Point d'accès (vide pour AWS ; R2 : `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) et région (`auto` pour R2). |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Si `s3` | Clé d'API du stockage. |
+| `S3_PRIVATE_BUCKET` | Si `s3` | Bucket PRIVÉ : documents d'identité et pièces jointes (aucun accès public). |
+| `S3_PUBLIC_BUCKET`, `S3_PUBLIC_BASE_URL` | Si médias de profil en `s3` | Bucket PUBLIC (différent du privé, refusé sinon) et son URL publique HTTPS. |
 | `STORAGE_LOCAL_DIR` | Non (`var/artisan-documents`) | Répertoire de stockage local, relatif à `backend/` ou chemin absolu. |
 | `STORAGE_MAX_UPLOAD_BYTES` | Non (`8388608`) | Taille maximale d'un document uploadé (octets, 8 Mo par défaut). |
 | `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_MAX` | Non (`10`) | Nombre max d'uploads de documents par utilisateur sur la fenêtre glissante. |
 | `RATE_LIMIT_DOCUMENT_UPLOAD_PER_USER_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par utilisateur (secondes). |
-| `AVATAR_STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Stockage PUBLIC des médias de profil (avatar et couverture), distinct du stockage privé des documents. |
+| `AVATAR_STORAGE_BACKEND` | Non (vide = `STORAGE_BACKEND`) | `local` ou `s3` (bucket public). Stockage PUBLIC des médias de profil (avatar et couverture), distinct du stockage privé des documents. |
 | `AVATAR_STORAGE_LOCAL_DIR` | Non (`var/public/avatars`) | Répertoire servi en lecture publique sous `/static/avatars`, relatif à `backend/` ou chemin absolu. |
 | `AVATAR_MAX_UPLOAD_BYTES` | Non (`10485760`) | Taille maximale du fichier envoyé pour une photo de profil (octets, 10 Mo). Le front la lit via `GET /artisans/me/media-constraints`. |
 | `COVER_MAX_UPLOAD_BYTES` | Non (`10485760`) | Idem pour la photo de couverture. |
@@ -160,7 +197,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `MESSAGING_HISTORY_PAGE_SIZE_MAX` | Non (`100`) | Plafond de `limit` sur `GET .../messages`. |
 | `RATE_LIMIT_MESSAGE_SEND_PER_USER_MAX` | Non (`30`) | Nombre max de messages texte par utilisateur sur la fenêtre glissante. |
 | `RATE_LIMIT_MESSAGE_SEND_PER_USER_WINDOW_SECONDS` | Non (`60`) | Largeur de la fenêtre glissante (secondes). |
-| `MESSAGE_ATTACHMENT_STORAGE_BACKEND` | Non (`local`) | `local` (seul implémenté). Stockage PRIVÉ des photos de la messagerie. |
+| `MESSAGE_ATTACHMENT_STORAGE_BACKEND` | Non (vide = `STORAGE_BACKEND`) | `local` ou `s3` (bucket privé). Stockage PRIVÉ des photos de la messagerie. |
 | `MESSAGE_ATTACHMENT_STORAGE_LOCAL_DIR` | Non (`var/message-attachments`) | Répertoire privé (jamais servi en statique), relatif à `backend/` ou chemin absolu. |
 | `MESSAGE_ATTACHMENT_MAX_UPLOAD_BYTES` | Non (`10485760`) | Taille maximale d'une photo envoyée (octets, 10 Mo). |
 | `MESSAGE_ATTACHMENT_MAX_SIDE_PX` | Non (`1600`) | Côté le plus long de la photo stockée, après réencodage. |
@@ -173,7 +210,8 @@ uv run uvicorn app.main:app --reload --port 8000
 | `WS_MAX_CONNECTIONS_PER_USER` | Non (`5`) | Connexions simultanées par utilisateur ; au-delà, la plus ancienne est fermée (`4429`). |
 | `COMMISSION_ROUNDING` | Non (`floor`) | Arrondi de la commission : `floor` (en faveur de l'artisan), `half_up`, `ceil`. Sans effet sur les commissions déjà enregistrées. |
 | `COMMISSION_RATE_MAX_BPS` | Non (`3000`) | Plafond de saisie d'un nouveau taux dans le back-office, en points de base (3000 = 30 %) : garde-fou contre une faute de frappe. Ne modifie aucun taux existant. |
-| `PAYMENT_PROVIDER` | Non (`sandbox`) | `sandbox` (contrat d'agrégateur simulé, interdit en prod) \| `disabled` (espèces seules). Point de bascule vers un agrégateur réel. |
+| `PAYMENT_PROVIDER` | Non (`sandbox`) | `sandbox` (contrat d'agrégateur simulé, interdit en production) \| `disabled` (espèces seules : paiement en ligne refusé avec `PAIEMENT_EN_LIGNE_INDISPONIBLE`, `online_available` faux). Point de bascule vers un agrégateur réel. |
+| `PAYMENT_CURRENCY` | Non (`XOF`) | Devise unique (franc CFA BCEAO, montants entiers). |
 | `PAYMENT_WEBHOOK_SECRET` | Hors dev | Secret HMAC des webhooks (32 caractères min.) ; en dev avec le sandbox, dérivé de `JWT_SECRET` s'il est vide. |
 | `PAYMENT_WEBHOOK_TOLERANCE_SECONDS` | Non (`300`) | Écart maximal entre l'horodatage signé d'un webhook et l'horloge serveur. |
 | `PAYMENT_WEBHOOK_MAX_BODY_BYTES` | Non (`65536`) | Taille maximale du corps d'un webhook. |
@@ -201,7 +239,7 @@ et `POST /auth/logout-all` révoquent respectivement une session ou toutes.
 Détail complet des garde-fous de sécurité : [BUILD_PLAN.md §4](../BUILD_PLAN.md#4-authentification-téléphone--otp).
 
 **Provider SMS** : `SMS_PROVIDER=console` (défaut, dev) journalise le code
-en clair dans les logs -- uniquement si `APP_ENV=dev` (vérifié deux fois :
+en clair dans les logs -- uniquement en `development`/`test` (vérifié deux fois :
 au choix du provider *et* dans le provider lui-même, pour ne jamais faire
 fuiter un code hors dev même mal configuré). Aucun fournisseur SMS
 commercial n'est branché à ce stade ; ce choix reste à trancher avant la
@@ -378,10 +416,12 @@ Montants, mesures, heures et dates ne sont jamais masqués
 **Photos** : réencodées (EXIF/GPS retirés, 1 600 px max), stockage privé à
 clé aléatoire, supprimées si l'enregistrement échoue.
 
-**Limite actuelle — instance unique.** Les connexions WebSocket et les
-tickets consommés sont en mémoire du processus : un bus partagé (Redis
-pub/sub) est **obligatoire avant** de lancer plusieurs instances du backend
-(BUILD_PLAN.md §3.4, « Dette multi-instance »).
+**Plusieurs instances.** Sans `REDIS_URL`, les connexions WebSocket et
+les tickets consommés vivent en mémoire du processus (instance unique,
+comportement de dev). Avec `REDIS_URL`, la diffusion passe par Redis
+pub/sub et les tickets par `SET NX` : chaque instance livre à ses propres
+connexions, un ticket consommé ailleurs est refusé. `REDIS_URL` est donc
+**obligatoire dès 2 instances** (BUILD_PLAN.md §3.4, DEPLOYMENT.md).
 
 ## Lieu des demandes et éligibilité avant envoi
 

@@ -296,8 +296,25 @@ async def test_with_online_payment_disabled_only_cash_remains(db_session: AsyncS
         cash = await init_payment(http, engagement, "cash")
 
     assert options.json() == {"online_channels": [], "cash_enabled": True, "currency": "XOF"}
+    # Paiement en ligne refusé avec un message qui dit quoi faire.
     assert online.status_code == 422
+    assert online.json()["error"]["code"] == "PAIEMENT_EN_LIGNE_INDISPONIBLE"
+    assert "espèces" in online.json()["error"]["message"]
+    # Les espèces fonctionnent, et le résumé dit qu'aucun séquestre n'est proposé.
     assert cash.status_code == 200
+    assert cash.json()["status"] == "reussi"
+    assert cash.json()["online_available"] is False
+
+
+async def test_the_summary_says_when_online_payment_is_offered(db_session: AsyncSession) -> None:
+    engagement = await make_payable_engagement(db_session)
+
+    async with client() as http:
+        view = await http.get(
+            f"/api/v1/interventions/{engagement.intervention.id}", headers=auth(engagement.client)
+        )
+
+    assert view.json()["payment"]["online_available"] is True
 
 
 async def test_options_list_the_configured_means(db_session: AsyncSession) -> None:

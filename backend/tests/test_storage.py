@@ -70,9 +70,10 @@ def test_get_storage_backend_resolves_relative_dir_outside_cwd() -> None:
     assert backend._base_dir.parent.name == "var"  # noqa: SLF001
 
 
-def test_get_storage_backend_rejects_unimplemented_backend() -> None:
+def test_get_storage_backend_rejects_unknown_backend() -> None:
+    # Jamais de repli silencieux sur le disque local pour une valeur inconnue.
     settings = get_settings().model_copy(update={"storage_backend": "local"})
-    object.__setattr__(settings, "storage_backend", "s3")  # contourne Literal pour le test
+    object.__setattr__(settings, "storage_backend", "gcs")  # contourne Literal pour le test
 
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(ValueError, match="fournisseur de stockage inconnu"):
         get_storage_backend(settings)

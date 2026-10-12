@@ -1,0 +1,34 @@
+# Service du front sur Railway (DEPLOYMENT.md) : fichiers statiques du build
+# Vite, fallback SPA, cache des assets, et les MÊMES en-têtes de sécurité que
+# vercel.json (égalité vérifiée par src/deploymentConfig.test.ts).
+{
+	# Pas d'API d'administration exposée, TLS terminé par la plateforme.
+	admin off
+	auto_https off
+}
+
+:{$PORT:8080} {
+	root * /srv
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(self), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data: blob:; media-src 'self' blob:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		-Server
+	}
+
+	# Assets hachés : immuables, cache d'un an. index.html : toujours revalidé
+	# (sinon un déploiement ne serait pas vu avant expiration du cache).
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@html path / /index.html
+	header @html Cache-Control "no-cache"
+
+	# Fallback SPA : toute route inconnue sert index.html.
+	try_files {path} /index.html
+	file_server
+}

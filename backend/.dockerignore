@@ -1,0 +1,21 @@
+# Jamais dans l'image : secrets locaux et fichiers stockés en local (var/
+# contient, en dev, des documents d'identité et des photos d'utilisateurs).
+.env
+.env.*
+var/
+
+# Environnement et caches locaux.
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Inutile à l'exécution.
+tests/
+README.md
+Dockerfile
+.dockerignore
+railway.json

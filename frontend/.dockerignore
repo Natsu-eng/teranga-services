@@ -1,0 +1,10 @@
+# Reconstruit dans l'image, ou inutile au build.
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore
+railway.json

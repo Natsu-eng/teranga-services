@@ -68,6 +68,18 @@ erreur au lieu de basculer en silence sur un autre port.
 
 ## Production
 
+Runbook complet (variables, étapes, durcissement) : [DEPLOYMENT.md](../DEPLOYMENT.md).
+Deux hébergements prêts : **Vercel** ([vercel.json](vercel.json)) ou
+**Railway** ([Dockerfile](Dockerfile) : build Vite puis Caddy,
+[Caddyfile](Caddyfile), [railway.json](railway.json)). Les en-têtes de
+sécurité des deux sont identiques (test `src/deploymentConfig.test.ts`).
+`VITE_API_BASE_URL` est figée **au build** : sur Railway, la déclarer dans
+les variables du service (transmise au Dockerfile en argument de build).
+
+Lancement **espèces seulement** (`PAYMENT_PROVIDER=disabled` côté backend) :
+l'écran de paiement ne propose que les espèces, sans promesse de séquestre,
+et aucun bouton « payer en ligne » n'apparaît (`PaymentSummary.onlineAvailable`).
+
 `npm run build` produit **uniquement des fichiers statiques** dans `dist/`
 (`index.html` + `assets/` hachés). N'importe quel hébergeur statique les
 sert ; deux réglages sont indispensables :

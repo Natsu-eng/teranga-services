@@ -33,6 +33,7 @@ export function paymentFixture(overrides: Partial<PaymentSummary> = {}): Payment
     releasedAt: null,
     refundedAt: null,
     payout: null,
+    onlineAvailable: true,
     ...overrides,
   };
 }

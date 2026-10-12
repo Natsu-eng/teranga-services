@@ -1,12 +1,54 @@
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
 from app.models.enums import PaymentChannel, PayoutChannel, VerificationDocType
+
+# Environnements reconnus : ensemble FERMÉ. Toute autre valeur fait échouer
+# le démarrage (une faute de frappe ne doit jamais faire tourner la prod
+# avec les réglages permissifs du dev).
+Environment = Literal["development", "test", "staging", "production"]
+ENVIRONMENTS: tuple[str, ...] = get_args(Environment)
+# Anciennes valeurs de APP_ENV, toujours acceptées (fichiers .env existants).
+_LEGACY_ENVIRONMENTS = {"dev": "development", "prod": "production"}
+
+# Fragments qui trahissent une valeur d'exemple jamais remplacée (copiée de
+# .env.example ou d'une documentation) : refusée pour un secret en production.
+_PLACEHOLDER_MARKERS = (
+    "change-me",
+    "changeme",
+    "change_me",
+    "placeholder",
+    "replace-me",
+    "remplacer",
+    "example",
+    "exemple",
+    "your-",
+    "votre-",
+    "xxxx",
+)
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def normalize_environment_name(raw: str) -> str:
+    """Nom d'environnement normalisé (casse, anciennes valeurs dev/prod) ;
+    lève `ValueError` hors de l'ensemble fermé, en citant les valeurs admises."""
+    value = _LEGACY_ENVIRONMENTS.get(raw.strip().lower(), raw.strip().lower())
+    if value not in ENVIRONMENTS:
+        raise ValueError(
+            f"ENVIRONMENT={raw!r} inconnu. Valeurs acceptées : {', '.join(ENVIRONMENTS)}."
+        )
+    return value
+
+
+def looks_like_placeholder(value: str) -> bool:
+    """Vrai pour une valeur d'exemple manifeste (« change-me », « exemple »...)."""
+    lowered = value.strip().lower()
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
 class Settings(BaseSettings):
@@ -14,15 +56,41 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Les tests construisent Settings par nom de champ (`environment=`) ;
+        # l'environnement réel passe par ENVIRONMENT (ou l'ancien APP_ENV).
+        populate_by_name=True,
     )
 
     database_url: str
-    app_env: Literal["dev", "staging", "prod"] = "dev"
+    # ENVIRONMENT : development (défaut), test, staging ou production.
+    # APP_ENV reste accepté (ancien nom), avec ses anciennes valeurs dev/prod.
+    environment: Environment = Field(
+        default="development", validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV")
+    )
     log_level: str = "INFO"
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, v: object) -> object:
+        return normalize_environment_name(v) if isinstance(v, str) else v
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def is_local(self) -> bool:
+        """Poste de développement ou suite de tests : seuls environnements où
+        les replis permissifs (mémoire, console, sandbox sans secret) sont
+        admis."""
+        return self.environment in ("development", "test")
+
     # "console" (dev, log lisible) est le seul fournisseur implémenté à ce
     # stade -- un fournisseur SMS commercial reste à choisir avant la prod
-    # (BUILD_PLAN.md §4). "unconfigured" échoue explicitement à l'envoi,
-    # pour ne jamais retomber silencieusement sur le provider console hors dev.
+    # (BUILD_PLAN.md §4, DEPLOYMENT.md). "unconfigured" échoue explicitement
+    # à l'envoi. En PRODUCTION, les deux sont refusés au démarrage
+    # (`validate_production`) : une prod où personne ne peut recevoir son
+    # code de connexion ne doit jamais démarrer.
     sms_provider: Literal["console", "unconfigured"] = "console"
 
     # Région par défaut pour interpréter un numéro écrit sans indicatif
@@ -53,6 +121,25 @@ class Settings(BaseSettings):
         # Permet CORS_ORIGINS=http://a,http://b dans .env plutôt que du JSON.
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, v: list[str]) -> list[str]:
+        for origin in v:
+            if "*" in origin:
+                raise ValueError(
+                    "CORS_ORIGINS ne doit jamais contenir de joker « * » : listez les origines "
+                    "exactes du front (les jetons d'accès transitent par ces appels)."
+                )
+            # Une origine = schéma + hôte (+ port), rien d'autre : le
+            # navigateur compare à l'identique, un « / » final ou un chemin
+            # ne correspondrait jamais (CORS cassé sans message clair).
+            if _origin_of(origin) != origin:
+                raise ValueError(
+                    f"CORS_ORIGINS : {origin!r} n'est pas une origine (attendu : "
+                    "https://hote[:port], sans chemin ni « / » final)."
+                )
         return v
 
     @field_validator("database_url")
@@ -121,17 +208,41 @@ class Settings(BaseSettings):
             )
         return v
 
+    # Redis partagé (DEPLOYMENT.md). Renseigné : le rate limiting, la
+    # diffusion temps réel de la messagerie et l'usage unique des tickets
+    # WebSocket passent par Redis -- état commun à toutes les instances.
+    # Vide (dev) : repli automatique sur l'existant (mémoire du processus ;
+    # PostgreSQL pour le rate limiting hors development/test). Indispensable
+    # dès que le backend tourne sur plus d'une instance.
+    redis_url: str | None = None
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def empty_redis_url_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @field_validator("redis_url")
+    @classmethod
+    def validate_redis_url(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith(("redis://", "rediss://", "unix://")):
+            raise ValueError("REDIS_URL doit commencer par redis://, rediss:// ou unix://.")
+        return v
+
     # Stockage des compteurs de TOUS les rate limitings (OTP, triage IA,
     # documents, médias de profil) -- voir app/services/rate_limit.py.
+    # - "redis" : partagé par toutes les instances, rapide (exige REDIS_URL) ;
     # - "postgres" : table `rate_limit_hit`, partagée par toutes les
-    #   instances et persistante (survit à un redémarrage/déploiement).
+    #   instances et persistante (survit à un redémarrage/déploiement) ;
     # - "memory" : état local au processus, pour le dev et les tests.
-    # Non renseigné : "memory" en dev, "postgres" en staging/prod. "memory"
-    # explicitement demandé en staging/prod est REFUSÉ au démarrage
+    # Non renseigné : "redis" si REDIS_URL est renseignée, sinon "memory" en
+    # development/test et "postgres" en staging/production. "memory"
+    # explicitement demandé en staging/production est REFUSÉ au démarrage
     # (`validate_rate_limit_backend`) : derrière plusieurs instances, chacune
     # appliquerait sa propre limite (limite réelle multipliée d'autant), et
     # chaque redéploiement remettrait tous les compteurs à zéro.
-    rate_limit_backend: Literal["memory", "postgres"] | None = None
+    rate_limit_backend: Literal["memory", "postgres", "redis"] | None = None
 
     @field_validator("rate_limit_backend", mode="before")
     @classmethod
@@ -145,14 +256,33 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_rate_limit_backend(self) -> "Settings":
         if self.rate_limit_backend is None:
-            self.rate_limit_backend = "memory" if self.app_env == "dev" else "postgres"
-        elif self.rate_limit_backend == "memory" and self.app_env != "dev":
+            if self.redis_url:
+                self.rate_limit_backend = "redis"
+            else:
+                self.rate_limit_backend = "memory" if self.is_local else "postgres"
+        elif self.rate_limit_backend == "redis" and not self.redis_url:
+            raise ValueError("RATE_LIMIT_BACKEND=redis exige REDIS_URL.")
+        elif self.rate_limit_backend == "memory" and not self.is_local:
             raise ValueError(
-                f"RATE_LIMIT_BACKEND=memory est interdit avec APP_ENV={self.app_env} : "
+                f"RATE_LIMIT_BACKEND=memory est interdit avec ENVIRONMENT={self.environment} : "
                 "les limites ne seraient ni partagées entre instances ni conservées au "
                 "redémarrage. Utilisez RATE_LIMIT_BACKEND=postgres (ou laissez-la vide)."
             )
         return self
+
+    # Nombre de proxys de confiance devant le backend (app/core/client_ip.py).
+    # 0 : accès direct (dev) -- l'IP du client est celle de la connexion.
+    # Railway (un proxy de bordure) : 1. Indispensable au rate limiting par
+    # IP : sans lui, derrière un proxy, tous les clients partageraient l'IP
+    # du proxy. Doit être renseigné EXPLICITEMENT en production.
+    trusted_proxy_hops: int | None = Field(default=None, ge=0, le=5)
+
+    @field_validator("trusted_proxy_hops", mode="before")
+    @classmethod
+    def empty_trusted_proxy_hops_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
     # Rate limiting sur /auth/request-otp, fenêtre glissante (stockage selon
     # RATE_LIMIT_BACKEND ci-dessus).
@@ -231,10 +361,12 @@ class Settings(BaseSettings):
     # Stockage des fichiers privés (documents de vérification artisan --
     # onboarding). "local" (dev) écrit sur disque hors du dépôt git et hors
     # de tout répertoire servi statiquement -- voir app/services/storage.py.
-    # Un fournisseur cloud privé reste à choisir avant la prod (même
-    # principe fail-fast documenté que sms_provider/ai_triage_provider) :
-    # aucune valeur autre que "local" n'est implémentée aujourd'hui.
-    storage_backend: Literal["local"] = "local"
+    # "s3" : stockage S3-compatible (AWS S3, Cloudflare R2...), bucket PRIVÉ
+    # (app/services/s3_storage.py). C'est aussi la valeur par défaut des
+    # deux autres stockages (avatars, pièces jointes) s'ils ne sont pas
+    # précisés. En production, "local" est REFUSÉ : le disque d'un service
+    # Railway est éphémère, les fichiers seraient perdus au redéploiement.
+    storage_backend: Literal["local", "s3"] = "local"
     # Chemin (relatif au dossier backend/, ou absolu) du répertoire de
     # stockage local. Défaut "var/artisan-documents" : hors du code source
     # applicatif, ignoré par backend/.gitignore, jamais monté en StaticFiles
@@ -248,6 +380,75 @@ class Settings(BaseSettings):
     # de traitement (magic bytes, écriture disque).
     storage_max_upload_bytes: int = 8 * 1024 * 1024
 
+    # --- Stockage S3-compatible (STORAGE_BACKEND=s3, DEPLOYMENT.md) --------
+    # Point d'accès : vide pour AWS S3 ; pour Cloudflare R2,
+    # https://<ACCOUNT_ID>.r2.cloudflarestorage.com.
+    s3_endpoint_url: str | None = None
+    # Région : "auto" pour R2, la région du bucket pour AWS (ex. eu-west-3).
+    s3_region: str = "auto"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    # Bucket PRIVÉ (aucun accès public) : documents d'identité et pièces
+    # jointes, toujours servis par les endpoints authentifiés.
+    s3_private_bucket: str | None = None
+    # Bucket PUBLIC : photos de profil et couvertures seulement. Doit être
+    # DIFFÉRENT du bucket privé (refusé au démarrage sinon).
+    s3_public_bucket: str | None = None
+    # URL publique du bucket public (domaine personnalisé R2/CDN ou URL
+    # publique du bucket), en HTTPS : base des URL d'avatar renvoyées au front.
+    s3_public_base_url: str | None = None
+
+    @field_validator(
+        "avatar_storage_backend",
+        "message_attachment_storage_backend",
+        "s3_endpoint_url",
+        "s3_access_key_id",
+        "s3_secret_access_key",
+        "s3_private_bucket",
+        "s3_public_bucket",
+        "s3_public_base_url",
+        mode="before",
+    )
+    @classmethod
+    def empty_storage_value_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def validate_storage(self) -> "Settings":
+        # Stockages non précisés : même fournisseur que STORAGE_BACKEND.
+        if self.avatar_storage_backend is None:
+            self.avatar_storage_backend = self.storage_backend
+        if self.message_attachment_storage_backend is None:
+            self.message_attachment_storage_backend = self.storage_backend
+
+        private_on_s3 = "s3" in (self.storage_backend, self.message_attachment_storage_backend)
+        public_on_s3 = self.avatar_storage_backend == "s3"
+        if not (private_on_s3 or public_on_s3):
+            return self
+        missing = [
+            name
+            for name, value, needed in (
+                ("S3_ACCESS_KEY_ID", self.s3_access_key_id, True),
+                ("S3_SECRET_ACCESS_KEY", self.s3_secret_access_key, True),
+                ("S3_PRIVATE_BUCKET", self.s3_private_bucket, private_on_s3),
+                ("S3_PUBLIC_BUCKET", self.s3_public_bucket, public_on_s3),
+                ("S3_PUBLIC_BASE_URL", self.s3_public_base_url, public_on_s3),
+            )
+            if needed and not value
+        ]
+        if missing:
+            raise ValueError(f"Stockage S3 incomplet, à renseigner : {', '.join(missing)}.")
+        if self.s3_private_bucket and self.s3_private_bucket == self.s3_public_bucket:
+            raise ValueError(
+                "S3_PRIVATE_BUCKET et S3_PUBLIC_BUCKET doivent être deux buckets différents : "
+                "un document d'identité ne doit jamais pouvoir se retrouver dans un bucket public."
+            )
+        if public_on_s3 and not (self.s3_public_base_url or "").startswith(("https://", "http://")):
+            raise ValueError("S3_PUBLIC_BASE_URL doit être une URL http(s) absolue.")
+        return self
+
     # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
     # (fenêtre glissante, stockage RATE_LIMIT_BACKEND) que RATE_LIMIT_OTP_*. Par utilisateur
     # authentifié (pas par IP : l'endpoint exige déjà un compte artisan) --
@@ -259,9 +460,9 @@ class Settings(BaseSettings):
     # Stockage PUBLIC (photo de profil artisan) -- volontairement distinct du
     # stockage privé ci-dessus (verification.doc_url) : une photo de profil
     # est censée être visible publiquement (recherche, profil détaillé),
-    # contrairement à une CNI. Même principe fail-fast que STORAGE_BACKEND :
-    # "local" est le seul fournisseur implémenté aujourd'hui.
-    avatar_storage_backend: Literal["local"] = "local"
+    # contrairement à une CNI. Vide : même valeur que STORAGE_BACKEND. En
+    # "s3", les médias vont dans le bucket PUBLIC, jamais le privé.
+    avatar_storage_backend: Literal["local", "s3"] | None = None
     # Répertoire local, monté en lecture publique par app/main.py sous
     # /static/avatars (StaticFiles) -- jamais le même répertoire que
     # STORAGE_LOCAL_DIR (documents privés), pour ne jamais risquer de servir
@@ -318,8 +519,9 @@ class Settings(BaseSettings):
 
     # Images jointes : stockage PRIVÉ, jamais monté en StaticFiles (comme les
     # documents de vérification) -- une photo d'intérieur ne doit être visible
-    # que des deux participants. Même principe fail-fast que STORAGE_BACKEND.
-    message_attachment_storage_backend: Literal["local"] = "local"
+    # que des deux participants. Vide : même valeur que STORAGE_BACKEND ; en
+    # "s3", bucket PRIVÉ (comme les documents d'identité).
+    message_attachment_storage_backend: Literal["local", "s3"] | None = None
     message_attachment_storage_local_dir: str = "var/message-attachments"
     # Taille maximale du fichier ENVOYÉ (une photo de téléphone dépasse
     # souvent 4 Mo). Ce qui est stocké est réencodé (EXIF/GPS retirés) et
@@ -445,13 +647,10 @@ class Settings(BaseSettings):
             raise ValueError("PAYMENT_ONLINE_CHANNELS ne peut pas contenir « cash ».")
         if self.payout_default_channel not in self.payout_allowed_channels:
             raise ValueError("PAYOUT_DEFAULT_CHANNEL doit figurer dans PAYOUT_ALLOWED_CHANNELS.")
-        if self.payment_provider == "sandbox" and self.app_env == "prod":
-            raise ValueError(
-                "PAYMENT_PROVIDER=sandbox est interdit avec APP_ENV=prod : aucun argent réel "
-                "ne circulerait. Configurez un agrégateur réel."
-            )
-        needs_secret = self.payment_provider != "disabled" and not (
-            self.payment_provider == "sandbox" and self.app_env == "dev"
+        # Sandbox en production : refusé par `validate_production`, avec les
+        # autres problèmes de la configuration (une seule liste).
+        needs_secret = self.payment_provider not in ("disabled", "sandbox") or (
+            self.payment_provider == "sandbox" and not self.is_local and not self.is_production
         )
         if needs_secret and len(self.payment_webhook_secret) < 32:
             raise ValueError(
@@ -466,6 +665,106 @@ class Settings(BaseSettings):
     # services séparés en prod (BUILD_PLAN.md §1), sur des origines
     # différentes -- le front ne peut pas deviner l'origine du back.
     backend_public_base_url: str = "http://localhost:8000"
+
+    @model_validator(mode="after")
+    def validate_production(self) -> "Settings":
+        """Fail-fast de PRODUCTION : refuse de démarrer sur une configuration
+        de dev ou incomplète. Tous les problèmes sont listés d'un coup (pas un
+        aller-retour par variable manquante). Hors production, rien ne change :
+        le dev démarre sans Redis, sans S3, avec le sandbox."""
+        if not self.is_production:
+            return self
+        problems: list[str] = []
+
+        if looks_like_placeholder(self.jwt_secret):
+            problems.append("JWT_SECRET est une valeur d'exemple : générez un secret aléatoire.")
+
+        database = make_url(self.database_url)
+        if (database.host or "").lower() in _LOCAL_HOSTS:
+            problems.append("DATABASE_URL pointe vers une base locale, pas celle de production.")
+        password = database.password or ""
+        if not password or password in ("password", "postgres") or looks_like_placeholder(password):
+            problems.append("DATABASE_URL n'a pas de mot de passe réel.")
+
+        if self.payment_provider == "sandbox":
+            problems.append(
+                "PAYMENT_PROVIDER=sandbox est interdit en production : aucun argent réel ne "
+                "circulerait. Agrégateur réel, ou PAYMENT_PROVIDER=disabled (espèces seulement)."
+            )
+        if self.payment_webhook_secret and looks_like_placeholder(self.payment_webhook_secret):
+            problems.append("PAYMENT_WEBHOOK_SECRET est une valeur d'exemple.")
+
+        if self.sms_provider == "console":
+            problems.append("SMS_PROVIDER=console est interdit en production : aucun SMS ne part.")
+        elif self.sms_provider == "unconfigured":
+            problems.append(
+                "SMS_PROVIDER=unconfigured : aucun fournisseur SMS réel n'est branché, personne "
+                "ne recevrait son code de connexion (voir DEPLOYMENT.md, prérequis)."
+            )
+
+        for name, backend in (
+            ("STORAGE_BACKEND", self.storage_backend),
+            ("AVATAR_STORAGE_BACKEND", self.avatar_storage_backend),
+            ("MESSAGE_ATTACHMENT_STORAGE_BACKEND", self.message_attachment_storage_backend),
+        ):
+            if backend == "local":
+                problems.append(
+                    f"{name}=local est interdit en production : le disque du service est "
+                    "éphémère, les fichiers seraient perdus au redéploiement (STORAGE_BACKEND=s3)."
+                )
+        if self.s3_public_base_url and not _is_public_https_url(self.s3_public_base_url):
+            problems.append("S3_PUBLIC_BASE_URL doit être une URL publique HTTPS.")
+        if self.s3_secret_access_key and looks_like_placeholder(self.s3_secret_access_key):
+            problems.append("S3_SECRET_ACCESS_KEY est une valeur d'exemple.")
+
+        if self.trusted_proxy_hops is None:
+            problems.append(
+                "TRUSTED_PROXY_HOPS doit être renseigné (1 derrière le proxy Railway) : sans "
+                "lui, le rate limiting par IP verrait tous les clients comme un seul."
+            )
+
+        if self.ai_triage_provider == "mistral" and not (self.mistral_api_key or "").strip():
+            problems.append("AI_TRIAGE_PROVIDER=mistral exige MISTRAL_API_KEY.")
+
+        for name, value in (
+            ("FRONTEND_PUBLIC_BASE_URL", self.frontend_public_base_url),
+            ("BACKEND_PUBLIC_BASE_URL", self.backend_public_base_url),
+        ):
+            if not _is_public_https_url(value):
+                problems.append(f"{name} doit être l'URL publique HTTPS du service ({value!r}).")
+
+        for origin in self.cors_origins:
+            if not _is_public_https_url(origin):
+                problems.append(f"CORS_ORIGINS : {origin!r} doit être une origine HTTPS publique.")
+        # Front et back sur deux origines (Vercel/Railway) : sans l'origine
+        # du front dans CORS_ORIGINS, le navigateur bloquerait chaque appel.
+        front = _origin_of(self.frontend_public_base_url)
+        if front != _origin_of(self.backend_public_base_url) and front not in self.cors_origins:
+            problems.append(
+                f"CORS_ORIGINS doit contenir l'origine du front ({front!r}) : front et backend "
+                "sont servis sur deux origines différentes."
+            )
+
+        if problems:
+            raise ValueError("Configuration de production refusée :\n- " + "\n- ".join(problems))
+        return self
+
+
+def _origin_of(url: str) -> str:
+    """Origine (`schéma://hôte[:port]`) d'une URL, en minuscules ; chaîne
+    vide si ce n'est pas une URL absolue."""
+    scheme, sep, rest = url.strip().partition("://")
+    if not sep or not scheme or not rest:
+        return ""
+    host = rest.split("/", 1)[0]
+    return f"{scheme.lower()}://{host.lower()}" if host else ""
+
+
+def _is_public_https_url(value: str) -> bool:
+    """URL `https://` vers un hôte public (jamais localhost)."""
+    scheme, _, rest = value.partition("://")
+    host = rest.split("/", 1)[0].rsplit(":", 1)[0].strip("[]").lower()
+    return scheme == "https" and bool(host) and host not in _LOCAL_HOSTS
 
 
 @lru_cache

@@ -150,4 +150,29 @@ describe('PaymentPanel — transparence des montants selon la partie', () => {
       within(panel()).getByRole('link', { name: 'Reprendre le paiement' }),
     ).toBeInTheDocument();
   });
+
+  it('espèces seulement : propose de déclarer le cash, jamais de payer en ligne', () => {
+    renderPanel(paymentFixture({ onlineAvailable: false }), 'client');
+
+    expect(
+      within(panel()).getByRole('link', { name: 'Déclarer le paiement en espèces' }),
+    ).toHaveAttribute('href', '/paiement/int-1');
+    expect(within(panel()).queryByText(/en ligne en toute sécurité/)).not.toBeInTheDocument();
+  });
+
+  it('espèces seulement : après le cash déclaré, aucune option « payer en ligne » morte', () => {
+    renderPanel(
+      paymentFixture({ status: 'reussi', channel: 'cash', onlineAvailable: false }),
+      'client',
+    );
+
+    expect(within(panel()).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(panel()).queryByText(/séquestre/)).not.toBeInTheDocument();
+  });
+
+  it("espèces seulement : l'artisan sait qu'il sera réglé en main propre", () => {
+    renderPanel(paymentFixture({ onlineAvailable: false }), 'artisan');
+
+    expect(within(panel()).getByText(/vous réglera en espèces/)).toBeInTheDocument();
+  });
 });

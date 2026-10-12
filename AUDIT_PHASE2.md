@@ -680,6 +680,46 @@ Points de cet audit concernés :
   planification des relances de versement, libération automatique après
   délai, abonnement « Vérifié ».
 
+## Mise à jour — `feat/deploy-prep`
+
+Préparation de la production, référence : [DEPLOYMENT.md](DEPLOYMENT.md)
+(runbook) et [BUILD_PLAN.md](BUILD_PLAN.md) (lot `feat/deploy-prep`).
+
+- **Dette multi-instance (lot `feat/messagerie`) : résolue.** Avec
+  `REDIS_URL`, diffusion temps réel par pub/sub, tickets WebSocket à usage
+  unique partagés, rate limiting en Redis (Lua atomique) ; sans Redis,
+  repli mémoire inchangé. Testé avec fakeredis (deux « instances » sur un
+  même serveur simulé).
+- **Stockage de production : implémenté.** S3/R2, bucket privé (CNI,
+  pièces jointes) et bucket public (photos) distincts ; stockage local
+  refusé en production (disque Railway éphémère). Testé par l'API : une
+  CNI n'existe que dans le bucket privé.
+- **Fail-fast de production** : `ENVIRONMENT` en ensemble fermé ;
+  secrets d'exemple, base locale, sandbox, SMS console, stockage local,
+  URL non HTTPS, CORS incohérent, proxy non déclaré refusés au démarrage
+  (démarrage réel simulé en test).
+- **En-têtes de sécurité** sur toute réponse de l'API (HSTS en production),
+  documentation interactive désactivée en production.
+- **Lancement espèces seulement** : refus clair du paiement en ligne,
+  front sans option morte ni promesse de séquestre.
+- **Constaté pendant le lot, corrigé** :
+  - **rate limiting par IP inopérant derrière un proxy** : l'IP lue était
+    celle du proxy Railway, commune à tous les clients ; l'option uvicorn
+    habituelle (`--forwarded-allow-ips='*'`) aurait permis de le
+    contourner en falsifiant `X-Forwarded-For`. `TRUSTED_PROXY_HOPS` lit
+    l'adresse ajoutée par notre proxy (testé contre la falsification) ;
+  - **données de démonstration** : `scripts/seed.py` aurait semé faux
+    artisans et faux avis en production ; il y est désormais refusé, et
+    `scripts/seed_reference.py` sème seulement métiers et taux initial ;
+  - `PAYMENT_CURRENCY` manquait à `.env.example` (un test garantit
+    désormais l'inventaire complet) ;
+  - un stockage inconnu retombait sur le disque local : c'est désormais une
+    erreur.
+- **Reste à faire avant la mise en ligne** : fournisseur SMS réel
+  (bloquant : la production refuse de démarrer sans lui), vérification de
+  PostGIS sur Railway, premier `docker build` et commandes Railway à
+  valider (non exécutés : aucun compte, Docker arrêté).
+
 ## Mise à jour — `feat/admin-backoffice`
 
 Back-office admin complet, référence : [BUILD_PLAN.md §3.6](BUILD_PLAN.md).

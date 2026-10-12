@@ -35,7 +35,7 @@ from app.core.errors import AppError
 from app.schemas.artisans import ArtisanDetailOut, MediaUploadLimitsOut, ProfileMediaConstraintsOut
 from app.services.file_validation import EXTENSION_BY_TYPE, MIME_BY_TYPE, DetectedFileType
 from app.services.image_processing import ImageTropGrandeError, ProcessedImage, reencode_image
-from app.services.storage import StorageBackend
+from app.services.storage import S3_PUBLIC_MEDIA_PREFIX, StorageBackend
 
 # Chemin public sous lequel `app.main` monte le stockage des médias de
 # profil -- partagé par l'avatar et la couverture (même régime public).
@@ -132,10 +132,18 @@ def build_media_key(*, profile_id: uuid.UUID, kind: MediaKind, detected: Detecte
     return f"{profile_id}/{_FILENAME_PREFIX[kind]}{uuid.uuid4().hex}.{extension}"
 
 
+def public_media_base(settings: Settings) -> str:
+    """Préfixe de toute URL publique de média : le backend en local
+    (`/static/avatars/`), le bucket public en S3 (`S3_PUBLIC_BASE_URL`)."""
+    if settings.avatar_storage_backend == "s3" and settings.s3_public_base_url:
+        return f"{settings.s3_public_base_url.rstrip('/')}/{S3_PUBLIC_MEDIA_PREFIX}/"
+    return f"{settings.backend_public_base_url}{PUBLIC_MEDIA_PATH}"
+
+
 def public_media_url(reference: str, *, settings: Settings) -> str:
     """URL ABSOLUE du média (front et back sont sur deux origines distinctes,
     voir `BACKEND_PUBLIC_BASE_URL`)."""
-    return f"{settings.backend_public_base_url}{PUBLIC_MEDIA_PATH}{reference}"
+    return f"{public_media_base(settings)}{reference}"
 
 
 def owned_media_key(
@@ -147,7 +155,7 @@ def owned_media_key(
     média de l'autre type). Voir la règle 1 du docstring du module."""
     if not url:
         return None
-    prefix = f"{settings.backend_public_base_url}{PUBLIC_MEDIA_PATH}"
+    prefix = public_media_base(settings)
     if not url.startswith(prefix):
         return None
     key = url.removeprefix(prefix)

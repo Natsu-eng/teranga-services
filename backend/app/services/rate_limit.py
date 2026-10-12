@@ -1,7 +1,9 @@
-"""Rate limiting à fenêtre glissante (BUILD_PLAN.md §4), deux stockages
+"""Rate limiting à fenêtre glissante (BUILD_PLAN.md §4), trois stockages
 interchangeables derrière le même contrat `RateLimiter` :
 
-- `PostgresRateLimiter` (staging/prod) : compteurs dans la table
+- `RedisRateLimiter` (app/services/redis_backend.py), dès que `REDIS_URL`
+  est renseignée : partagé par toutes les instances, script Lua atomique ;
+- `PostgresRateLimiter` (staging/prod sans Redis) : compteurs dans la table
   `rate_limit_hit`, partagés par toutes les instances et persistants -- la
   limite reste la même quel que soit le nombre de workers, et un
   redéploiement ne remet pas les compteurs à zéro.
@@ -46,7 +48,7 @@ class RateLimiter(Protocol):
         ...
 
 
-def _validate_window(window_seconds: int) -> None:
+def validate_window(window_seconds: int) -> None:
     if not 0 < window_seconds <= MAX_WINDOW_SECONDS:
         raise ValueError(
             f"Fenêtre de rate limiting invalide : {window_seconds} s "
@@ -62,7 +64,7 @@ class SlidingWindowRateLimiter:
         self._lock = asyncio.Lock()
 
     async def check(self, key: str, *, max_hits: int, window_seconds: int) -> bool:
-        _validate_window(window_seconds)
+        validate_window(window_seconds)
         now = time.monotonic()
         cutoff = now - window_seconds
         async with self._lock:
@@ -115,7 +117,7 @@ class PostgresRateLimiter:
         self._last_global_purge = float("-inf")
 
     async def check(self, key: str, *, max_hits: int, window_seconds: int) -> bool:
-        _validate_window(window_seconds)
+        validate_window(window_seconds)
         key_hash = hash_rate_limit_key(self._bucket, key)
         window = bindparam("window", timedelta(seconds=window_seconds), type_=Interval)
         same_key = (RateLimitHit.bucket == self._bucket) & (RateLimitHit.key_hash == key_hash)
@@ -166,11 +168,18 @@ PAYMENT_INIT_BUCKET = "payment_init"
 
 _memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
 _postgres_limiters: dict[str, PostgresRateLimiter] = {}
+_redis_limiters: dict[str, RateLimiter] = {}
 
 
 def _limiter_for(bucket: str, settings: Settings) -> RateLimiter:
     """Instance unique par bucket et par processus, du stockage choisi par
     `RATE_LIMIT_BACKEND` (déjà résolu et validé par `Settings`)."""
+    if settings.rate_limit_backend == "redis" and settings.redis_url:
+        if bucket not in _redis_limiters:
+            from app.services.redis_backend import RedisRateLimiter, get_redis_client
+
+            _redis_limiters[bucket] = RedisRateLimiter(get_redis_client(settings.redis_url), bucket)
+        return _redis_limiters[bucket]
     if settings.rate_limit_backend == "postgres":
         if bucket not in _postgres_limiters:
             # Import tardif : le moteur applicatif n'est créé que si le
