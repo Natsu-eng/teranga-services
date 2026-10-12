@@ -31,8 +31,9 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.core.phone import PhoneInvalideError, normalize_phone  # noqa: E402
 from app.db.session import async_session_maker  # noqa: E402
-from app.models.enums import Role  # noqa: E402
+from app.models.enums import AuditAction, AuditTargetType, Role  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services import audit as audit_service  # noqa: E402
 
 
 class AdminPromotionError(Exception):
@@ -57,8 +58,18 @@ async def promote_to_admin(session: AsyncSession, phone: str) -> tuple[User, boo
     if user.role is Role.ADMIN:
         return user, True
 
+    previous_role = user.role
     user.role = Role.ADMIN
     await session.flush()
+    # Journalisé comme toute promotion, sans acteur applicatif (script CLI).
+    await audit_service.record(
+        session,
+        actor=None,
+        action=AuditAction.ADMIN_BOOTSTRAP,
+        target_type=AuditTargetType.USER,
+        target_id=user.id,
+        details={"previous_role": previous_role, "via": "scripts/create_admin.py"},
+    )
     return user, False
 
 

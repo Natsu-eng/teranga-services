@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.models.enums import VerificationStatus
+from app.models.enums import AuditAction, AuditTargetType, VerificationStatus
 from app.models.user import User
 from app.repositories import verification as verification_repository
 from app.schemas.admin import (
@@ -28,6 +28,7 @@ from app.schemas.admin import (
 )
 from app.schemas.artisans import VerificationDocumentOut
 from app.schemas.pagination import Page
+from app.services import audit as audit_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404, to_detail
 from app.services.file_validation import DetectedFileType, detect_file_type
 from app.services.storage import StorageBackend, StorageObjectIntrouvableError
@@ -134,6 +135,24 @@ async def _review(
     required = list(settings.verification_required_doc_types)
     artisan.verified_status = compute_verified_status(artisan.verifications, required)
     await session.flush()
+    # Même transaction que la décision : journalisée si et seulement si validée.
+    await audit_service.record(
+        session,
+        actor=admin,
+        action=(
+            AuditAction.VERIFICATION_APPROVE
+            if to_status is VerificationStatus.APPROVED
+            else AuditAction.VERIFICATION_REJECT
+        ),
+        target_type=AuditTargetType.VERIFICATION,
+        target_id=verification.id,
+        details={
+            "artisan_id": artisan.id,
+            "doc_type": verification.doc_type,
+            "note": note,
+            "artisan_verified_status": artisan.verified_status,
+        },
+    )
 
     return VerificationReviewOut(
         id=verification.id,
