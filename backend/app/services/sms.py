@@ -23,7 +23,7 @@ class SmsProvider(Protocol):
 class ConsoleSmsProvider:
     """Provider de dev : journalise le code au lieu d'envoyer un vrai SMS.
 
-    Le code n'est écrit en clair dans les logs que si `APP_ENV=dev` --
+    Le code n'est écrit en clair dans les logs qu'en development/test --
     vérifié ici même (et pas seulement au choix du provider) pour qu'un
     mauvais branchage en staging/prod ne fasse jamais fuiter un code OTP.
     """
@@ -32,13 +32,13 @@ class ConsoleSmsProvider:
         self._settings = settings or get_settings()
 
     async def send_otp(self, phone: str, code: str) -> None:
-        if self._settings.app_env == "dev":
+        if self._settings.is_local:
             logger.info("[dev] Code OTP pour %s : %s", phone, code)
         else:
             logger.warning(
-                "ConsoleSmsProvider utilisé hors environnement dev (APP_ENV=%s) -- "
+                "ConsoleSmsProvider utilisé hors poste de développement (ENVIRONMENT=%s) -- "
                 "code OTP volontairement non journalisé.",
-                self._settings.app_env,
+                self._settings.environment,
             )
 
 

@@ -110,7 +110,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | Variable | Requise | Description |
 | --- | --- | --- |
 | `DATABASE_URL` | Oui | URL de connexion Postgres, driver `asyncpg` obligatoire. Aucune valeur par défaut : le démarrage échoue explicitement si absente ou malformée. |
-| `APP_ENV` | Non (`dev`) | `dev` \| `staging` \| `prod`. Contrôle le format des logs (lisible en dev, JSON en prod) et si le provider SMS console journalise le code OTP. |
+| `ENVIRONMENT` | Non (`development`) | `development` \| `test` \| `staging` \| `production` (ensemble fermé ; ancien nom `APP_ENV`, valeurs `dev`/`prod` acceptées). Format des logs (JSON hors development/test), code OTP journalisé seulement en development/test, et en production fail-fast sur toute configuration incomplète ou de dev (DEPLOYMENT.md). |
 | `LOG_LEVEL` | Non (`INFO`) | Niveau de log Python standard. |
 | `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules. Pas de wildcard. |
 | `JWT_SECRET` | Oui | Secret de signature des JWT. Aucune valeur par défaut : le démarrage échoue si absent ou trop court (< 32 caractères). |
@@ -201,7 +201,7 @@ et `POST /auth/logout-all` révoquent respectivement une session ou toutes.
 Détail complet des garde-fous de sécurité : [BUILD_PLAN.md §4](../BUILD_PLAN.md#4-authentification-téléphone--otp).
 
 **Provider SMS** : `SMS_PROVIDER=console` (défaut, dev) journalise le code
-en clair dans les logs -- uniquement si `APP_ENV=dev` (vérifié deux fois :
+en clair dans les logs -- uniquement en `development`/`test` (vérifié deux fois :
 au choix du provider *et* dans le provider lui-même, pour ne jamais faire
 fuiter un code hors dev même mal configuré). Aucun fournisseur SMS
 commercial n'est branché à ce stade ; ce choix reste à trancher avant la

@@ -169,20 +169,24 @@ def _settings(**overrides: object) -> Settings:
 
 
 def test_backend_defaults_to_memory_in_dev_and_postgres_elsewhere() -> None:
-    assert _settings(app_env="dev").rate_limit_backend == "memory"
-    assert _settings(app_env="staging").rate_limit_backend == "postgres"
-    assert _settings(app_env="prod").rate_limit_backend == "postgres"
+    assert _settings(environment="development").rate_limit_backend == "memory"
+    assert _settings(environment="test").rate_limit_backend == "memory"
+    assert _settings(environment="staging").rate_limit_backend == "postgres"
 
 
-@pytest.mark.parametrize("app_env", ["staging", "prod"])
-def test_memory_backend_is_refused_outside_dev(app_env: str) -> None:
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_memory_backend_is_refused_outside_dev(environment: str) -> None:
     with pytest.raises(ValidationError, match="RATE_LIMIT_BACKEND=memory est interdit"):
-        _settings(app_env=app_env, rate_limit_backend="memory")
+        _settings(environment=environment, rate_limit_backend="memory")
 
 
 def test_dependency_serves_the_configured_storage() -> None:
-    assert isinstance(get_otp_rate_limiter(_settings(app_env="dev")), SlidingWindowRateLimiter)
-    postgres = get_otp_rate_limiter(_settings(app_env="dev", rate_limit_backend="postgres"))
+    assert isinstance(
+        get_otp_rate_limiter(_settings(environment="development")), SlidingWindowRateLimiter
+    )
+    postgres = get_otp_rate_limiter(
+        _settings(environment="development", rate_limit_backend="postgres")
+    )
     assert isinstance(postgres, PostgresRateLimiter)
     # Une seule instance par fonctionnalité et par processus.
-    assert postgres is get_otp_rate_limiter(_settings(app_env="prod"))
+    assert postgres is get_otp_rate_limiter(_settings(environment="staging"))

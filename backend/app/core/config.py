@@ -1,12 +1,54 @@
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Literal, get_args
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
 from app.models.enums import PaymentChannel, PayoutChannel, VerificationDocType
+
+# Environnements reconnus : ensemble FERMÉ. Toute autre valeur fait échouer
+# le démarrage (une faute de frappe ne doit jamais faire tourner la prod
+# avec les réglages permissifs du dev).
+Environment = Literal["development", "test", "staging", "production"]
+ENVIRONMENTS: tuple[str, ...] = get_args(Environment)
+# Anciennes valeurs de APP_ENV, toujours acceptées (fichiers .env existants).
+_LEGACY_ENVIRONMENTS = {"dev": "development", "prod": "production"}
+
+# Fragments qui trahissent une valeur d'exemple jamais remplacée (copiée de
+# .env.example ou d'une documentation) : refusée pour un secret en production.
+_PLACEHOLDER_MARKERS = (
+    "change-me",
+    "changeme",
+    "change_me",
+    "placeholder",
+    "replace-me",
+    "remplacer",
+    "example",
+    "exemple",
+    "your-",
+    "votre-",
+    "xxxx",
+)
+_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+
+
+def normalize_environment_name(raw: str) -> str:
+    """Nom d'environnement normalisé (casse, anciennes valeurs dev/prod) ;
+    lève `ValueError` hors de l'ensemble fermé, en citant les valeurs admises."""
+    value = _LEGACY_ENVIRONMENTS.get(raw.strip().lower(), raw.strip().lower())
+    if value not in ENVIRONMENTS:
+        raise ValueError(
+            f"ENVIRONMENT={raw!r} inconnu. Valeurs acceptées : {', '.join(ENVIRONMENTS)}."
+        )
+    return value
+
+
+def looks_like_placeholder(value: str) -> bool:
+    """Vrai pour une valeur d'exemple manifeste (« change-me », « exemple »...)."""
+    lowered = value.strip().lower()
+    return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
 
 
 class Settings(BaseSettings):
@@ -14,15 +56,41 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        # Les tests construisent Settings par nom de champ (`environment=`) ;
+        # l'environnement réel passe par ENVIRONMENT (ou l'ancien APP_ENV).
+        populate_by_name=True,
     )
 
     database_url: str
-    app_env: Literal["dev", "staging", "prod"] = "dev"
+    # ENVIRONMENT : development (défaut), test, staging ou production.
+    # APP_ENV reste accepté (ancien nom), avec ses anciennes valeurs dev/prod.
+    environment: Environment = Field(
+        default="development", validation_alias=AliasChoices("ENVIRONMENT", "APP_ENV")
+    )
     log_level: str = "INFO"
+
+    @field_validator("environment", mode="before")
+    @classmethod
+    def normalize_environment(cls, v: object) -> object:
+        return normalize_environment_name(v) if isinstance(v, str) else v
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+    @property
+    def is_local(self) -> bool:
+        """Poste de développement ou suite de tests : seuls environnements où
+        les replis permissifs (mémoire, console, sandbox sans secret) sont
+        admis."""
+        return self.environment in ("development", "test")
+
     # "console" (dev, log lisible) est le seul fournisseur implémenté à ce
     # stade -- un fournisseur SMS commercial reste à choisir avant la prod
-    # (BUILD_PLAN.md §4). "unconfigured" échoue explicitement à l'envoi,
-    # pour ne jamais retomber silencieusement sur le provider console hors dev.
+    # (BUILD_PLAN.md §4, DEPLOYMENT.md). "unconfigured" échoue explicitement
+    # à l'envoi. En PRODUCTION, les deux sont refusés au démarrage
+    # (`validate_production`) : une prod où personne ne peut recevoir son
+    # code de connexion ne doit jamais démarrer.
     sms_provider: Literal["console", "unconfigured"] = "console"
 
     # Région par défaut pour interpréter un numéro écrit sans indicatif
@@ -126,8 +194,9 @@ class Settings(BaseSettings):
     # - "postgres" : table `rate_limit_hit`, partagée par toutes les
     #   instances et persistante (survit à un redémarrage/déploiement).
     # - "memory" : état local au processus, pour le dev et les tests.
-    # Non renseigné : "memory" en dev, "postgres" en staging/prod. "memory"
-    # explicitement demandé en staging/prod est REFUSÉ au démarrage
+    # Non renseigné : "memory" en development/test, "postgres" en
+    # staging/production. "memory" explicitement demandé en staging/production
+    # est REFUSÉ au démarrage
     # (`validate_rate_limit_backend`) : derrière plusieurs instances, chacune
     # appliquerait sa propre limite (limite réelle multipliée d'autant), et
     # chaque redéploiement remettrait tous les compteurs à zéro.
@@ -145,10 +214,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_rate_limit_backend(self) -> "Settings":
         if self.rate_limit_backend is None:
-            self.rate_limit_backend = "memory" if self.app_env == "dev" else "postgres"
-        elif self.rate_limit_backend == "memory" and self.app_env != "dev":
+            self.rate_limit_backend = "memory" if self.is_local else "postgres"
+        elif self.rate_limit_backend == "memory" and not self.is_local:
             raise ValueError(
-                f"RATE_LIMIT_BACKEND=memory est interdit avec APP_ENV={self.app_env} : "
+                f"RATE_LIMIT_BACKEND=memory est interdit avec ENVIRONMENT={self.environment} : "
                 "les limites ne seraient ni partagées entre instances ni conservées au "
                 "redémarrage. Utilisez RATE_LIMIT_BACKEND=postgres (ou laissez-la vide)."
             )
@@ -445,13 +514,10 @@ class Settings(BaseSettings):
             raise ValueError("PAYMENT_ONLINE_CHANNELS ne peut pas contenir « cash ».")
         if self.payout_default_channel not in self.payout_allowed_channels:
             raise ValueError("PAYOUT_DEFAULT_CHANNEL doit figurer dans PAYOUT_ALLOWED_CHANNELS.")
-        if self.payment_provider == "sandbox" and self.app_env == "prod":
-            raise ValueError(
-                "PAYMENT_PROVIDER=sandbox est interdit avec APP_ENV=prod : aucun argent réel "
-                "ne circulerait. Configurez un agrégateur réel."
-            )
-        needs_secret = self.payment_provider != "disabled" and not (
-            self.payment_provider == "sandbox" and self.app_env == "dev"
+        # Sandbox en production : refusé par `validate_production`, avec les
+        # autres problèmes de la configuration (une seule liste).
+        needs_secret = self.payment_provider not in ("disabled", "sandbox") or (
+            self.payment_provider == "sandbox" and not self.is_local and not self.is_production
         )
         if needs_secret and len(self.payment_webhook_secret) < 32:
             raise ValueError(
@@ -466,6 +532,63 @@ class Settings(BaseSettings):
     # services séparés en prod (BUILD_PLAN.md §1), sur des origines
     # différentes -- le front ne peut pas deviner l'origine du back.
     backend_public_base_url: str = "http://localhost:8000"
+
+    @model_validator(mode="after")
+    def validate_production(self) -> "Settings":
+        """Fail-fast de PRODUCTION : refuse de démarrer sur une configuration
+        de dev ou incomplète. Tous les problèmes sont listés d'un coup (pas un
+        aller-retour par variable manquante). Hors production, rien ne change :
+        le dev démarre sans Redis, sans S3, avec le sandbox."""
+        if not self.is_production:
+            return self
+        problems: list[str] = []
+
+        if looks_like_placeholder(self.jwt_secret):
+            problems.append("JWT_SECRET est une valeur d'exemple : générez un secret aléatoire.")
+
+        database = make_url(self.database_url)
+        if (database.host or "").lower() in _LOCAL_HOSTS:
+            problems.append("DATABASE_URL pointe vers une base locale, pas celle de production.")
+        password = database.password or ""
+        if not password or password in ("password", "postgres") or looks_like_placeholder(password):
+            problems.append("DATABASE_URL n'a pas de mot de passe réel.")
+
+        if self.payment_provider == "sandbox":
+            problems.append(
+                "PAYMENT_PROVIDER=sandbox est interdit en production : aucun argent réel ne "
+                "circulerait. Agrégateur réel, ou PAYMENT_PROVIDER=disabled (espèces seulement)."
+            )
+        if self.payment_webhook_secret and looks_like_placeholder(self.payment_webhook_secret):
+            problems.append("PAYMENT_WEBHOOK_SECRET est une valeur d'exemple.")
+
+        if self.sms_provider == "console":
+            problems.append("SMS_PROVIDER=console est interdit en production : aucun SMS ne part.")
+        elif self.sms_provider == "unconfigured":
+            problems.append(
+                "SMS_PROVIDER=unconfigured : aucun fournisseur SMS réel n'est branché, personne "
+                "ne recevrait son code de connexion (voir DEPLOYMENT.md, prérequis)."
+            )
+
+        if self.ai_triage_provider == "mistral" and not (self.mistral_api_key or "").strip():
+            problems.append("AI_TRIAGE_PROVIDER=mistral exige MISTRAL_API_KEY.")
+
+        for name, value in (
+            ("FRONTEND_PUBLIC_BASE_URL", self.frontend_public_base_url),
+            ("BACKEND_PUBLIC_BASE_URL", self.backend_public_base_url),
+        ):
+            if not _is_public_https_url(value):
+                problems.append(f"{name} doit être l'URL publique HTTPS du service ({value!r}).")
+
+        if problems:
+            raise ValueError("Configuration de production refusée :\n- " + "\n- ".join(problems))
+        return self
+
+
+def _is_public_https_url(value: str) -> bool:
+    """URL `https://` vers un hôte public (jamais localhost)."""
+    scheme, _, rest = value.partition("://")
+    host = rest.split("/", 1)[0].rsplit(":", 1)[0].strip("[]").lower()
+    return scheme == "https" and bool(host) and host not in _LOCAL_HOSTS
 
 
 @lru_cache
