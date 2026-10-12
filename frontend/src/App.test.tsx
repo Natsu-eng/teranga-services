@@ -41,7 +41,7 @@ function renderAt(path: string) {
 }
 
 /** Simulates an already-logged-in visitor: a persisted refresh token that AuthProvider silently exchanges for a fresh session on mount. */
-function stubAuthenticatedSession() {
+function stubAuthenticatedSession(role: 'client' | 'artisan' | 'admin' = 'client') {
   authStore.setTokens({ access: '', refresh: 'persisted-refresh' });
   vi.stubGlobal(
     'fetch',
@@ -53,7 +53,7 @@ function stubAuthenticatedSession() {
                 id: 'u1',
                 phone: '+221771234501',
                 full_name: 'Diandé Diallo',
-                role: 'client',
+                role,
                 locale: 'fr',
                 phone_verified_at: '2026-01-01T00:00:00Z',
                 artisan_profile_id: null,
@@ -204,6 +204,38 @@ describe('routing', () => {
 
     renderAt('/admin/litiges');
     expect(await screen.findByText('Page introuvable')).toBeInTheDocument();
+  });
+
+  it('cache tout le back-office à un non-admin : chaque section répond « page introuvable »', async () => {
+    stubAuthenticatedSession('client');
+    const sections = [
+      '/admin',
+      '/admin/verifications',
+      '/admin/artisans',
+      '/admin/artisans/un-artisan',
+      '/admin/utilisateurs',
+      '/admin/avis',
+      '/admin/commissions',
+      '/admin/journal',
+    ];
+    for (const path of sections) {
+      const view = renderAt(path);
+      expect(await screen.findByText('Page introuvable')).toBeInTheDocument();
+      // Jamais la coquille admin : rien ne confirme que la route existe.
+      expect(screen.queryByRole('navigation', { name: 'Sections admin' })).not.toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it('ouvre la vue d’ensemble dans la coquille admin pour un admin', async () => {
+    stubAuthenticatedSession('admin');
+
+    renderAt('/admin');
+
+    expect(await screen.findByRole('heading', { name: 'Vue d’ensemble' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Sections admin' })).toBeInTheDocument();
+    // Sans activité : des zéros honnêtes et une explication, jamais un chiffre inventé.
+    expect(await screen.findByText(/Aucune activité pour l’instant/)).toBeInTheDocument();
   });
 
   it('renders a 404 with a link back to /accueil for an unknown route', () => {
