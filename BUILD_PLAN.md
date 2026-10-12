@@ -40,7 +40,8 @@ la migration complète.
 | Migrations | **Alembic** | Migrations versionnées, réversibles, obligatoires |
 | Validation | **Pydantic v2** | Schémas d'API stricts, une seule source de vérité |
 | Base en dev | **Postgres local (pgAdmin)** | Gratuit, rapide, jetable ; `DATABASE_URL` unique |
-| Base en prod | **Railway** (managé) | Bascule = 1 variable d'env, zéro code |
+| Base en prod | **Railway** (managé, **PostGIS à vérifier**, DEPLOYMENT.md §4.1) | Bascule = variables d'env, zéro code |
+| Déploiement | **Railway** (backend Docker, front statique Vercel ou Railway+Caddy, Redis, stockage R2/S3) | Runbook complet : [DEPLOYMENT.md](DEPLOYMENT.md) (lot `feat/deploy-prep`) |
 | Topologie | **2 services séparés** : front (Vite) + API (FastAPI) | Standard SaaS, déploiement propre, front délocalisable (Vercel) |
 | Sort d'Express | **Retiré (Lot 13)** ✅ | FastAPI a pris l'IA (Lot 11) puis tout le reste ; le front est un projet Vite pur |
 | Auth | **Téléphone + OTP** (SMS) | Standard Sénégal ; corrige le `userRole` auto-déclarable |
@@ -68,7 +69,11 @@ Une seule variable `DATABASE_URL`. Local aujourd'hui :
 ```
 DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/teranga
 ```
-Railway demain : on change **cette ligne**, rien d'autre.
+Railway demain : on change **cette ligne**, rien d'autre. Depuis le lot
+`feat/deploy-prep`, `ENVIRONMENT=production` active en plus un **fail-fast**
+au démarrage : secret manquant ou d'exemple, base locale, SMS console,
+paiement sandbox, stockage local, URL non HTTPS, CORS incohérent ou proxy
+non déclaré sont refusés, tous listés d'un coup (DEPLOYMENT.md §3).
 
 ---
 
@@ -839,13 +844,14 @@ endpoint).
 **Bascule vers un cloud privé en prod** (S3-compatible à accès privé, GCS…) :
 n'implique qu'une nouvelle classe respectant ce même `Protocol`, branchée
 via `STORAGE_BACKEND=<nom>` (`Settings`, jamais en dur) — aucune réécriture
-du code appelant. Aucun fournisseur cloud n'est implémenté à ce stade
-(`STORAGE_BACKEND=local` est la seule valeur acceptée aujourd'hui ; toute
-autre valeur lève `NotImplementedError` au démarrage de l'accès, même
-principe fail-fast documenté que `SMS_PROVIDER=unconfigured`) — ce choix
-reste à trancher avant la mise en production, le disque local de
-`LocalStorageBackend` ne survivant de toute façon pas à un redéploiement
-Railway (pas de disque persistant).
+du code appelant. **Depuis le lot `feat/deploy-prep`** :
+`STORAGE_BACKEND=s3` (Cloudflare R2, AWS S3 ; `app/services/s3_storage.py`)
+range documents d'identité et pièces jointes dans un bucket **PRIVÉ** et les
+médias de profil dans un bucket **PUBLIC** distinct (deux buckets différents
+exigés au démarrage, jamais d'ACL publique objet par objet). `local` reste le
+défaut du dev mais est **refusé en production** : le disque d'un service
+Railway est éphémère, les fichiers seraient perdus au redéploiement
+(DEPLOYMENT.md §4.3).
 
 **Upload sécurisé** (`POST /artisans/me/documents`,
 `app.services.documents.upload_document`) :
@@ -1006,8 +1012,12 @@ authentifié et révoque l'URL locale ensuite. Fichier supprimé si
 l'enregistrement en base échoue. Rate limiting par utilisateur : 30
 messages/min, 20 photos/10 min (`429 TROP_DE_DEMANDES`).
 
-**Dette multi-instance — bus Redis pub/sub (à traiter AVANT de passer à
-plusieurs instances backend).** `ConnectionManager` et le registre des
+**Dette multi-instance — RÉSOLUE par le lot `feat/deploy-prep`** : avec
+`REDIS_URL`, la diffusion passe par Redis pub/sub (`RedisRealtimeBus`,
+chaque instance livre à ses propres connexions) et les tickets par
+`SET NX` avec expiration (`RedisTicketStore`) ; sans `REDIS_URL`, repli
+automatique sur la mémoire (comportement historique, instance unique).
+Le constat d'origine, pour mémoire : `ConnectionManager` et le registre des
 tickets consommés sont en mémoire, locaux au processus : exacts en instance
 unique (cible de lancement, comme Railway 1 réplica). Avec plusieurs
 instances : (1) un message enregistré par l'instance A n'est pas poussé aux
@@ -1015,11 +1025,9 @@ sockets ouvertes sur B — et comme un client dont le WebSocket est `open` ne
 fait pas de polling, il ne le verrait qu'au prochain rattrapage
 (reconnexion, retour au premier plan) : **dégradation silencieuse, pas
 seulement un retard** ; (2) un ticket consommé sur A pourrait être rejoué
-sur B pendant ses 60 s de validité. Correction prévue : publication via
-Redis pub/sub (un canal par utilisateur, chaque instance relaie à ses
-sockets) et consommation atomique du `jti` en Redis (`SET NX EX`). Le rate
-limiting, lui, est déjà partagé (table `rate_limit_hit`, lot
-`feat/media-hardening`).
+sur B pendant ses 60 s de validité. Le rate limiting était déjà partagé
+(table `rate_limit_hit`, lot `feat/media-hardening`) ; il passe aussi par
+Redis quand `REDIS_URL` est renseignée (script Lua atomique).
 
 ## 3.5 Paiements : séquestre, espèces, commission, versement (lot `feat/paiements`)
 
@@ -1742,9 +1750,20 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   confirmations qui énoncent l'effet, journal en lecture seule ; espace Pro :
   bandeau de suspension et avis reçus. Détail §3.6. *But : piloter la
   plateforme sans jamais perdre la trace de qui a décidé quoi.*
-- **Lot 15 — Déploiement Railway** (2 services + Postgres managé, bascule
-  `DATABASE_URL`) + branchement d'un agrégateur réel (§3.5, point de
-  bascule). *À séquencer selon priorités.*
+- **Lot `feat/deploy-prep` — Préparation de la production.** ✅
+  (préparation ; mise en ligne effective à faire, DEPLOYMENT.md)
+  `ENVIRONMENT` en ensemble fermé et fail-fast de production ; en-têtes de
+  sécurité HTTP sur toute réponse (HSTS en production, docs API désactivées) ;
+  Redis pour rate limiting, temps réel et tickets (repli mémoire) ; stockage
+  S3/R2 privé/public, obligatoire en production ; lancement « espèces
+  seulement » sans option morte ; CORS durci ; IP réelle du client derrière
+  le proxy (rate limiting non contournable) ; Dockerfiles, `railway.json`
+  (migrations en pré-déploiement, healthcheck de readiness), Caddy pour un
+  front sur Railway ; données de référence de production séparées de la
+  démo ; runbook DEPLOYMENT.md. **Bloquant restant : fournisseur SMS réel.**
+- **Lot 15 — Mise en ligne Railway** : suivre DEPLOYMENT.md (PostGIS à
+  vérifier, stockage R2, fournisseur SMS), puis branchement d'un
+  agrégateur réel (§3.5, point de bascule). *À séquencer selon priorités.*
 
 ---
 
@@ -1771,6 +1790,10 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
 Scoring de fiabilité des artisans, détection de fuite par NLP sur la messagerie,
 assistant conversationnel, i18n Wolof/Français, tarification dynamique,
 notifications push. Phase 3+.
+
+Production (après le lot `feat/deploy-prep`, DEPLOYMENT.md) : adaptateur
+d'un fournisseur SMS réel (**bloquant de mise en ligne**), supervision
+externe et alertes, export des sauvegardes, CDN devant le bucket public.
 
 Paiements (après le lot `feat/paiements`, §3.5) : recouvrement des
 commissions dues sur le cash, planification des relances de versements,
