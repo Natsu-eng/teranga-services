@@ -211,6 +211,7 @@ interface BackendServiceRequest {
   ai_estimate_min_fcfa: number | null;
   ai_estimate_max_fcfa: number | null;
   status: 'ouverte' | 'en_relation' | 'convertie' | 'annulee' | 'expiree';
+  expires_at?: string | null;
   created_at: string;
 }
 
@@ -377,7 +378,9 @@ const URGENCY_LABELS: Record<BackendTriageResult['urgency'], string> = {
 // (U+202F) — matches the literal thousands-separator style already used for
 // this string elsewhere in the codebase (mock.ts's fallback defaults).
 function formatFcfaThousands(n: number): string {
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return Math.round(n)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 }
 
 function formatPriceRangeFcfa(minFcfa: number, maxFcfa: number): string {
@@ -398,7 +401,6 @@ function formatRelativeDate(iso: string): string {
   if (diffDays < 30) return `Il y a ${Math.floor(diffDays / 7)} semaine(s)`;
   return `Il y a ${Math.floor(diffDays / 30)} mois`;
 }
-
 
 function mapReview(review: BackendReview): Review {
   return {
@@ -424,6 +426,7 @@ function mapServiceRequest(request: BackendServiceRequest): ServiceRequest {
     aiEstimateMinFcfa: request.ai_estimate_min_fcfa,
     aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
     status: request.status,
+    expiresAt: request.expires_at ?? null,
     createdAt: request.created_at,
   };
 }
@@ -569,7 +572,10 @@ function mapConversation(conversation: BackendConversation): ConversationDetail 
   };
 }
 
-function mapArtisan(item: BackendArtisanListItem & { cover_url?: string | null }, reviews: Review[]): Artisan {
+function mapArtisan(
+  item: BackendArtisanListItem & { cover_url?: string | null },
+  reviews: Review[],
+): Artisan {
   const primaryTrade = item.trades[0]?.trade.label_fr ?? '';
   const lowestRate =
     item.trades.length > 0 ? Math.min(...item.trades.map((t) => t.hourly_rate_fcfa)) : null;
@@ -845,10 +851,9 @@ export const httpApiClient: ApiClient = {
   },
 
   async removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile> {
-    const detail = await apiRequest<BackendArtisanDetail>(
-      `/artisans/me/trades/${artisanTradeId}`,
-      { method: 'DELETE' },
-    );
+    const detail = await apiRequest<BackendArtisanDetail>(`/artisans/me/trades/${artisanTradeId}`, {
+      method: 'DELETE',
+    });
     return mapMyArtisanProfile(detail);
   },
 
@@ -929,7 +934,8 @@ export const httpApiClient: ApiClient = {
     // trade_code is guaranteed to reference an active trade by the backend
     // (app.services.ai_triage) -- falling back to the raw code here only
     // guards against a race with a trade deactivated between the two calls.
-    const tradeLabel = trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code;
+    const tradeLabel =
+      trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code;
 
     return {
       trade: tradeLabel,
@@ -971,6 +977,14 @@ export const httpApiClient: ApiClient = {
   async listMyServiceRequests(): Promise<ServiceRequest[]> {
     const page = await apiRequest<BackendPage<BackendServiceRequest>>('/requests/me');
     return page.items.map(mapServiceRequest);
+  },
+
+  async cancelServiceRequest(requestId: string): Promise<ServiceRequest> {
+    const request = await apiRequest<BackendServiceRequest>(
+      `/requests/${encodeURIComponent(requestId)}/cancel`,
+      { method: 'POST' },
+    );
+    return mapServiceRequest(request);
   },
 
   async listRequestEligibility(artisanId: string): Promise<RequestEligibility[]> {
@@ -1041,7 +1055,10 @@ export const httpApiClient: ApiClient = {
   async createQuote(interventionId: string, input: CreateQuoteInput): Promise<Intervention> {
     const intervention = await apiRequest<BackendIntervention>(
       `/interventions/${interventionId}/quote`,
-      { method: 'POST', body: { labor_fcfa: input.laborFcfa, materials_fcfa: input.materialsFcfa } },
+      {
+        method: 'POST',
+        body: { labor_fcfa: input.laborFcfa, materials_fcfa: input.materialsFcfa },
+      },
     );
     return mapIntervention(intervention);
   },
@@ -1136,7 +1153,11 @@ export const httpApiClient: ApiClient = {
     );
   },
 
-  async sendImageMessage(conversationId: string, file: File, caption: string): Promise<ChatMessage> {
+  async sendImageMessage(
+    conversationId: string,
+    file: File,
+    caption: string,
+  ): Promise<ChatMessage> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('caption', caption);

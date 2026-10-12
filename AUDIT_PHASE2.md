@@ -567,6 +567,32 @@ concernés :
   messages vocaux, suppression/édition d'un message, signalement d'un
   message à la modération.
 
+## Mise à jour — `feat/annulation-demande`
+
+- **Constat** : les statuts `annulee`/`expiree` d'une demande existaient
+  sans aucune route ni écran pour s'en servir : une demande non traitée
+  restait indéfiniment dans « Mes demandes » — et les demandes mal
+  localisées par l'ancien GPS silencieux s'accumulaient.
+- **Corrigé** : `POST /requests/{id}/cancel` (client propriétaire, demande
+  OUVERTE seulement) ; annulation, jamais suppression (historique, liens
+  vers mises en relation et fils conservés). Une demande déjà reçue par un
+  artisan s'annule en annulant d'abord la mise en relation. Verrou de la
+  ligne sur l'annulation ET la mise en relation : jamais deux décisions
+  concurrentes. Une demande annulée n'est plus éligible ni envoyable.
+- **Écran** : « Annuler la demande » avec confirmation ; demande hors de
+  la région de Dakar -> « Annuler cette demande » proposé directement ;
+  annulées et expirées repliées sous « Anciennes demandes ».
+- **Choix assumé** : aucune annulation automatique des anciennes demandes
+  mal localisées — modifier les données d'un client sans qu'il le voie
+  irait contre la transparence ; l'écran les signale et propose l'action.
+- **Expiration** : une demande restée ouverte plus de
+  `REQUEST_OPEN_TTL_DAYS` jours (30) est expirée. La règle s'applique
+  d'office, sans dépendre d'une tâche planifiée : statut effectif
+  « expiree » à la lecture, exclue de l'éligibilité, envoi refusé
+  (`DEMANDE_EXPIREE`) ; chaque demande ouverte affiche « expire le … ».
+  `scripts/expire_requests.py` (quotidien) enregistre le statut en base,
+  sans jamais toucher une demande mise en relation entre-temps.
+
 ## Mise à jour — `fix/localisation-demande`
 
 Deux défauts d'ergonomie constatés en test manuel, et leur cause commune :

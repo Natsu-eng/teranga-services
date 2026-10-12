@@ -164,6 +164,8 @@ export interface ApiClient {
   listTrades(): Promise<Trade[]>;
   createServiceRequest(input: CreateServiceRequestInput): Promise<ServiceRequest>;
   listMyServiceRequests(): Promise<ServiceRequest[]>;
+  /** Annule une demande encore ouverte (jamais supprimée : elle reste en historique). */
+  cancelServiceRequest(requestId: string): Promise<ServiceRequest>;
   /** Pour chaque demande ouverte : cet artisan peut-il la recevoir (métier, zone) ? */
   listRequestEligibility(artisanId: string): Promise<RequestEligibility[]>;
   /** Cet artisan intervient-il pour ce métier à ce lieu ? (avant de créer la demande) */

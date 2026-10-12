@@ -67,6 +67,18 @@ async def list_my_request_eligibility(
     )
 
 
+@router.post("/{request_id}/cancel", response_model=ServiceRequestOut)
+async def cancel_request(
+    request_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    client: Annotated[User, Depends(require_role(Role.CLIENT))],
+) -> ServiceRequestOut:
+    """Annule une demande encore ouverte (jamais supprimée : historique)."""
+    result = await requests_service.cancel_request(session, request_id=request_id, client=client)
+    await session.commit()
+    return result
+
+
 @router.get("/{request_id}", response_model=ServiceRequestOut)
 async def get_request(
     request_id: uuid.UUID,

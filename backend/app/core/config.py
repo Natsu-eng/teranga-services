@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -351,6 +351,15 @@ class Settings(BaseSettings):
     # appareils) : au-delà, la plus ancienne est fermée -- borne la mémoire
     # occupée par un seul compte.
     ws_max_connections_per_user: int = 5
+
+    # --- Demandes ----------------------------------------------------------
+
+    # Durée de vie d'une demande OUVERTE (aucun artisan ne l'a reçue) : au-delà,
+    # elle est expirée -- un besoin de dépannage vieux d'un mois n'est plus
+    # d'actualité, et l'artisan ne doit pas chiffrer un problème périmé. La
+    # règle s'applique d'office à la lecture et à l'envoi ;
+    # scripts/expire_requests.py l'enregistre en base (statistiques).
+    request_open_ttl_days: int = Field(default=30, ge=1)
 
     # --- Paiements (BUILD_PLAN.md §3.5) ------------------------------------
 

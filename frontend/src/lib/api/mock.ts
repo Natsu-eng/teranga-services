@@ -159,6 +159,7 @@ export const mockApiClient: ApiClient = {
       aiEstimateMinFcfa: input.aiEstimateMinFcfa ?? null,
       aiEstimateMaxFcfa: input.aiEstimateMaxFcfa ?? null,
       status: 'ouverte',
+      expiresAt: null,
       createdAt: new Date().toISOString(),
     };
   },
@@ -427,5 +428,10 @@ export const mockApiClient: ApiClient = {
   async checkArtisanCoverage(): Promise<EngagementCheck> {
     await simulateNetworkLatency();
     return { eligible: true, reason: null };
+  },
+
+  async cancelServiceRequest(): Promise<ServiceRequest> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', "Cette demande n'existe pas.");
   },
 };

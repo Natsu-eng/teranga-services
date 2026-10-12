@@ -5,10 +5,11 @@ Requêtes SQLAlchemy pures : jamais de Pydantic ici, jamais de logique métier
 """
 
 import uuid
+from datetime import datetime
 
 from geoalchemy2.elements import WKTElement
 from geoalchemy2.shape import to_shape
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -61,12 +62,19 @@ async def create_service_request(
     return request
 
 
-async def get_by_id(session: AsyncSession, request_id: uuid.UUID) -> ServiceRequest | None:
+async def get_by_id(
+    session: AsyncSession, request_id: uuid.UUID, *, for_update: bool = False
+) -> ServiceRequest | None:
+    """`for_update` : verrouille la ligne jusqu'à la fin de la transaction --
+    toute décision sur le STATUT d'une demande (annulation, mise en
+    relation) passe par ce verrou, donc jamais deux décisions concurrentes."""
     stmt = (
         select(ServiceRequest)
         .where(ServiceRequest.id == request_id)
         .options(joinedload(ServiceRequest.trade))
     )
+    if for_update:
+        stmt = stmt.with_for_update(of=ServiceRequest).execution_options(populate_existing=True)
     return (await session.execute(stmt)).unique().scalar_one_or_none()
 
 
@@ -87,19 +95,38 @@ async def list_by_client(
 
 
 async def list_open_by_client(
-    session: AsyncSession, client_id: uuid.UUID, *, limit: int
+    session: AsyncSession, client_id: uuid.UUID, *, created_after: datetime, limit: int
 ) -> list[ServiceRequest]:
-    """Demandes encore ouvertes du client, les plus récentes d'abord."""
+    """Demandes encore ouvertes ET non expirées du client, les plus récentes
+    d'abord."""
     stmt = (
         select(ServiceRequest)
         .where(
             ServiceRequest.client_id == client_id,
             ServiceRequest.status == ServiceRequestStatus.OUVERTE,
+            ServiceRequest.created_at > created_after,
         )
         .order_by(ServiceRequest.created_at.desc(), ServiceRequest.id)
         .limit(limit)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def expire_open_created_before(session: AsyncSession, cutoff: datetime) -> int:
+    """Passe `expiree` toute demande encore OUVERTE créée avant `cutoff`.
+    La condition est réévaluée par Postgres sur chaque ligne verrouillée :
+    une demande mise en relation entre-temps n'est jamais expirée."""
+    stmt = (
+        update(ServiceRequest)
+        .where(
+            ServiceRequest.status == ServiceRequestStatus.OUVERTE,
+            ServiceRequest.created_at <= cutoff,
+        )
+        .values(status=ServiceRequestStatus.EXPIREE)
+        .returning(ServiceRequest.id)
+        .execution_options(synchronize_session=False)
+    )
+    return len((await session.execute(stmt)).scalars().all())
 
 
 async def count_by_client(session: AsyncSession, client_id: uuid.UUID) -> int:

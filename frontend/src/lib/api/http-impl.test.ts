@@ -142,14 +142,12 @@ describe('httpApiClient', () => {
     });
 
     it('builds the query string from filters (trade code, near, sort, pagination)', async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse(200, {
-            items: [],
-            pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
-          }),
-        );
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          items: [],
+          pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 },
+        }),
+      );
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.listArtisans!({
@@ -211,13 +209,11 @@ describe('httpApiClient', () => {
     it('propagates the backend 404 message as-is (already French, display-ready)', async () => {
       vi.stubGlobal(
         'fetch',
-        vi
-          .fn()
-          .mockResolvedValue(
-            jsonResponse(404, {
-              error: { code: 'ARTISAN_NOT_FOUND', message: 'Artisan introuvable.' },
-            }),
-          ),
+        vi.fn().mockResolvedValue(
+          jsonResponse(404, {
+            error: { code: 'ARTISAN_NOT_FOUND', message: 'Artisan introuvable.' },
+          }),
+        ),
       );
 
       const promise = httpApiClient.getArtisanById!('does-not-exist');
@@ -864,6 +860,8 @@ describe('httpApiClient', () => {
         aiEstimateMinFcfa: 12000,
         aiEstimateMaxFcfa: 25000,
         status: 'ouverte',
+        // Absent de la réponse (serveur antérieur) : null, jamais undefined.
+        expiresAt: null,
         createdAt: '2026-01-01T00:00:00Z',
       });
 
@@ -907,6 +905,35 @@ describe('httpApiClient', () => {
       await expect(promise).rejects.toMatchObject({
         message: 'Le métier demandé est introuvable ou inactif.',
       });
+    });
+  });
+
+  describe('cancelServiceRequest', () => {
+    it('annule une demande (POST) et renvoie son nouvel état', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          id: 'req-1',
+          client_id: 'u1',
+          trade: { id: 't1', code: 'plomberie', label_fr: 'Plomberie' },
+          description: 'Fuite.',
+          photo_url: null,
+          location: { lat: 14.6681, lng: -17.4339 },
+          location_label: 'Dakar Plateau',
+          urgency: 'normal',
+          ai_estimate_min_fcfa: null,
+          ai_estimate_max_fcfa: null,
+          status: 'annulee',
+          created_at: '2026-10-12T00:00:00Z',
+        }),
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const request = await httpApiClient.cancelServiceRequest!('req-1');
+
+      expect(request.status).toBe('annulee');
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/requests\/req-1\/cancel$/);
+      expect(options.method).toBe('POST');
     });
   });
 
@@ -1110,20 +1137,18 @@ describe('httpApiClient', () => {
     });
 
     it('declineIntervention posts the optional reason', async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse(200, {
-            ...backendIntervention,
-            status: 'annulee',
-            cancellation: {
-              kind: 'refus',
-              by: 'artisan',
-              reason: 'Trop loin.',
-              at: '2026-01-02T00:00:00Z',
-            },
-          }),
-        );
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(200, {
+          ...backendIntervention,
+          status: 'annulee',
+          cancellation: {
+            kind: 'refus',
+            by: 'artisan',
+            reason: 'Trop loin.',
+            at: '2026-01-02T00:00:00Z',
+          },
+        }),
+      );
       vi.stubGlobal('fetch', fetchMock);
 
       const intervention = await httpApiClient.declineIntervention!('int-1', 'Trop loin.');
@@ -1557,7 +1582,7 @@ describe('httpApiClient', () => {
       expect(fetchMock.mock.calls[1][0]).toMatch(/\/interventions\/int-1\/cancel$/);
     });
 
-    it("tranche un litige côté admin", async () => {
+    it('tranche un litige côté admin', async () => {
       const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, backendIntervention));
       vi.stubGlobal('fetch', fetchMock);
 

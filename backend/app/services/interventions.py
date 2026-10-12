@@ -329,7 +329,10 @@ async def list_request_eligibility(
     demandes du client sont lues (jamais celles d'autrui)."""
     artisan = await get_artisan_or_404(session, artisan_id)
     requests = await requests_repository.list_open_by_client(
-        session, client.id, limit=settings.pagination_page_size_max
+        session,
+        client.id,
+        created_after=requests_service.expiry_cutoff(settings),
+        limit=settings.pagination_page_size_max,
     )
     results: list[RequestEligibilityOut] = []
     for request in requests:
@@ -381,11 +384,17 @@ async def create_intervention(
     La demande passe à `en_relation` -- elle ne peut plus recevoir d'autre
     intervention tant que celle-ci n'est pas close.
     """
-    request = await requests_service.get_request_or_404(session, payload.service_request_id)
+    # Verrou de la demande : une annulation concurrente ne peut pas être
+    # réécrite en `en_relation` (et inversement).
+    request = await requests_service.get_request_or_404(
+        session, payload.service_request_id, for_update=True
+    )
     if request.client_id != client.id:
         raise DemandeAutruiInterditeError()
     if request.status is not ServiceRequestStatus.OUVERTE:
         raise DemandeNonOuverteError()
+    if requests_service.is_expired(request, settings):
+        raise requests_service.DemandeExpireeError()
 
     artisan = await get_artisan_or_404(session, payload.artisan_id)
     lat, lng = location_to_lat_lng(request)

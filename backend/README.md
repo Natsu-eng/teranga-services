@@ -180,6 +180,7 @@ uv run uvicorn app.main:app --reload --port 8000
 | `RATE_LIMIT_PAYMENT_INIT_PER_USER_MAX` / `..._WINDOW_SECONDS` | Non (`10` / `600`) | Tentatives de paiement par utilisateur. |
 | `FRONTEND_PUBLIC_BASE_URL` | Non (`http://localhost:3000`) | Origine du front pour les pages de retour après paiement. **À renseigner en prod.** |
 | `SANDBOX_WEBHOOK_URL` | Non (vide) | Sandbox : cible des webhooks simulés (défaut : ce backend). |
+| `REQUEST_OPEN_TTL_DAYS` | Non (`30`) | Jours avant qu'une demande restée ouverte (sans artisan) n'expire. |
 | `BACKEND_PUBLIC_BASE_URL` | Non (`http://localhost:8000`) | Origine publique du backend, préfixe des URL absolues d'avatar/couverture. **À renseigner en prod.** |
 
 Voir [.env.example](.env.example) pour le détail documenté de chaque variable.
@@ -390,6 +391,17 @@ seule par :
 | --- | --- |
 | `GET /api/v1/requests/me/eligibility?artisan_id=` | Client : chaque demande ouverte, éligible ou non, avec la raison (`hors_zone`, `metier_non_exerce`, `artisan_non_verifie`) |
 | `GET /api/v1/artisans/{id}/coverage?trade=&lat=&lng=` | Public : cet artisan couvre-t-il ce lieu pour ce métier ? |
+| `POST /api/v1/requests/{id}/cancel` | Client propriétaire : annule une demande encore ouverte (jamais supprimée) |
+
+**Expiration** : une demande restée ouverte plus de `REQUEST_OPEN_TTL_DAYS`
+jours (30 par défaut) est expirée — appliqué d'office (affichée
+« expiree », plus proposée aux artisans, envoi refusé `DEMANDE_EXPIREE`),
+même sans planificateur. `expires_at` est renvoyé pour chaque demande
+ouverte. Pour enregistrer ce statut en base, planifier une fois par jour :
+
+```bash
+uv run python scripts/expire_requests.py
+```
 
 ## Paiements (séquestre, espèces, versements)
 

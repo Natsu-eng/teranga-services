@@ -60,4 +60,6 @@ class ServiceRequestOut(BaseModel):
     ai_estimate_min_fcfa: int | None
     ai_estimate_max_fcfa: int | None
     status: ServiceRequestStatus
+    # Demande ouverte : date à laquelle elle expirera sans artisan (sinon null).
+    expires_at: datetime | None = None
     created_at: datetime
