@@ -1,9 +1,14 @@
-"""Jeu de données de développement, idempotent.
+"""Jeu de données de DÉMONSTRATION (développement), idempotent.
 
 JAMAIS exécuté automatiquement au démarrage de l'application -- toujours à la
 main :
 
     uv run python scripts/seed.py
+
+REFUSÉ en production (ENVIRONMENT=production) : faux artisans, faux avis et
+client de démo n'ont rien à y faire. Pour la production, seules les données
+de référence (métiers, taux initial) sont semées, par
+`scripts/seed_reference.py` (DEPLOYMENT.md).
 
 Sème :
 - les métiers de `trade` (plomberie, électricité, climatisation, menuiserie,
@@ -67,18 +72,17 @@ from app.models.request import ServiceRequest
 from app.models.review import Review
 from app.models.trade import Trade
 from app.models.user import User
+from app.services.reference_data import (
+    DEFAULT_COMMISSION_RATE_BPS,
+    TRADES,
+    ensure_default_commission_rate,
+    ensure_trade,
+)
 from app.services.reviews import recalculate_artisan_rating
 from app.services.verification import compute_verified_status
 
-TRADES = [
-    ("plomberie", "Plomberie", 1),
-    ("electricite", "Électricité", 2),
-    ("climatisation", "Climatisation", 3),
-    ("menuiserie", "Menuiserie", 4),
-    ("maconnerie", "Maçonnerie", 5),
-]
-
-DEFAULT_COMMISSION_RATE_BPS = 1000
+# Réexportés : la démo s'appuie sur les mêmes données de référence que la prod.
+__all__ = ["DEFAULT_COMMISSION_RATE_BPS", "TRADES"]
 
 CLIENT_PHONE = "+221771234501"
 CLIENT_NAME = "Diandé Diallo"
@@ -194,13 +198,9 @@ def _point(lat: float, lng: float) -> WKTElement:
 async def _get_or_create_trade(
     session: AsyncSession, code: str, label_fr: str, sort_order: int
 ) -> Trade:
-    trade = (await session.execute(select(Trade).where(Trade.code == code))).scalar_one_or_none()
-    if trade is not None:
-        return trade
-    trade = Trade(code=code, label_fr=label_fr, sort_order=sort_order, is_active=True)
-    session.add(trade)
-    await session.flush()
-    print(f"  + trade {code!r}")
+    trade, created = await ensure_trade(session, code, label_fr, sort_order)
+    if created:
+        print(f"  + trade {code!r}")
     return trade
 
 
@@ -212,28 +212,9 @@ async def _seed_trades(session: AsyncSession) -> dict[str, Trade]:
 
 
 async def _seed_default_commission_rate(session: AsyncSession) -> CommissionRate:
-    existing = (
-        await session.execute(
-            select(CommissionRate).where(
-                CommissionRate.trade_id.is_(None),
-                CommissionRate.tier.is_(None),
-                CommissionRate.effective_to.is_(None),
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        return existing
-    rate = CommissionRate(
-        rate_bps=DEFAULT_COMMISSION_RATE_BPS,
-        trade_id=None,
-        tier=None,
-        effective_from=datetime.now(UTC),
-    )
-    session.add(rate)
-    await session.flush()
-    print(
-        f"  + commission_rate par défaut ({DEFAULT_COMMISSION_RATE_BPS} bps, tous métiers/paliers)"
-    )
+    rate, created = await ensure_default_commission_rate(session)
+    if created:
+        print(f"  + commission_rate par défaut ({rate.rate_bps} bps, tous métiers/paliers)")
     return rate
 
 
@@ -415,6 +396,11 @@ async def seed(session: AsyncSession) -> None:
 
 
 async def main() -> None:
+    if get_settings().is_production:
+        sys.exit(
+            "Refusé : scripts/seed.py sème des données de DÉMONSTRATION (faux artisans, faux "
+            "avis). En production, utilisez scripts/seed_reference.py (DEPLOYMENT.md)."
+        )
     async with async_session_maker() as session, session.begin():
         await seed(session)
     print("Seed terminé.")
