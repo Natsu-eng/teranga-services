@@ -221,6 +221,7 @@ def to_detail(
         **_common_fields(profile, None, required_doc_types=required_doc_types),
         cover_url=profile.cover_url,
         created_at=profile.created_at,
+        is_suspended=profile.suspended_at is not None,
     )
 
 
@@ -302,9 +303,19 @@ async def get_artisan_or_404(session: AsyncSession, artisan_id: uuid.UUID) -> Ar
 
 
 async def get_artisan_detail(
-    session: AsyncSession, artisan_id: uuid.UUID, *, settings: Settings
+    session: AsyncSession,
+    artisan_id: uuid.UUID,
+    *,
+    settings: Settings,
+    requester: User | None = None,
 ) -> ArtisanDetailOut:
+    """Fiche d'un artisan. Suspendu : servie seulement à lui-même et aux
+    admins -- pour le public, il n'existe plus (même 404 qu'un id inconnu)."""
     profile = await get_artisan_or_404(session, artisan_id)
+    if profile.suspended_at is not None and (
+        requester is None or not _is_owner_or_admin(profile, requester)
+    ):
+        raise ArtisanIntrouvableError()
     required_doc_types = list(settings.verification_required_doc_types)
     return to_detail(profile, required_doc_types=required_doc_types)
 

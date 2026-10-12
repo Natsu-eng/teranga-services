@@ -294,8 +294,11 @@ async def get_artisan(
     artisan_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
+    requester: Annotated[User | None, Depends(get_current_user_optional)],
 ) -> ArtisanDetailOut:
-    return await artisans_service.get_artisan_detail(session, artisan_id, settings=settings)
+    return await artisans_service.get_artisan_detail(
+        session, artisan_id, settings=settings, requester=requester
+    )
 
 
 @router.get("/{artisan_id}/coverage", response_model=EngagementCheckOut)

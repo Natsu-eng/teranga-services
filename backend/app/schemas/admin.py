@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import ArtisanVerifiedStatus, VerificationDocType, VerificationStatus
 from app.schemas.artisans import ArtisanTradeOut, VerificationDocumentOut
+from app.schemas.audit import AuditEntryOut
 
 
 class AdminVerificationListItemOut(BaseModel):
@@ -69,3 +70,39 @@ class AdminArtisanDetailOut(BaseModel):
     verified_status: ArtisanVerifiedStatus
     trades: list[ArtisanTradeOut]
     documents: list[VerificationDocumentOut]
+    # Back-office (BUILD_PLAN.md §3.6).
+    phone: str
+    created_at: datetime
+    rating_avg: float | None
+    review_count: int
+    is_suspended: bool
+    suspended_at: datetime | None
+    suspension_reason: str | None
+    # Interventions de l'artisan, par statut.
+    interventions: dict[str, int]
+    # Décisions admin le concernant (journal d'audit), plus récentes d'abord.
+    history: list[AuditEntryOut]
+
+
+class AdminArtisanListItemOut(BaseModel):
+    """Une ligne de `GET /admin/artisans`."""
+
+    id: uuid.UUID
+    full_name: str
+    phone: str
+    verified_status: ArtisanVerifiedStatus
+    is_suspended: bool
+    trade_labels: list[str]
+    rating_avg: float | None
+    review_count: int
+    pending_documents: int
+    created_at: datetime
+
+
+class ArtisanSuspendIn(BaseModel):
+    # Motif obligatoire : jamais de sanction muette (journalisé, montré à l'artisan).
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class ArtisanReactivateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)

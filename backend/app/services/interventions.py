@@ -161,6 +161,15 @@ class ArtisanNonVerifieError(AppError):
         )
 
 
+class ArtisanIndisponibleError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ARTISAN_INDISPONIBLE",
+            message="Cet artisan ne peut pas recevoir de nouvelles demandes pour le moment.",
+            status_code=422,
+        )
+
+
 class ArtisanMetierNonExerceError(AppError):
     def __init__(self) -> None:
         super().__init__(
@@ -284,6 +293,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
 
 _BLOCKER_ERRORS: dict[EngagementBlocker, Callable[[], AppError]] = {
     EngagementBlocker.ARTISAN_NON_VERIFIE: ArtisanNonVerifieError,
+    EngagementBlocker.ARTISAN_INDISPONIBLE: ArtisanIndisponibleError,
     EngagementBlocker.METIER_NON_EXERCE: ArtisanMetierNonExerceError,
     EngagementBlocker.HORS_ZONE: ArtisanHorsZoneError,
 }
@@ -313,6 +323,8 @@ async def evaluate_engagement(
     )
     if verified_status is not ArtisanVerifiedStatus.VERIFIED:
         return EngagementBlocker.ARTISAN_NON_VERIFIE
+    if artisan.suspended_at is not None:
+        return EngagementBlocker.ARTISAN_INDISPONIBLE
     if not await artisans_repository.artisan_exercises_trade(
         session, artisan_id=artisan.id, trade_id=trade_id
     ):

@@ -7,7 +7,7 @@ toute façon (déclencheur `audit_log_append_only`).
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditLog
@@ -51,3 +51,25 @@ async def list_entries(
 async def count_entries(session: AsyncSession, filters: AuditFilters) -> int:
     stmt = select(func.count()).select_from(AuditLog).where(*_conditions(filters))
     return (await session.execute(stmt)).scalar_one()
+
+
+async def list_for_artisan(
+    session: AsyncSession, artisan_id: uuid.UUID, *, limit: int
+) -> list[AuditLog]:
+    """Décisions concernant un artisan : celles qui le ciblent (suspension,
+    réactivation) et celles sur ses documents (détail `artisan_id`)."""
+    stmt = (
+        select(AuditLog)
+        .where(
+            or_(
+                and_(
+                    AuditLog.target_type == AuditTargetType.ARTISAN,
+                    AuditLog.target_id == artisan_id,
+                ),
+                AuditLog.details["artisan_id"].astext == str(artisan_id),
+            )
+        )
+        .order_by(AuditLog.created_at.desc(), AuditLog.id)
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())

@@ -134,6 +134,9 @@ class EngagementBlocker(StrEnum):
     `POST /interventions`, dans cet ordre)."""
 
     ARTISAN_NON_VERIFIE = "artisan_non_verifie"
+    # Suspendu par un admin. Libellé volontairement neutre : ces lectures
+    # sont publiques, la raison d'une suspension ne regarde pas les tiers.
+    ARTISAN_INDISPONIBLE = "artisan_indisponible"
     METIER_NON_EXERCE = "metier_non_exerce"
     HORS_ZONE = "hors_zone"
 

@@ -17,6 +17,8 @@ class ArtisanCountsOut(BaseModel):
     pending: int
     verified: int
     rejected: int
+    # Suspendus par un admin (quel que soit leur statut de vérification).
+    suspended: int
 
 
 class UserCountsOut(BaseModel):

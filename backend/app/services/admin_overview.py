@@ -90,6 +90,13 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
             .where(Verification.status == VerificationStatus.PENDING)
         )
     ).scalar_one()
+    suspended_artisans = (
+        await session.execute(
+            select(func.count())
+            .select_from(ArtisanProfile)
+            .where(ArtisanProfile.deleted_at.is_(None), ArtisanProfile.suspended_at.is_not(None))
+        )
+    ).scalar_one()
     open_disputes = (
         await session.execute(
             select(func.count())
@@ -109,6 +116,7 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
         artisans=ArtisanCountsOut(
             total=sum(artisans.values()),
             **{status.value: artisans.get(status.value, 0) for status in ArtisanVerifiedStatus},
+            suspended=suspended_artisans,
         ),
         users=UserCountsOut(
             clients=users.get(Role.CLIENT.value, 0),
