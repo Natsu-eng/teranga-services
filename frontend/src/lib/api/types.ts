@@ -19,6 +19,7 @@ import type {
   PayoutSettings,
   AIAnalysisResult,
   MyArtisanProfile,
+  MyReceivedReview,
   MyVerification,
   ProfileMediaConstraints,
   Review,
@@ -28,6 +29,7 @@ import type {
   VerificationDocType,
   VerificationDocument,
 } from '../../types';
+import type { AdminBackofficeApi } from './admin-backoffice';
 
 // `not_implemented` : fonctionnalité déclarée côté front mais pas encore
 // servie par le backend -- levée explicitement (`notImplemented`,
@@ -143,7 +145,7 @@ export interface AdminVerificationFilters {
  * sur des données fictives. Une fonctionnalité sans backend encore doit
  * passer explicitement par `notImplemented()` (http-impl.ts).
  */
-export interface ApiClient {
+export interface ApiClient extends AdminBackofficeApi {
   listArtisans(filters?: ArtisanFilters): Promise<Artisan[]>;
   getArtisanById(id: string): Promise<Artisan>;
   analyzeProblem(description: string): Promise<AIAnalysisResult>;
@@ -188,6 +190,10 @@ export interface ApiClient {
   /** Litige : gèle l'argent jusqu'à l'arbitrage d'un admin. */
   openDispute(id: string, reason: string): Promise<Intervention>;
   createReview(interventionId: string, input: CreateReviewInput): Promise<Review>;
+  /** Avis reçus par l'artisan courant, masqués compris (statut de modération). */
+  listMyReviews(): Promise<MyReceivedReview[]>;
+  /** Signale un avis reçu : une fois, motif obligatoire ; il reste visible jusqu'à la décision. */
+  reportReview(reviewId: string, reason: string): Promise<MyReceivedReview>;
   listAdminVerifications(filters?: AdminVerificationFilters): Promise<AdminVerificationListItem[]>;
   getAdminVerificationDocumentBlob(verificationId: string): Promise<Blob>;
   approveVerification(verificationId: string): Promise<AdminVerificationReview>;

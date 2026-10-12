@@ -28,6 +28,14 @@ import { RealtimeProvider } from './features/messages/realtime/RealtimeProvider'
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 import { AdminDisputesScreen } from './features/admin/AdminDisputesScreen';
+import { AdminLayout } from './features/admin/AdminLayout';
+import { AdminOverviewScreen } from './features/admin/AdminOverviewScreen';
+import { AdminArtisansScreen } from './features/admin/AdminArtisansScreen';
+import { AdminArtisanDetailScreen } from './features/admin/AdminArtisanDetailScreen';
+import { AdminUsersScreen } from './features/admin/AdminUsersScreen';
+import { AdminReviewsScreen } from './features/admin/AdminReviewsScreen';
+import { AdminCommissionsScreen } from './features/admin/AdminCommissionsScreen';
+import { AdminAuditScreen } from './features/admin/AdminAuditScreen';
 import { PaymentScreen } from './features/payments/PaymentScreen';
 import { MyPaymentsScreen } from './features/payments/MyPaymentsScreen';
 import { EarningsScreen } from './features/payments/EarningsScreen';
@@ -73,22 +81,26 @@ export function AppRoutes() {
                   </ProtectedRoute>
                 }
               />
+              {/* Back-office : une seule garde pour toute la coquille et ses sections. */}
               <Route
-                path="admin/verifications"
+                path="admin"
                 element={
                   <RequireAdminRoute>
-                    <AdminVerificationQueueScreen />
+                    <AdminLayout />
                   </RequireAdminRoute>
                 }
-              />
-              <Route
-                path="admin/litiges"
-                element={
-                  <RequireAdminRoute>
-                    <AdminDisputesScreen />
-                  </RequireAdminRoute>
-                }
-              />
+              >
+                <Route index element={<AdminOverviewScreen />} />
+                <Route path="verifications" element={<AdminVerificationQueueScreen />} />
+                <Route path="artisans" element={<AdminArtisansScreen />} />
+                <Route path="artisans/:artisanId" element={<AdminArtisanDetailScreen />} />
+                <Route path="utilisateurs" element={<AdminUsersScreen />} />
+                <Route path="avis" element={<AdminReviewsScreen />} />
+                <Route path="litiges" element={<AdminDisputesScreen />} />
+                <Route path="commissions" element={<AdminCommissionsScreen />} />
+                <Route path="journal" element={<AdminAuditScreen />} />
+                <Route path="*" element={<NotFoundScreen />} />
+              </Route>
             </Route>
 
             <Route element={<SubPageLayout />}>

@@ -680,6 +680,48 @@ Points de cet audit concernés :
   planification des relances de versement, libération automatique après
   délai, abonnement « Vérifié ».
 
+## Mise à jour — `feat/admin-backoffice`
+
+Back-office admin complet, référence : [BUILD_PLAN.md §3.6](BUILD_PLAN.md).
+Points de cet audit concernés :
+
+- **Recommandation du lot `feat/admin-verification` (table d'audit) :
+  construite.** `audit_log` en ajout seul, garanti par la base
+  (déclencheurs refusant UPDATE, DELETE et TRUNCATE — testés) ; écrit dans
+  la même transaction que chaque action ; les actions existantes
+  (documents, litiges, création du premier admin par script) y sont
+  désormais journalisées.
+- **§4, `review.status` (`masque`/`signale`) sans point d'entrée : close.**
+  L'artisan signale (une fois, motif), l'admin masque ou maintient ; un
+  avis n'est jamais supprimé ; un avis signalé reste visible et compté
+  jusqu'à la décision (un signalement seul ne fait rien disparaître).
+- **§4, `commission_rate` sans administration : close.** Grille en ajout
+  seul ; un test prouve qu'une intervention existante garde son taux et sa
+  commission, même calculée après l'ajout d'un nouveau taux.
+- **Rôle admin** : le premier admin reste créé par le seul script ;
+  ensuite, octroi et retrait depuis l'interface avec anti-verrouillage
+  (jamais son propre rôle, jamais le dernier admin ; verrou contre deux
+  retraits croisés, course simulée en test) ; retrait effectif à la
+  requête suivante (rôle relu en base, testé avec un jeton émis avant).
+- **Artisans** : suspension distincte de la vérification (invisible,
+  fiche publique 404, inéligible aux nouvelles demandes, travaux et
+  paiements en cours préservés), motif montré à l'artisan seul.
+- **Sécurité vérifiée par les tests** : toutes les nouvelles routes
+  `/admin/*` -> 401 anonyme, 403 client/artisan ; journal en GET seul ;
+  aucune route PUT/PATCH/DELETE sur les taux ; recherches LIKE échappées
+  (`%` et `_` cherchés littéralement) ; côté front, les huit sections
+  `/admin/*` répondent « Page introuvable » à un non-admin.
+- **Constaté pendant le lot, corrigé** :
+  - la note dénormalisée pouvait devenir périmée si deux modérations
+    touchaient le même artisan en même temps : le profil est désormais
+    verrouillé avant le recalcul ;
+  - la doc du module admin affirmait « aucun endpoint n'attribue le rôle »,
+    devenu faux : docstring, BUILD_PLAN §4.4 et README backend réécrits.
+- **Vérification** : porte backend verte (ruff, ruff format, mypy strict,
+  pytest), porte front verte (`npm run validate`, `npm run build`).
+- **Reste hors périmètre (documenté)** : annulation d'un taux programmé,
+  taux par palier (non appliqués par le moteur), export du journal.
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

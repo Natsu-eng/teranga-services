@@ -13,7 +13,6 @@ import { formatFcfa } from '../../lib/format';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { Intervention } from '../../types';
 import { CHANNEL_LABELS, formatPaymentDate, formatRate } from '../payments/paymentText';
-import { AdminHeader } from './AdminHeader';
 
 /** Longueur minimale de la justification (alignée sur la validation serveur). */
 const MIN_NOTE_LENGTH = 3;
@@ -182,45 +181,42 @@ export const AdminDisputesScreen: React.FC = () => {
     setData((prev) => (prev ? prev.filter((item) => item.id !== id) : prev));
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminHeader />
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-16 space-y-5">
-        <div className="space-y-1">
-          <h1 className="font-display text-display-md font-semibold text-primary">Litiges</h1>
-          <p className="text-sm text-muted-foreground">
-            L&apos;argent d&apos;une intervention en litige est gelé jusqu&apos;à votre décision.
-          </p>
-        </div>
-        <div className="flex gap-2" role="group" aria-label="Filtrer les litiges">
-          <Chip selected={!resolved} onClick={() => setResolved(false)}>
-            À trancher
-          </Chip>
-          <Chip selected={resolved} onClick={() => setResolved(true)}>
-            Tranchés
-          </Chip>
-        </div>
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="font-display text-display-md font-semibold text-primary">Litiges</h1>
+        <p className="text-sm text-muted-foreground">
+          L&apos;argent d&apos;une intervention en litige est gelé jusqu&apos;à votre décision.
+        </p>
+      </div>
+      <div className="flex gap-2" role="group" aria-label="Filtrer les litiges">
+        <Chip selected={!resolved} onClick={() => setResolved(false)}>
+          À trancher
+        </Chip>
+        <Chip selected={resolved} onClick={() => setResolved(true)}>
+          Tranchés
+        </Chip>
+      </div>
 
-        {isLoading && !data ? (
-          <div className="space-y-4" aria-busy="true">
-            <Skeleton className="h-52 rounded-card" />
-          </div>
-        ) : error && !data ? (
-          <ErrorState message={error.message} onRetry={reload} />
-        ) : data && data.length === 0 ? (
-          <EmptyState
-            icon={resolved ? <Scale /> : <AlertTriangle />}
-            title={resolved ? 'Aucun litige tranché.' : 'Aucun litige à trancher.'}
-          />
-        ) : (
-          <ul className="space-y-4">
-            {(data ?? []).map((intervention) => (
-              <li key={intervention.id}>
-                <DisputeCard intervention={intervention} onResolved={removeResolved} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
+      {isLoading && !data ? (
+        <div className="space-y-4" aria-busy="true">
+          <Skeleton className="h-52 rounded-card" />
+        </div>
+      ) : error && !data ? (
+        <ErrorState message={error.message} onRetry={reload} />
+      ) : data && data.length === 0 ? (
+        <EmptyState
+          icon={resolved ? <Scale /> : <AlertTriangle />}
+          title={resolved ? 'Aucun litige tranché.' : 'Aucun litige à trancher.'}
+        />
+      ) : (
+        <ul className="space-y-4">
+          {(data ?? []).map((intervention) => (
+            <li key={intervention.id}>
+              <DisputeCard intervention={intervention} onResolved={removeResolved} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };

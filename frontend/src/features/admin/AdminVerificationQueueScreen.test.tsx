@@ -167,15 +167,4 @@ describe('AdminVerificationQueueScreen', () => {
     );
     await waitFor(() => expect(screen.queryByText('Idrissa Diop')).not.toBeInTheDocument());
   });
-
-  it('logs out via the header button', async () => {
-    const logout = vi.fn();
-    mockedUseAuth.mockReturnValue(authValue({ logout }));
-
-    renderScreen();
-
-    fireEvent.click(await screen.findByRole('button', { name: /Déconnexion/ }));
-
-    expect(logout).toHaveBeenCalled();
-  });
 });

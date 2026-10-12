@@ -48,6 +48,11 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
     __tablename__ = "artisan_profile"
     __table_args__ = (
         Index("ix_artisan_profile_base_location", "base_location", postgresql_using="gist"),
+        # Une suspension a toujours un motif ; une réactivation efface les deux.
+        CheckConstraint(
+            "(suspended_at IS NULL) = (suspension_reason IS NULL)",
+            name="suspension_fields_together",
+        ),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -72,11 +77,19 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
         nullable=False,
         default=SubscriptionTier.FREE,
     )
-    # Dénormalisé depuis `review` (avis `publie` uniquement) : un AVG() par
+    # Dénormalisé depuis `review` (avis visibles : `publie` et `signale` en attente
+    # de décision ; jamais `masque`) : un AVG() par
     # artisan sur chaque requête de liste ne tient pas à l'échelle. Recalculé
     # par `app.services.reviews.recalculate_artisan_rating`, jamais saisi
     # directement (BUILD_PLAN.md §6, Lot 9).
     rating_avg: Mapped[Decimal | None] = mapped_column(Numeric(precision=3, scale=2))
+    # Suspension décidée par un admin (BUILD_PLAN.md §3.6), DISTINCTE de la
+    # vérification : un artisan suspendu disparaît de la recherche et ne
+    # reçoit plus de nouvelle demande, mais ses interventions et paiements
+    # en cours continuent. NULL = actif. Chaque suspension/réactivation est
+    # journalisée (audit_log).
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suspension_reason: Mapped[str | None] = mapped_column(Text)
     # Moyen de versement choisi par l'artisan (BUILD_PLAN.md §3.5). Le numéro,
     # lui, n'est jamais saisi : c'est toujours celui du compte, vérifié par
     # OTP. NULL = réglage par défaut (PAYOUT_DEFAULT_CHANNEL).

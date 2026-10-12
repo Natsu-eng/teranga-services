@@ -7,6 +7,26 @@ export interface Review {
   rating: number;
   date: string;
   comment: string;
+  /**
+   * Statut de modération, dit tel quel par le serveur : `signale` = signalé
+   * par l'artisan, en attente de décision (toujours visible et compté).
+   * Absent sur les données de démonstration.
+   */
+  moderationStatus?: 'publie' | 'masque' | 'signale';
+}
+
+/** Un avis reçu, vu par l'artisan lui-même (masqués compris). */
+export interface MyReceivedReview {
+  id: string;
+  rating: number;
+  comment: string;
+  authorName: string;
+  createdAt: string;
+  status: 'publie' | 'masque' | 'signale';
+  reportReason: string | null;
+  reportedAt: string | null;
+  /** Un seul signalement par avis, et seulement sur un avis publié. */
+  canReport: boolean;
 }
 
 export interface Realisation {
@@ -320,6 +340,10 @@ export interface MyArtisanProfile {
   isAvailable: boolean;
   verifiedStatus: ArtisanVerifiedStatus;
   trades: ArtisanTradeDetail[];
+  /** Suspendu par un admin : invisible en recherche, aucune nouvelle demande. */
+  isSuspended: boolean;
+  /** Motif de la suspension, montré à l'artisan lui-même (jamais au public). */
+  suspensionReason: string | null;
 }
 
 /** Limites d'envoi d'une photo du profil, telles qu'appliquées par le serveur. */

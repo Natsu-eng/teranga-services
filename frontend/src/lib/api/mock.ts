@@ -25,6 +25,7 @@ import type {
   Artisan,
   Intervention,
   MyArtisanProfile,
+  MyReceivedReview,
   MyVerification,
   ProfileMediaConstraints,
   Review,
@@ -40,6 +41,93 @@ import {
   type CreateReviewInput,
   type CreateServiceRequestInput,
 } from './types';
+import type { AdminBackofficeApi } from './admin-backoffice';
+import type { PageResult } from '../../types/admin';
+
+// Back-office : rien d'inventé. Listes vides, vue d'ensemble à zéro, et
+// toute action échoue comme sur un identifiant inconnu.
+function emptyPage<T>(): PageResult<T> {
+  return { items: [], page: 1, total: 0, totalPages: 0 };
+}
+
+const NOT_FOUND = () => new ApiError('not_found', 'Élément introuvable.');
+
+const mockAdminBackoffice: AdminBackofficeApi = {
+  async getAdminOverview() {
+    await simulateNetworkLatency();
+    return {
+      artisans: { total: 0, none: 0, pending: 0, verified: 0, rejected: 0, suspended: 0 },
+      users: { clients: 0, artisans: 0, admins: 0 },
+      interventions: { proposee: 0, acceptee: 0, enCours: 0, terminee: 0, annulee: 0, litige: 0 },
+      money: {
+        inEscrowFcfa: 0,
+        releasedFcfa: 0,
+        cashFcfa: 0,
+        refundedFcfa: 0,
+        businessVolumeFcfa: 0,
+        commissionCollectedFcfa: 0,
+        commissionDueFcfa: 0,
+        commissionPendingFcfa: 0,
+      },
+      pendingVerifications: 0,
+      openDisputes: 0,
+      reportedReviews: 0,
+      generatedAt: new Date().toISOString(),
+    };
+  },
+  async listAdminArtisans() {
+    await simulateNetworkLatency();
+    return emptyPage();
+  },
+  async getAdminArtisan() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async suspendArtisan() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async reactivateArtisan() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async listAdminUsers() {
+    await simulateNetworkLatency();
+    return emptyPage();
+  },
+  async grantAdmin() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async revokeAdmin() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async listAdminReviews() {
+    await simulateNetworkLatency();
+    return emptyPage();
+  },
+  async hideReview() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async restoreReview() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async getCommissionGrid() {
+    await simulateNetworkLatency();
+    return { items: [], maxRateBps: 0, generatedAt: new Date().toISOString() };
+  },
+  async addCommissionRate() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
+  async listAuditEntries() {
+    await simulateNetworkLatency();
+    return emptyPage();
+  },
+};
 
 // Mêmes codes que le seed backend (backend/scripts/seed.py).
 const MOCK_TRADES: Trade[] = [
@@ -409,6 +497,18 @@ export const mockApiClient: ApiClient = {
       destinationPhone: '+221770000000',
     };
   },
+
+  async listMyReviews(): Promise<MyReceivedReview[]> {
+    await simulateNetworkLatency();
+    return [];
+  },
+
+  async reportReview(): Promise<MyReceivedReview> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Avis introuvable.');
+  },
+
+  ...mockAdminBackoffice,
 
   async listAdminDisputes(): Promise<Intervention[]> {
     await simulateNetworkLatency();

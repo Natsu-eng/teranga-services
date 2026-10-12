@@ -104,6 +104,8 @@ def _build_filtered_query(
         # *sortie* API (`verified_status` reste recalculé à la volée),
         # seulement comme filtre de visibilité.
         ArtisanProfile.verified_status == ArtisanVerifiedStatus.VERIFIED,
+        # Suspendu par un admin : invisible, quelle que soit sa vérification.
+        ArtisanProfile.suspended_at.is_(None),
         _artisan_trade_reachable(filters, point),
     )
     if point is not None:

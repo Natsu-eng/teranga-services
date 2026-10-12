@@ -134,6 +134,9 @@ class EngagementBlocker(StrEnum):
     `POST /interventions`, dans cet ordre)."""
 
     ARTISAN_NON_VERIFIE = "artisan_non_verifie"
+    # Suspendu par un admin. Libellé volontairement neutre : ces lectures
+    # sont publiques, la raison d'une suspension ne regarde pas les tiers.
+    ARTISAN_INDISPONIBLE = "artisan_indisponible"
     METIER_NON_EXERCE = "metier_non_exerce"
     HORS_ZONE = "hors_zone"
 
@@ -168,3 +171,28 @@ class MessageKind(StrEnum):
     TEXTE = "texte"
     DEVIS = "devis"
     SYSTEME = "systeme"
+
+
+class AuditAction(StrEnum):
+    """Actions sensibles inscrites au journal d'audit (append-only)."""
+
+    ADMIN_BOOTSTRAP = "admin.bootstrap"  # premier admin, par le script CLI
+    VERIFICATION_APPROVE = "verification.approve"
+    VERIFICATION_REJECT = "verification.reject"
+    DISPUTE_RESOLVE = "dispute.resolve"
+    ARTISAN_SUSPEND = "artisan.suspend"
+    ARTISAN_REACTIVATE = "artisan.reactivate"
+    USER_GRANT_ADMIN = "user.grant_admin"
+    USER_REVOKE_ADMIN = "user.revoke_admin"
+    REVIEW_HIDE = "review.hide"
+    REVIEW_RESTORE = "review.restore"
+    COMMISSION_RATE_CREATE = "commission_rate.create"
+
+
+class AuditTargetType(StrEnum):
+    VERIFICATION = "verification"
+    INTERVENTION = "intervention"
+    ARTISAN = "artisan"
+    USER = "user"
+    REVIEW = "review"
+    COMMISSION_RATE = "commission_rate"

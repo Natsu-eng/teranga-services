@@ -58,6 +58,8 @@ const profileFixture: MyArtisanProfile = {
   coverUrl: null,
   isAvailable: true,
   verifiedStatus: 'none',
+  isSuspended: false,
+  suspensionReason: null,
   trades: [],
 };
 

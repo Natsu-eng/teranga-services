@@ -171,8 +171,10 @@ Extension 1:1 d'un `user` de rôle `artisan`.
 | is_available | bool | toggle dispo — modifiable via `PATCH /artisans/me` (Lot 12c) |
 | verified_status | enum(`none`,`pending`,`verified`,`rejected`) | dérivé des `verification`, **pas** un booléen — voir encadré ci-dessous |
 | subscription_tier | enum(`free`,`verified`) | monétisation (abonnement) |
-| rating_avg | numeric(3,2) null | **dénormalisé** depuis `review` (avis `publie` uniquement) — recalculé par `recalculate_artisan_rating`, jamais saisi (Lot 9) |
+| rating_avg | numeric(3,2) null | **dénormalisé** depuis `review` (avis visibles : `publie` et `signale` en attente de décision, jamais `masque`) — recalculé par `recalculate_artisan_rating`, jamais saisi (Lot 9, §3.6) |
 | review_count | int, défaut 0 | idem, dénormalisé et recalculé avec `rating_avg` |
+| suspended_at | timestamptz null | suspension par un admin (§3.6) ; NULL = actif |
+| suspension_reason | text null | motif obligatoire, montré à l'artisan lui-même ; CHECK `suspension_fields_together` |
 | created_at / updated_at / deleted_at | | |
 
 > **`verified_status` : règle de dérivation exacte** (`app.services.verification.compute_verified_status`,
@@ -196,8 +198,11 @@ Extension 1:1 d'un `user` de rôle `artisan`.
 > **Dénormalisation `rating_avg`/`review_count`** : un `AVG(rating)` par
 > artisan sur chaque requête de liste ne tient pas à l'échelle.
 > `app.services.reviews.recalculate_artisan_rating` recalcule les deux
-> colonnes depuis les avis `publie` uniquement (masqué/signalé exclus),
-> appelée après toute mutation d'un avis (insertion ou changement de statut).
+> colonnes depuis les avis visibles (`publie`, et `signale` tant qu'un admin
+> n'a pas tranché ; `masque` exclu), appelée après toute mutation d'un avis
+> (insertion ou changement de statut). Le profil est verrouillé avant
+> l'agrégat : deux modérations simultanées ne laissent jamais une note
+> périmée (§3.6).
 
 #### `verification`
 Documents de vérification d'un artisan. **Plusieurs par artisan** (CNI, selfie,
@@ -395,10 +400,16 @@ C'est la digue anti-faux-avis de Checkatrade (90 % de leurs avis sont vérifiés
 | comment | text | |
 | contact_verified | bool | client vérifié par SMS |
 | status | enum(`publie`,`masque`,`signale`) | modération |
+| report_reason | text null | motif du signalement par l'artisan (§3.6) |
+| reported_at | timestamptz null | posé avec `report_reason` (CHECK `report_fields_together`) ; `signale` implique un signalement (CHECK `signale_has_report`) |
 | created_at | timestamptz | |
 
 > **Règle métier** : un `review` ne peut exister que si l'`intervention` liée est
 > `terminee`. Contrainte applicative + idéalement contrainte DB.
+>
+> **Modération (§3.6)** : un avis n'est jamais supprimé. L'artisan concerné
+> peut le signaler une fois (motif) ; il reste visible et compté jusqu'à la
+> décision d'un admin, qui le masque (motif, journalisé) ou le maintient.
 
 #### `conversation` / `message`
 Messagerie in-app client ↔ artisan, **une conversation par intervention**,
@@ -465,6 +476,27 @@ famille si un token déjà révoqué est rejoué — signal de vol).
 | created_at | timestamptz | |
 | user_agent | text null | contexte de l'appareil, pour affichage futur des sessions actives |
 | ip | text null | contexte de connexion, pour audit |
+
+#### `audit_log` (journal d'audit, lot `feat/admin-backoffice`)
+Journal **en ajout seul** de toutes les actions admin sensibles (§3.6).
+
+| Champ | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| created_at | timestamptz | `clock_timestamp()` : heure réelle de l'écriture, même dans une longue transaction |
+| actor_id | UUID FK → user null | NULL = script CLI (création du premier admin) |
+| actor_name | varchar(150) null | nom de l'admin au moment de l'action (lisible même s'il change de nom) |
+| action | enum (`admin.bootstrap`, `verification.approve`/`reject`, `dispute.resolve`, `artisan.suspend`/`reactivate`, `user.grant_admin`/`revoke_admin`, `review.hide`/`restore`, `commission_rate.create`) | |
+| target_type | enum(`verification`,`intervention`,`artisan`,`user`,`review`,`commission_rate`) | |
+| target_id | UUID null | |
+| details | jsonb, défaut `{}` | motif, statut précédent, valeurs avant/après |
+
+> **Ajout seul, garanti par la base** : déclencheurs `audit_log_append_only`
+> (BEFORE UPDATE OR DELETE) et `audit_log_no_truncate` qui lèvent une
+> erreur. Même un accès SQL direct par l'application ne peut ni réécrire ni
+> effacer l'historique (testé). L'écriture se fait dans la MÊME transaction
+> que l'action : une action validée est toujours journalisée, une action
+> annulée ne l'est jamais.
 
 ---
 
@@ -1133,6 +1165,82 @@ délai automatique de libération ; un seul fournisseur actif à la fois (un
 remboursement exige le fournisseur d'origine).
 
 
+## 3.6 Back-office admin (lot `feat/admin-backoffice`)
+
+**Décisions de sécurité actées (non négociables).**
+
+1. **Premier admin = script CLI uniquement** (`scripts/create_admin.py`,
+   §4.4). Ensuite, un admin peut promouvoir ou retirer d'autres comptes
+   depuis l'interface.
+2. **Anti-verrouillage** : impossible de retirer son PROPRE rôle admin
+   (`REVOCATION_DE_SOI_INTERDITE`), impossible de retirer le DERNIER admin
+   (`DERNIER_ADMIN`). Les lignes de tous les admins actifs sont verrouillées
+   (`FOR UPDATE`, ordre stable) avant de compter : deux retraits croisés
+   simultanés ne peuvent pas vider le back-office (testé, course simulée).
+3. **Toutes les routes `/admin/*` exigent le rôle admin**, relu en base à
+   chaque requête (un retrait coupe l'accès immédiatement, même avec un
+   jeton encore valide — testé) ; 403 générique, rien ne révèle la route.
+   Côté front, toute la coquille `/admin/*` est derrière `RequireAdminRoute`
+   (écran « Page introuvable » pour un non-admin, sur les huit sections —
+   testé).
+4. **Journal d'audit en ajout seul** (`audit_log`, §2.2) : chaque action
+   sensible y est inscrite, base comprise.
+5. **Grille de commission : on AJOUTE, on ne modifie ni ne supprime.**
+
+**Endpoints** (tous `require_role(Role.ADMIN)`, paginés comme §5.2 sauf la
+grille) :
+
+| Route | Rôle |
+|---|---|
+| `GET /admin/overview` | chiffres dérivés des tables métier (comptes, artisans par statut et suspendus, interventions par statut, argent par statut de paiement, commissions collectées / dues / à prélever, files : documents, litiges, avis signalés). Zéros honnêtes, jamais d'estimation. |
+| `GET /admin/artisans` · `GET /admin/artisans/{id}` | tous les artisans (statut, `suspended`, recherche nom/téléphone) ; fiche : documents, interventions par statut, historique des décisions (journal). |
+| `POST /admin/artisans/{id}/suspend` · `/reactivate` | suspension (motif ≥ 10 car., montré à l'artisan) : invisible en recherche, fiche publique 404, inéligible aux NOUVELLES demandes (`ARTISAN_INDISPONIBLE` dans `evaluate_engagement`) ; interventions et paiements en cours continuent. |
+| `GET /admin/users` · `POST /admin/users/{id}/grant-admin` · `/revoke-admin` | rôle admin. Chaque ligne porte `can_grant_admin`, `can_revoke_admin` et `guard` (raison du blocage) : garde-fous visibles AVANT l'action, revérifiés sous verrou. Seul un compte client sans profil artisan est promouvable (comptes admin dédiés, rôle unique) ; au retrait, le rôle est déduit des données (artisan si profil, sinon client). |
+| `GET /admin/reviews` · `POST /admin/reviews/{id}/hide` · `/restore` | modération : signalés d'abord ; masquer exige un motif ; rétablir/maintenir ; note recalculée, profil verrouillé. |
+| `GET /admin/commission-rates` · `POST /admin/commission-rates` | grille complète (en vigueur / programmé / archivé, nombre d'interventions qui ont figé chaque taux) ; ajout d'un taux daté. |
+| `GET /admin/audit` | journal, filtres action / type de cible / cible / auteur. Méthode GET seule (testé). |
+
+Côté artisan : `GET /artisans/me/reviews` (tous ses avis, masqués compris,
+avec statut de modération) et `POST /artisans/me/reviews/{id}/report`
+(une fois par avis, motif ≥ 10 car. ; 404 pour l'avis d'un autre artisan).
+`ReviewOut.status` dit le statut tel quel (un avis `signale` reste public).
+
+**Grille de commission, règles exactes** (`app/services/admin_commission.py`) :
+date d'effet = maintenant par défaut, jamais dans le passé
+(`DATE_EFFET_PASSEE`) ; le taux de même portée qui couvre cette date voit
+seulement sa FIN posée à cette date (sa période écoulée, figée par les
+interventions, reste intacte) ; un taux programmé plus tard borne le
+nouveau (grille continue, sans trou ni chevauchement) ; même début ou
+ajout concurrent → 409 `CHEVAUCHEMENT_TAUX` (la contrainte d'exclusion
+reste juge final) ; taux par palier refusés (422 `PALIER_NON_APPLIQUE`)
+tant que `find_effective_rate` ne les lit pas ; plafond de saisie
+`COMMISSION_RATE_MAX_BPS` (défaut 3000 = 30 %) contre la faute de frappe.
+**Preuve** (`tests/test_admin_commission.py`) : après l'ajout d'un taux,
+une intervention existante garde son taux et sa commission — y compris une
+commission calculée APRÈS le changement — tandis qu'une nouvelle
+intervention résout le nouveau taux.
+
+**Actions journalisées** : création du premier admin (script, `actor_id`
+NULL), validation/refus de document, arbitrage de litige, suspension et
+réactivation, octroi et retrait du rôle admin, masquage et rétablissement
+d'avis, ajout de taux. Un refus (409/422) n'écrit rien. Le signalement
+d'un avis est l'acte de l'artisan, porté par l'avis lui-même, pas par le
+journal admin.
+
+**Frontend** : coquille `AdminLayout` (en-tête + navigation à huit
+entrées : Vue d'ensemble, Vérifications, Artisans, Utilisateurs, Avis,
+Litiges, Commissions, Journal), une seule garde pour toutes les routes
+imbriquées. Toute action sensible passe par une confirmation qui énonce
+l'effet exact avant d'agir (`ConfirmActionSheet`), motif obligatoire quand
+le serveur l'exige ; le refus serveur s'affiche en clair. Journal en
+lecture seule. Espace Pro : bandeau « compte suspendu » avec le motif,
+section « Avis reçus » avec « Signaler cet avis ».
+
+**Limites connues** : pas d'annulation d'un taux programmé (on en ajoute
+un autre avant lui) ; pas de taux par palier tant que le moteur ne les
+applique pas ; pas d'export du journal ; un compte admin ne peut pas être
+aussi artisan (rôle unique, choix assumé).
+
 ## 4. Authentification (téléphone + OTP)
 
 Flux : `request-otp` (génère code, hache, envoie SMS) → `verify-otp` (compare
@@ -1239,16 +1347,17 @@ vérification) reste un chantier distinct, hors périmètre de ce lot.
 
 ### 4.4 Rôle admin : bootstrap hors application (lot `feat/admin-verification`)
 
-**Décision de sécurité actée, non négociable : le rôle `admin` ne s'obtient
-JAMAIS via l'application.** Aucun endpoint, aucun paramètre d'API (schéma
-d'entrée, query param, header) ne peut créer ni promouvoir un admin — ni au
-signup (§4.3, `_SIGNUP_ROLES` verrouille explicitement `{client, artisan}`),
-ni via aucune route de l'espace admin lui-même (`PATCH`/`POST
-/admin/*` ne touchent jamais `role`, seulement `verification.status` et
-`artisan_profile.verified_status` dérivé).
+**Décision de sécurité actée, non négociable : le PREMIER admin ne
+s'obtient JAMAIS via l'application.** Aucun parcours public (signup :
+§4.3, `_SIGNUP_ROLES` verrouille explicitement `{client, artisan}`), aucun
+paramètre d'API ne peut créer un admin. Depuis le lot
+`feat/admin-backoffice` (§3.6), un admin DÉJÀ en place peut promouvoir un
+compte client dédié ou retirer le rôle d'un autre admin
+(`/admin/users/...`), sous garde anti-verrouillage et journalisé ; c'est
+la seule autre route qui touche `role`.
 
-**Seul chemin : `scripts/create_admin.py`, en ligne de commande, côté
-serveur.** Exige un accès direct à `DATABASE_URL` — jamais exposé sur le
+**Seul chemin vers le premier admin : `scripts/create_admin.py`, en ligne
+de commande, côté serveur** (journalisé `admin.bootstrap`, auteur NULL). Exige un accès direct à `DATABASE_URL` — jamais exposé sur le
 réseau, jamais appelable depuis le frontend. Promeut un utilisateur
 **déjà inscrit** via le parcours OTP normal (par son numéro E.164) ; ne
 crée jamais de compte lui-même, refuse explicitement un numéro inconnu.
@@ -1279,13 +1388,9 @@ client, même en tentant de l'injecter dans le corps de la requête (testé).
 Un document déjà tranché ne se re-tranche pas (`VERIFICATION_DEJA_TRAITEE`,
 409) : chaque ligne `verification` ne porte donc jamais plus d'une
 décision, `reviewed_by`/`reviewed_at` restent un audit trail fiable et
-non réécrit pour ce lot. **Recommandation, non construite ici** : une table
-d'audit dédiée (journal append-only de toutes les actions admin, au-delà
-de la seule dernière décision par document) serait utile si l'espace admin
-grandit (plusieurs admins, besoin d'historique complet même après un
-éventuel changement de décision) — hors périmètre pour l'instant, `reviewed_by`/
-`reviewed_at` suffisent au besoin actuel (une décision définitive par
-document).
+non réécrit. **Construit depuis** (lot `feat/admin-backoffice`) : le
+journal d'audit en ajout seul `audit_log` (§2.2, §3.6) trace en plus
+chaque décision de tous les admins.
 
 ---
 
@@ -1625,6 +1730,18 @@ merge. Le backend a sa propre porte (`pytest`, `ruff`, `mypy`).
   et versements Pro, historique client, litiges admin. Détail §3.5.
   *But : le client paie en confiance, l'artisan sait exactement ce qu'il
   touche, Téranga mesure tout — y compris le cash.*
+- **Lot `feat/admin-backoffice` — Back-office admin.** Journal d'audit en
+  ajout seul (déclencheurs PostgreSQL) et actions existantes journalisées ;
+  vue d'ensemble aux chiffres dérivés ; gestion des artisans et suspension
+  (invisible, inéligible aux nouvelles demandes, travaux en cours
+  préservés, motif montré à l'artisan) ; rôle admin depuis l'interface avec
+  anti-verrouillage (jamais soi-même, jamais le dernier, verrou contre la
+  course) ; signalement d'avis par l'artisan et modération (jamais de
+  suppression, note recalculée) ; grille de commission en ajout seul, taux
+  figés prouvés intacts. Front : coquille `/admin` à huit sections,
+  confirmations qui énoncent l'effet, journal en lecture seule ; espace Pro :
+  bandeau de suspension et avis reçus. Détail §3.6. *But : piloter la
+  plateforme sans jamais perdre la trace de qui a décidé quoi.*
 - **Lot 15 — Déploiement Railway** (2 services + Postgres managé, bascule
   `DATABASE_URL`) + branchement d'un agrégateur réel (§3.5, point de
   bascule). *À séquencer selon priorités.*

@@ -14,8 +14,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import ArtisanVerifiedStatus, VerificationDocType, VerificationStatus
+from app.models.enums import (
+    ArtisanVerifiedStatus,
+    ReviewStatus,
+    Role,
+    VerificationDocType,
+    VerificationStatus,
+)
 from app.schemas.artisans import ArtisanTradeOut, VerificationDocumentOut
+from app.schemas.audit import AuditEntryOut
 
 
 class AdminVerificationListItemOut(BaseModel):
@@ -69,3 +76,87 @@ class AdminArtisanDetailOut(BaseModel):
     verified_status: ArtisanVerifiedStatus
     trades: list[ArtisanTradeOut]
     documents: list[VerificationDocumentOut]
+    # Back-office (BUILD_PLAN.md §3.6).
+    phone: str
+    created_at: datetime
+    rating_avg: float | None
+    review_count: int
+    is_suspended: bool
+    suspended_at: datetime | None
+    suspension_reason: str | None
+    # Interventions de l'artisan, par statut.
+    interventions: dict[str, int]
+    # Décisions admin le concernant (journal d'audit), plus récentes d'abord.
+    history: list[AuditEntryOut]
+
+
+class AdminArtisanListItemOut(BaseModel):
+    """Une ligne de `GET /admin/artisans`."""
+
+    id: uuid.UUID
+    full_name: str
+    phone: str
+    verified_status: ArtisanVerifiedStatus
+    is_suspended: bool
+    trade_labels: list[str]
+    rating_avg: float | None
+    review_count: int
+    pending_documents: int
+    created_at: datetime
+
+
+class ArtisanSuspendIn(BaseModel):
+    # Motif obligatoire : jamais de sanction muette (journalisé, montré à l'artisan).
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class ArtisanReactivateIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AdminUserOut(BaseModel):
+    """Un compte dans `GET /admin/users`, avec ce que l'admin peut en faire
+    — et pourquoi pas (`guard`) : les garde-fous sont visibles avant l'action."""
+
+    id: uuid.UUID
+    full_name: str
+    phone: str
+    role: Role
+    created_at: datetime
+    has_artisan_profile: bool
+    is_self: bool
+    can_grant_admin: bool
+    can_revoke_admin: bool
+    guard: str | None
+
+
+class AdminRoleChangeIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class AdminReviewOut(BaseModel):
+    """Un avis vu par la modération : auteur RÉEL (l'admin en a besoin pour
+    juger), artisan concerné, signalement éventuel."""
+
+    id: uuid.UUID
+    rating: int
+    comment: str
+    status: ReviewStatus
+    contact_verified: bool
+    created_at: datetime
+    intervention_id: uuid.UUID
+    author_id: uuid.UUID
+    author_name: str
+    artisan_id: uuid.UUID
+    artisan_name: str
+    report_reason: str | None
+    reported_at: datetime | None
+
+
+class ReviewHideIn(BaseModel):
+    # Motif obligatoire : masquer une critique se justifie (journalisé).
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class ReviewRestoreIn(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)

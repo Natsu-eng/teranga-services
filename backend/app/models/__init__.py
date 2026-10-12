@@ -6,6 +6,7 @@ qu'Alembic (`migrations/env.py`) importe pour l'autogenerate.
 
 from app.db.base import Base
 from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
+from app.models.audit import AuditLog
 from app.models.commission import CommissionRate
 from app.models.intervention import Intervention, InterventionDispute, Quote
 from app.models.messaging import Conversation, Message
@@ -21,6 +22,7 @@ from app.models.user import User
 __all__ = [
     "ArtisanProfile",
     "ArtisanTrade",
+    "AuditLog",
     "Base",
     "CommissionRate",
     "Conversation",

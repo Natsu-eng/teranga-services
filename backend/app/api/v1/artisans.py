@@ -36,7 +36,7 @@ from app.schemas.artisans import (
 )
 from app.schemas.interventions import EngagementCheckOut
 from app.schemas.pagination import Page
-from app.schemas.reviews import ReviewOut
+from app.schemas.reviews import ArtisanOwnReviewOut, ReviewOut, ReviewReportIn
 from app.services import artisans as artisans_service
 from app.services import avatars as avatars_service
 from app.services import covers as covers_service
@@ -289,13 +289,50 @@ async def get_my_document_content(
     return StreamingResponse(io.BytesIO(content), media_type=MIME_BY_TYPE[detected])
 
 
+@router.get("/me/reviews", response_model=Page[ArtisanOwnReviewOut])
+async def list_my_reviews(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int | None, Query(ge=1)] = None,
+) -> Page[ArtisanOwnReviewOut]:
+    """Tous les avis reçus, masqués compris, avec leur statut de modération."""
+    return await reviews_service.list_own_reviews(
+        session,
+        user=artisan,
+        page=page,
+        page_size=page_size or settings.pagination_page_size_default,
+        settings=settings,
+    )
+
+
+@router.post("/me/reviews/{review_id}/report", response_model=ArtisanOwnReviewOut)
+async def report_my_review(
+    review_id: uuid.UUID,
+    payload: ReviewReportIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanOwnReviewOut:
+    """Signale un avis reçu (une fois, motif obligatoire). Il reste visible
+    et compté jusqu'à la décision d'un admin."""
+    result = await reviews_service.report_review(
+        session, user=artisan, review_id=review_id, reason=payload.reason
+    )
+    await session.commit()
+    return result
+
+
 @router.get("/{artisan_id}", response_model=ArtisanDetailOut)
 async def get_artisan(
     artisan_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
+    requester: Annotated[User | None, Depends(get_current_user_optional)],
 ) -> ArtisanDetailOut:
-    return await artisans_service.get_artisan_detail(session, artisan_id, settings=settings)
+    return await artisans_service.get_artisan_detail(
+        session, artisan_id, settings=settings, requester=requester
+    )
 
 
 @router.get("/{artisan_id}/coverage", response_model=EngagementCheckOut)

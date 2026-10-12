@@ -32,6 +32,7 @@ import type {
   Dispute,
   Intervention,
   MyArtisanProfile,
+  MyReceivedReview,
   PaymentChannel,
   PaymentOptions,
   PaymentStatus,
@@ -50,6 +51,7 @@ import type {
   VerificationDocument,
 } from '../../types';
 import { apiRequest, apiRequestBlob } from './http';
+import { httpAdminBackoffice } from './admin-backoffice';
 import { ApiError } from './types';
 import type {
   AddArtisanTradeInput,
@@ -100,6 +102,10 @@ interface BackendArtisanListItem {
 
 interface BackendArtisanDetail extends BackendArtisanListItem {
   cover_url: string | null;
+  is_suspended: boolean;
+  // Renseigné seulement pour l'artisan lui-même et l'admin : la fiche d'un
+  // suspendu n'est jamais servie au public.
+  suspension_reason: string | null;
 }
 
 interface BackendMediaUploadLimits {
@@ -173,6 +179,13 @@ interface BackendReview {
   comment: string;
   author_name: string;
   created_at: string;
+  status: 'publie' | 'masque' | 'signale';
+}
+
+interface BackendMyReceivedReview extends BackendReview {
+  report_reason: string | null;
+  reported_at: string | null;
+  can_report: boolean;
 }
 
 interface BackendPage<T> {
@@ -365,6 +378,8 @@ interface BackendConversation {
 }
 
 const REVIEWS_PAGE_SIZE = 20;
+// Avis reçus affichés dans l'espace Pro (plafond serveur : PAGINATION_PAGE_SIZE_MAX).
+const MY_REVIEWS_PAGE_SIZE = 50;
 
 // The backend's closed urgency enum (app/models/enums.py) mapped to the
 // French adjectives the screen already expects (AIAnalysisResult.urgency).
@@ -410,6 +425,7 @@ function mapReview(review: BackendReview): Review {
     rating: review.rating,
     date: formatRelativeDate(review.created_at),
     comment: review.comment,
+    moderationStatus: review.status,
   };
 }
 
@@ -643,6 +659,22 @@ function mapMyArtisanProfile(item: BackendArtisanDetail): MyArtisanProfile {
     isAvailable: item.is_available,
     verifiedStatus: item.verified_status,
     trades: item.trades.map(mapArtisanTradeDetail),
+    isSuspended: item.is_suspended,
+    suspensionReason: item.suspension_reason,
+  };
+}
+
+function mapMyReceivedReview(review: BackendMyReceivedReview): MyReceivedReview {
+  return {
+    id: review.id,
+    rating: review.rating,
+    comment: review.comment,
+    authorName: review.author_name,
+    createdAt: review.created_at,
+    status: review.status,
+    reportReason: review.report_reason,
+    reportedAt: review.reported_at,
+    canReport: review.can_report,
   };
 }
 
@@ -754,6 +786,8 @@ export function notImplemented(feature: string): never {
 }
 
 export const httpApiClient: ApiClient = {
+  ...httpAdminBackoffice,
+
   async listArtisans(filters?: ArtisanFilters): Promise<Artisan[]> {
     const page = await apiRequest<BackendPage<BackendArtisanListItem>>(
       `/artisans${buildArtisanQuery(filters)}`,
@@ -1266,6 +1300,24 @@ export const httpApiClient: ApiClient = {
       await apiRequest<BackendPayoutSettings>('/payments/me/payout-settings', {
         method: 'PUT',
         body: { channel },
+      }),
+    );
+  },
+
+  async listMyReviews(): Promise<MyReceivedReview[]> {
+    // Grande page unique : un artisan relit ses avis récents ; l'historique
+    // complet reste servi page par page par l'API si besoin.
+    const page = await apiRequest<BackendPage<BackendMyReceivedReview>>(
+      `/artisans/me/reviews?page=1&page_size=${MY_REVIEWS_PAGE_SIZE}`,
+    );
+    return page.items.map(mapMyReceivedReview);
+  },
+
+  async reportReview(reviewId: string, reason: string): Promise<MyReceivedReview> {
+    return mapMyReceivedReview(
+      await apiRequest<BackendMyReceivedReview>(`/artisans/me/reviews/${reviewId}/report`, {
+        method: 'POST',
+        body: { reason },
       }),
     );
   },

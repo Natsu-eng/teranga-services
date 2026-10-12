@@ -38,6 +38,8 @@ from app.core.errors import AppError
 from app.models.artisan import ArtisanProfile
 from app.models.enums import (
     ArtisanVerifiedStatus,
+    AuditAction,
+    AuditTargetType,
     DisputeOutcome,
     EngagementBlocker,
     InterventionCancellationKind,
@@ -64,6 +66,7 @@ from app.schemas.pagination import Page
 from app.schemas.payments import DisputeOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.reviews import ReviewOut
+from app.services import audit as audit_service
 from app.services import commission as commission_service
 from app.services import conversations as conversations_service
 from app.services import payments as payments_service
@@ -154,6 +157,15 @@ class ArtisanNonVerifieError(AppError):
         super().__init__(
             code="ARTISAN_NON_VERIFIE",
             message="Cet artisan n'est pas encore vérifié.",
+            status_code=422,
+        )
+
+
+class ArtisanIndisponibleError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ARTISAN_INDISPONIBLE",
+            message="Cet artisan ne peut pas recevoir de nouvelles demandes pour le moment.",
             status_code=422,
         )
 
@@ -257,6 +269,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
                 comment=intervention.review.comment,
                 author_name=public_display_name(intervention.review.author.full_name),
                 created_at=intervention.review.created_at,
+                status=intervention.review.status,
             )
             if intervention.review
             else None
@@ -281,6 +294,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
 
 _BLOCKER_ERRORS: dict[EngagementBlocker, Callable[[], AppError]] = {
     EngagementBlocker.ARTISAN_NON_VERIFIE: ArtisanNonVerifieError,
+    EngagementBlocker.ARTISAN_INDISPONIBLE: ArtisanIndisponibleError,
     EngagementBlocker.METIER_NON_EXERCE: ArtisanMetierNonExerceError,
     EngagementBlocker.HORS_ZONE: ArtisanHorsZoneError,
 }
@@ -310,6 +324,8 @@ async def evaluate_engagement(
     )
     if verified_status is not ArtisanVerifiedStatus.VERIFIED:
         return EngagementBlocker.ARTISAN_NON_VERIFIE
+    if artisan.suspended_at is not None:
+        return EngagementBlocker.ARTISAN_INDISPONIBLE
     if not await artisans_repository.artisan_exercises_trade(
         session, artisan_id=artisan.id, trade_id=trade_id
     ):
@@ -693,6 +709,19 @@ async def resolve_dispute(
     dispute.resolved_at = datetime.now(UTC)
     dispute.resolution_note = note
     await session.flush()
+    await audit_service.record(
+        session,
+        actor=admin,
+        action=AuditAction.DISPUTE_RESOLVE,
+        target_type=AuditTargetType.INTERVENTION,
+        target_id=intervention.id,
+        details={
+            "outcome": outcome,
+            "note": note,
+            "opened_by": dispute.opened_by_role,
+            "payout_id": payout.id if payout is not None else None,
+        },
+    )
     return SettledIntervention(
         intervention=to_intervention_out(intervention),
         payout_id=payout.id if payout is not None else None,

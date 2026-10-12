@@ -14,12 +14,15 @@ un admin peut lire N'IMPORTE QUEL document (pas seulement les siens).
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
-from app.models.enums import VerificationStatus
+from app.models.enums import AuditAction, AuditTargetType, InterventionStatus, VerificationStatus
+from app.models.intervention import Intervention
 from app.models.user import User
+from app.repositories import audit as audit_repository
 from app.repositories import verification as verification_repository
 from app.schemas.admin import (
     AdminArtisanDetailOut,
@@ -27,7 +30,9 @@ from app.schemas.admin import (
     VerificationReviewOut,
 )
 from app.schemas.artisans import VerificationDocumentOut
+from app.schemas.audit import AuditEntryOut
 from app.schemas.pagination import Page
+from app.services import audit as audit_service
 from app.services.artisans import PageHorsBornesError, get_artisan_or_404, to_detail
 from app.services.file_validation import DetectedFileType, detect_file_type
 from app.services.storage import StorageBackend, StorageObjectIntrouvableError
@@ -134,6 +139,24 @@ async def _review(
     required = list(settings.verification_required_doc_types)
     artisan.verified_status = compute_verified_status(artisan.verifications, required)
     await session.flush()
+    # Même transaction que la décision : journalisée si et seulement si validée.
+    await audit_service.record(
+        session,
+        actor=admin,
+        action=(
+            AuditAction.VERIFICATION_APPROVE
+            if to_status is VerificationStatus.APPROVED
+            else AuditAction.VERIFICATION_REJECT
+        ),
+        target_type=AuditTargetType.VERIFICATION,
+        target_id=verification.id,
+        details={
+            "artisan_id": artisan.id,
+            "doc_type": verification.doc_type,
+            "note": note,
+            "artisan_verified_status": artisan.verified_status,
+        },
+    )
 
     return VerificationReviewOut(
         id=verification.id,
@@ -185,6 +208,19 @@ async def get_artisan_detail_for_admin(
     required_doc_types = list(settings.verification_required_doc_types)
     detail = to_detail(profile, required_doc_types=required_doc_types)
     documents = sorted(profile.verifications, key=lambda v: v.created_at, reverse=True)
+    intervention_counts = {
+        status.value: int(total)
+        for status, total in (
+            await session.execute(
+                select(Intervention.status, func.count())
+                .where(Intervention.artisan_id == profile.id)
+                .group_by(Intervention.status)
+            )
+        ).all()
+    }
+    history = await audit_repository.list_for_artisan(
+        session, profile.id, limit=settings.pagination_page_size_max
+    )
     return AdminArtisanDetailOut(
         id=detail.id,
         full_name=detail.full_name,
@@ -195,4 +231,15 @@ async def get_artisan_detail_for_admin(
         verified_status=detail.verified_status,
         trades=detail.trades,
         documents=[VerificationDocumentOut.model_validate(v) for v in documents],
+        phone=profile.user.phone,
+        created_at=profile.created_at,
+        rating_avg=float(profile.rating_avg) if profile.rating_avg is not None else None,
+        review_count=profile.review_count,
+        is_suspended=profile.suspended_at is not None,
+        suspended_at=profile.suspended_at,
+        suspension_reason=profile.suspension_reason,
+        interventions={
+            status.value: intervention_counts.get(status.value, 0) for status in InterventionStatus
+        },
+        history=[AuditEntryOut.model_validate(entry) for entry in history],
     )

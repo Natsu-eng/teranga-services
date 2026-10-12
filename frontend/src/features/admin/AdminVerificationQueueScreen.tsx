@@ -8,7 +8,6 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { TextAreaField } from '../../components/ui/Field';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill } from '../../components/ui/StatusPill';
-import { AdminHeader } from './AdminHeader';
 import { useAdminVerificationQueue } from './hooks/useAdminVerificationQueue';
 import { useDocumentPreview } from './hooks/useDocumentPreview';
 import { useVerificationReview } from './hooks/useVerificationReview';
@@ -190,44 +189,40 @@ export const AdminVerificationQueueScreen: React.FC = () => {
   const pendingCount = queue.data?.length ?? null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AdminHeader />
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="font-display text-display-md font-semibold text-primary">
+          Documents à vérifier
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {pendingCount == null
+            ? 'File d’attente des documents envoyés par les artisans.'
+            : `${pendingCount} document${pendingCount > 1 ? 's' : ''} en attente, du plus ancien au plus récent.`}
+        </p>
+      </div>
 
-      <main className="max-w-3xl mx-auto px-4 md:px-8 pt-6 pb-16 space-y-5">
-        <div className="space-y-1">
-          <h1 className="font-display text-display-md font-semibold text-primary">
-            Documents à vérifier
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {pendingCount == null
-              ? 'File d’attente des documents envoyés par les artisans.'
-              : `${pendingCount} document${pendingCount > 1 ? 's' : ''} en attente, du plus ancien au plus récent.`}
-          </p>
+      {queue.isLoading && !queue.data ? (
+        <div className="space-y-4" aria-busy="true">
+          <Skeleton className="h-44 rounded-card" />
+          <Skeleton className="h-44 rounded-card" />
         </div>
-
-        {queue.isLoading && !queue.data ? (
-          <div className="space-y-4" aria-busy="true">
-            <Skeleton className="h-44 rounded-card" />
-            <Skeleton className="h-44 rounded-card" />
-          </div>
-        ) : queue.error && !queue.data ? (
-          <ErrorState message={queue.error.message} onRetry={queue.reload} />
-        ) : queue.data && queue.data.length === 0 ? (
-          <EmptyState
-            icon={<ShieldCheck />}
-            title="Aucun document en attente de revue."
-            description="Les nouveaux envois des artisans apparaîtront ici."
-          />
-        ) : (
-          <ul className="space-y-4">
-            {queue.data?.map((item) => (
-              <li key={item.id}>
-                <VerificationCard item={item} onReviewed={queue.removeFromQueue} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </main>
+      ) : queue.error && !queue.data ? (
+        <ErrorState message={queue.error.message} onRetry={queue.reload} />
+      ) : queue.data && queue.data.length === 0 ? (
+        <EmptyState
+          icon={<ShieldCheck />}
+          title="Aucun document en attente de revue."
+          description="Les nouveaux envois des artisans apparaîtront ici."
+        />
+      ) : (
+        <ul className="space-y-4">
+          {queue.data?.map((item) => (
+            <li key={item.id}>
+              <VerificationCard item={item} onReviewed={queue.removeFromQueue} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };
