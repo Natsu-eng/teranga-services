@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Banknote, CheckCircle2, Clock, CreditCard, ShieldCheck } from 'lucide-react';
+import { Banknote, CheckCircle2, Clock, CreditCard, ShieldCheck, Wallet } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { AppBar } from '../../components/ui/AppBar';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -275,14 +275,26 @@ export const PaymentScreen: React.FC = () => {
           <MoneyBreakdown payment={payment} role="client" />
         </Card>
 
-        <Card tone="tint" padding="sm" className="flex items-start gap-2 text-sm">
-          <ShieldCheck aria-hidden className="w-4 h-4 shrink-0 mt-0.5 text-primary-emerald" />
-          <span>
-            Paiement en ligne protégé : Téranga conserve votre argent et ne le verse à
-            l&apos;artisan qu&apos;après votre confirmation de fin des travaux. En cas de problème,
-            vous êtes remboursé si les travaux ne sont pas réalisés.
-          </span>
-        </Card>
+        {data.options.onlineChannels.length > 0 ? (
+          <Card tone="tint" padding="sm" className="flex items-start gap-2 text-sm">
+            <ShieldCheck aria-hidden className="w-4 h-4 shrink-0 mt-0.5 text-primary-emerald" />
+            <span>
+              Paiement en ligne protégé : Téranga conserve votre argent et ne le verse à
+              l&apos;artisan qu&apos;après votre confirmation de fin des travaux. En cas de
+              problème, vous êtes remboursé si les travaux ne sont pas réalisés.
+            </span>
+          </Card>
+        ) : (
+          // Lancement « espèces seulement » : rien n'est promis qui n'existe pas.
+          <Card tone="tint" padding="sm" className="flex items-start gap-2 text-sm">
+            <Wallet aria-hidden className="w-4 h-4 shrink-0 mt-0.5 text-primary-emerald" />
+            <span>
+              Le paiement en ligne n&apos;est pas encore disponible. Vous réglez l&apos;artisan en
+              espèces, en main propre ; déclarez-le ici pour que le suivi de vos travaux soit à
+              jour.
+            </span>
+          </Card>
+        )}
 
         {channels.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -328,9 +340,11 @@ export const PaymentScreen: React.FC = () => {
                       {CHANNEL_LABELS[option]}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      {option === 'cash'
-                        ? "Vous réglez l'artisan en main propre — sans protection du séquestre."
-                        : 'Paiement sécurisé, conservé par Téranga jusqu’à la fin des travaux.'}
+                      {option !== 'cash'
+                        ? 'Paiement sécurisé, conservé par Téranga jusqu’à la fin des travaux.'
+                        : data.options.onlineChannels.length > 0
+                          ? "Vous réglez l'artisan en main propre — sans protection du séquestre."
+                          : "Vous réglez l'artisan en main propre."}
                     </span>
                   </span>
                 </label>
@@ -352,7 +366,13 @@ export const PaymentScreen: React.FC = () => {
             fullWidth
             isLoading={isSubmitting}
             onClick={handlePay}
-            leadingIcon={<ShieldCheck aria-hidden className="w-5 h-5" />}
+            leadingIcon={
+              channel === 'cash' ? (
+                <Wallet aria-hidden className="w-5 h-5" />
+              ) : (
+                <ShieldCheck aria-hidden className="w-5 h-5" />
+              )
+            }
           >
             {channel === 'cash'
               ? `Je paierai ${formatFcfa(payment.amountFcfa)} en espèces`

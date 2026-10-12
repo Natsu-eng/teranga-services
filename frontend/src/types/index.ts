@@ -191,6 +191,12 @@ export interface PaymentSummary {
     channel: PayoutChannel;
     sentAt: string | null;
   } | null;
+  /**
+   * Le paiement en ligne (séquestre) est-il proposé ? Faux au lancement
+   * « espèces seulement » : l'interface ne promet alors ni séquestre ni
+   * « payer en ligne », seulement le règlement en espèces.
+   */
+  onlineAvailable: boolean;
 }
 
 export type CancellationKind = 'refus' | 'annulation' | 'arbitrage';

@@ -289,6 +289,7 @@ interface BackendPaymentSummary {
     channel: PayoutChannel;
     sent_at: string | null;
   } | null;
+  online_available: boolean;
 }
 
 interface BackendClientPayment {
@@ -482,6 +483,7 @@ function mapPaymentSummary(payment: BackendPaymentSummary): PaymentSummary {
           sentAt: payment.payout.sent_at,
         }
       : null,
+    onlineAvailable: payment.online_available,
   };
 }
 

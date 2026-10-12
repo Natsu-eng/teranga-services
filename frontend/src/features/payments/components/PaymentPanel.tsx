@@ -16,7 +16,9 @@ function explanation(payment: PaymentSummary, role: UserRole): string | null {
       case null:
       case 'echoue':
       case 'annule':
-        return "Payez en ligne en toute sécurité : Téranga conserve l'argent et ne le verse à l'artisan qu'une fois la fin des travaux confirmée par vous.";
+        return payment.onlineAvailable
+          ? "Payez en ligne en toute sécurité : Téranga conserve l'argent et ne le verse à l'artisan qu'une fois la fin des travaux confirmée par vous."
+          : "Vous réglez l'artisan en espèces, en main propre. Déclarez-le ici pour que votre suivi soit à jour.";
       case 'en_attente':
         return 'Paiement commencé, en attente de confirmation. Vous pouvez le reprendre si vous l’avez interrompu.';
       case 'retenu':
@@ -26,7 +28,9 @@ function explanation(payment: PaymentSummary, role: UserRole): string | null {
           ? `Versé à l'artisan le ${formatPaymentDate(payment.releasedAt)}.`
           : "Versé à l'artisan.";
       case 'reussi':
-        return `Vous réglez ${amount} directement à l'artisan, en espèces : ce règlement n'est pas protégé par le séquestre.`;
+        return payment.onlineAvailable
+          ? `Vous réglez ${amount} directement à l'artisan, en espèces : ce règlement n'est pas protégé par le séquestre.`
+          : `Vous réglez ${amount} directement à l'artisan, en espèces.`;
       case 'rembourse':
         return payment.refundedAt
           ? `${amount} vous ont été remboursés le ${formatPaymentDate(payment.refundedAt)}.`
@@ -37,7 +41,9 @@ function explanation(payment: PaymentSummary, role: UserRole): string | null {
     case null:
     case 'echoue':
     case 'annule':
-      return "Le client n'a pas encore payé. S'il paie en ligne, l'argent est sécurisé avant les travaux.";
+      return payment.onlineAvailable
+        ? "Le client n'a pas encore payé. S'il paie en ligne, l'argent est sécurisé avant les travaux."
+        : "Le client vous réglera en espèces, en main propre ; il n'a pas encore déclaré ce règlement.";
     case 'en_attente':
       return 'Le client est en train de payer.';
     case 'retenu':
@@ -79,8 +85,14 @@ export const PaymentPanel: React.FC<PaymentPanelProps> = ({
 }) => {
   const pill = paymentPill(payment, role);
   const text = explanation(payment, role);
+  // Espèces déjà déclarées : « payer en ligne plutôt » n'a de sens que si
+  // le paiement en ligne existe (jamais un bouton vers une option absente).
   const showPay =
-    role === 'client' && interventionStatus === 'en_cours' && canStartPayment(payment);
+    role === 'client' &&
+    interventionStatus === 'en_cours' &&
+    canStartPayment(payment) &&
+    (payment.status !== 'reussi' || payment.onlineAvailable);
+  const cashOnly = !payment.onlineAvailable;
   const isSecured = payment.status === 'retenu';
 
   return (
@@ -111,13 +123,21 @@ export const PaymentPanel: React.FC<PaymentPanelProps> = ({
           to={`/paiement/${interventionId}`}
           variant="primary"
           fullWidth
-          leadingIcon={<ShieldCheck aria-hidden className="w-5 h-5" />}
+          leadingIcon={
+            cashOnly ? (
+              <Wallet aria-hidden className="w-5 h-5" />
+            ) : (
+              <ShieldCheck aria-hidden className="w-5 h-5" />
+            )
+          }
         >
-          {payment.status === 'en_attente'
-            ? 'Reprendre le paiement'
-            : payment.status === 'reussi'
-              ? 'Payer en ligne plutôt'
-              : `Payer ${formatFcfa(payment.amountFcfa)}`}
+          {cashOnly
+            ? 'Déclarer le paiement en espèces'
+            : payment.status === 'en_attente'
+              ? 'Reprendre le paiement'
+              : payment.status === 'reussi'
+                ? 'Payer en ligne plutôt'
+                : `Payer ${formatFcfa(payment.amountFcfa)}`}
         </ButtonLink>
       )}
     </section>
