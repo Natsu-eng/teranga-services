@@ -93,6 +93,7 @@ async def test_a_suspended_artisan_disappears_from_search_and_public_profile(
 
     async with _client() as http:
         before = await http.get("/api/v1/artisans", params={"q": "Moussa Suspendu"})
+        public_before = await http.get(f"/api/v1/artisans/{artisan.id}")
         suspended = await _suspend(http, admin, artisan)
         after = await http.get("/api/v1/artisans", params={"q": "Moussa Suspendu"})
         public = await http.get(f"/api/v1/artisans/{artisan.id}")
@@ -100,12 +101,14 @@ async def test_a_suspended_artisan_disappears_from_search_and_public_profile(
         as_admin = await http.get(f"/api/v1/artisans/{artisan.id}", headers=_auth(admin))
 
     assert [item["id"] for item in before.json()["items"]] == [str(artisan.id)]
+    assert public_before.json()["suspension_reason"] is None
     assert suspended.status_code == 200, suspended.text
     assert after.json()["items"] == []
     assert public.status_code == 404
-    # L'artisan voit sa fiche, et qu'il est suspendu (transparence).
+    # L'artisan voit sa fiche, qu'il est suspendu, et pourquoi (transparence).
     assert as_owner.status_code == 200
     assert as_owner.json()["is_suspended"] is True
+    assert as_owner.json()["suspension_reason"] == "Plusieurs plaintes de clients vérifiées."
     assert as_admin.status_code == 200
 
 

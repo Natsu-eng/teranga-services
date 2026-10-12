@@ -143,8 +143,10 @@ class ArtisanDetailOut(ArtisanListItemOut):
     cover_url: str | None
     created_at: datetime
     # Lu seulement par l'artisan lui-même (et l'admin) : la fiche d'un
-    # artisan suspendu n'est plus servie au public (404).
+    # artisan suspendu n'est plus servie au public (404). Le motif lui est
+    # donc montré sans jamais fuiter : jamais de sanction muette.
     is_suspended: bool = False
+    suspension_reason: str | None = None
 
 
 class ArtisanStatsPublicOut(BaseModel):

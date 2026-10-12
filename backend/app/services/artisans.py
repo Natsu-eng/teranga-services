@@ -222,6 +222,7 @@ def to_detail(
         cover_url=profile.cover_url,
         created_at=profile.created_at,
         is_suspended=profile.suspended_at is not None,
+        suspension_reason=profile.suspension_reason,
     )
 
 
