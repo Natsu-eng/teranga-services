@@ -41,7 +41,7 @@ from app.services import artisans as artisans_service
 from app.services import avatars as avatars_service
 from app.services import covers as covers_service
 from app.services import documents as documents_service
-from app.services import interventions as interventions_service
+from app.services import engagement as engagement_service
 from app.services import reviews as reviews_service
 from app.services.file_validation import MIME_BY_TYPE
 from app.services.profile_media import discard_obsolete_media, media_constraints
@@ -349,7 +349,7 @@ async def check_artisan_coverage(
     en lecture seule : l'écran l'annonce avant que le client n'envoie quoi
     que ce soit. Public comme la fiche et la recherche par proximité, qui
     n'en révèlent pas moins."""
-    return await interventions_service.check_coverage(
+    return await engagement_service.check_coverage(
         session, artisan_id=artisan_id, trade_code=trade, lat=lat, lng=lng, settings=settings
     )
 

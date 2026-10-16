@@ -21,6 +21,7 @@ from app.schemas.pagination import Page
 from app.schemas.payments import DisputeOpenIn, InterventionCancelIn
 from app.schemas.quotes import QuoteCreateIn
 from app.schemas.reviews import ReviewCreateIn, ReviewOut
+from app.services import disputes as disputes_service
 from app.services import interventions as interventions_service
 from app.services import payouts as payouts_service
 from app.services import quotes as quotes_service
@@ -157,7 +158,7 @@ async def open_dispute(
     session: Annotated[AsyncSession, Depends(get_session)],
     user: Annotated[User, Depends(require_role(Role.CLIENT, Role.ARTISAN))],
 ) -> InterventionOut:
-    result = await interventions_service.open_dispute(
+    result = await disputes_service.open_dispute(
         session, intervention_id=intervention_id, user=user, reason=payload.reason
     )
     await session.commit()

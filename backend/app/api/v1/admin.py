@@ -57,6 +57,7 @@ from app.services import admin_reviews as admin_reviews_service
 from app.services import admin_users as admin_users_service
 from app.services import admin_verification as admin_verification_service
 from app.services import audit as audit_service
+from app.services import disputes as disputes_service
 from app.services import interventions as interventions_service
 from app.services import payouts as payouts_service
 from app.services.file_validation import MIME_BY_TYPE
@@ -216,7 +217,7 @@ async def list_disputes(
 ) -> Page[InterventionOut]:
     """Litiges (BUILD_PLAN.md §3.5) : chaque intervention avec son volet
     financier complet (montant retenu, commission, versement) et le motif."""
-    return await interventions_service.list_disputes(
+    return await disputes_service.list_disputes(
         session,
         resolved=resolved,
         page=page,
@@ -237,7 +238,7 @@ async def resolve_dispute(
 ) -> InterventionOut:
     """Tranche un litige : `libere` (versement à l'artisan) ou `rembourse`
     (client remboursé). `admin` = celui authentifié, jamais un champ."""
-    result = await interventions_service.resolve_dispute(
+    result = await disputes_service.resolve_dispute(
         session,
         intervention_id=intervention_id,
         admin=admin,

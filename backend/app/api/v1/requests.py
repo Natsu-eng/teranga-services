@@ -18,7 +18,7 @@ from app.models.user import User
 from app.schemas.interventions import RequestEligibilityOut
 from app.schemas.pagination import Page
 from app.schemas.requests import ServiceRequestCreateIn, ServiceRequestOut
-from app.services import interventions as interventions_service
+from app.services import engagement as engagement_service
 from app.services import requests as requests_service
 
 router = APIRouter(prefix="/requests", tags=["requests"])
@@ -62,7 +62,7 @@ async def list_my_request_eligibility(
     """Pour chaque demande ouverte du client : cet artisan peut-il la
     recevoir (métier, zone) ? Lecture seule -- l'envoi reste vérifié par
     `POST /interventions`."""
-    return await interventions_service.list_request_eligibility(
+    return await engagement_service.list_request_eligibility(
         session, client=client, artisan_id=artisan_id, settings=settings
     )
 
