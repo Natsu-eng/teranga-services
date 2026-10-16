@@ -60,13 +60,6 @@ async def get_by_id(session: AsyncSession, conversation_id: uuid.UUID) -> Conver
     return (await session.execute(stmt)).unique().scalar_one_or_none()
 
 
-async def get_by_intervention_id(
-    session: AsyncSession, intervention_id: uuid.UUID
-) -> Conversation | None:
-    stmt = select(Conversation).where(Conversation.intervention_id == intervention_id)
-    return (await session.execute(stmt)).scalar_one_or_none()
-
-
 def _activity() -> ColumnElement[datetime]:
     return func.coalesce(Conversation.last_message_at, Conversation.created_at)
 

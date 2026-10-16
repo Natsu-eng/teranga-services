@@ -40,7 +40,6 @@ from app.models.enums import (
     PlatformFeeKind,
     PlatformFeeStatus,
     QuoteStatus,
-    Role,
 )
 from app.models.intervention import Intervention
 from app.models.payment import Payment, Payout, PlatformFee
@@ -510,14 +509,3 @@ async def settle_on_cancellation(
 def has_retained_funds(intervention: Intervention) -> bool:
     payment = current_payment(intervention)
     return payment is not None and payment.status is PaymentStatus.RETENU
-
-
-def viewer_role(intervention: Intervention, user: User) -> Role | None:
-    """Rôle de `user` dans cette intervention (`None` : tiers)."""
-    if user.role is Role.ADMIN:
-        return Role.ADMIN
-    if intervention.client_id == user.id:
-        return Role.CLIENT
-    if intervention.artisan.user_id == user.id:
-        return Role.ARTISAN
-    return None
