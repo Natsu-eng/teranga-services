@@ -27,7 +27,7 @@ from app.models.user import User
 from app.schemas.admin import AdminReviewOut
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 from app.services.reviews import AvisIntrouvableError, recalculate_artisan_rating
 from app.services.text_search import LIKE_ESCAPE, contains_pattern
 

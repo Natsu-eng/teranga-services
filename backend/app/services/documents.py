@@ -26,7 +26,8 @@ from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories import verification as verification_repository
 from app.schemas.artisans import MyVerificationOut, VerificationDocumentOut
-from app.services.artisans import ArtisanProfilIntrouvableError, get_artisan_or_404
+from app.services.artisan_errors import ArtisanProfilIntrouvableError
+from app.services.artisans import get_artisan_or_404
 from app.services.file_validation import EXTENSION_BY_TYPE, DetectedFileType, detect_file_type
 from app.services.storage import StorageBackend, StorageObjectIntrouvableError
 from app.services.verification import compute_verified_status

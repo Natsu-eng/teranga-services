@@ -37,6 +37,7 @@ from app.schemas.artisans import (
 from app.schemas.interventions import EngagementCheckOut
 from app.schemas.pagination import Page
 from app.schemas.reviews import ArtisanOwnReviewOut, ReviewOut, ReviewReportIn
+from app.services import artisan_profile as artisan_profile_service
 from app.services import artisans as artisans_service
 from app.services import avatars as avatars_service
 from app.services import covers as covers_service
@@ -111,7 +112,7 @@ async def update_my_profile(
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> ArtisanDetailOut:
-    result = await artisans_service.update_profile(
+    result = await artisan_profile_service.update_profile(
         session, user=artisan, payload=payload, settings=settings
     )
     await session.commit()
@@ -209,7 +210,7 @@ async def add_my_trade(
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> ArtisanDetailOut:
-    result = await artisans_service.add_trade(
+    result = await artisan_profile_service.add_trade(
         session, user=artisan, payload=payload, settings=settings
     )
     await session.commit()
@@ -223,7 +224,7 @@ async def remove_my_trade(
     settings: Annotated[Settings, Depends(get_settings)],
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> ArtisanDetailOut:
-    result = await artisans_service.remove_trade(
+    result = await artisan_profile_service.remove_trade(
         session, user=artisan, artisan_trade_id=artisan_trade_id, settings=settings
     )
     await session.commit()

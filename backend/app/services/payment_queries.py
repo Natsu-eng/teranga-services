@@ -17,7 +17,7 @@ from app.schemas.payments import (
     EarningItemOut,
     EarningsTotalsOut,
 )
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 from app.services.identity import public_display_name
 from app.services.payment_summary import (
     online_payment_available,

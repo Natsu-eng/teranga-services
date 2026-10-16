@@ -32,7 +32,7 @@ from app.schemas.interventions import (
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
 from app.services import payments as payments_service
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 from app.services.intervention_errors import (
     InterventionTransitionInvalideError,
 )

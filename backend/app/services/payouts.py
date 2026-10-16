@@ -23,7 +23,7 @@ from app.schemas.payments import (
     PayoutSettingsIn,
     PayoutSettingsOut,
 )
-from app.services.artisans import get_own_profile
+from app.services.artisan_profile import get_own_profile
 from app.services.payment_providers.base import (
     PaymentProvider,
     PaymentProviderError,

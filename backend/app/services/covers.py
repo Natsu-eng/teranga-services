@@ -18,7 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.models.user import User
-from app.services.artisans import get_own_profile, to_detail
+from app.services.artisan_profile import get_own_profile
+from app.services.artisans import to_detail
 from app.services.file_validation import detect_file_type
 from app.services.image_processing import ImageNonDecodableError
 from app.services.profile_media import (

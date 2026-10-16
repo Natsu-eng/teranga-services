@@ -33,7 +33,8 @@ from app.schemas.artisans import VerificationDocumentOut
 from app.schemas.audit import AuditEntryOut
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
-from app.services.artisans import PageHorsBornesError, get_artisan_or_404, to_detail
+from app.services.artisan_errors import PageHorsBornesError
+from app.services.artisans import get_artisan_or_404, to_detail
 from app.services.file_validation import DetectedFileType, detect_file_type
 from app.services.storage import StorageBackend, StorageObjectIntrouvableError
 from app.services.verification import compute_verified_status

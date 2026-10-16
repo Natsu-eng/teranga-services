@@ -10,128 +10,33 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
-from geoalchemy2.elements import WKTElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import AppError
-from app.core.full_name import validate_full_name
 from app.models.artisan import ArtisanProfile
 from app.models.enums import Role, VerificationDocType
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
-from app.repositories import trades as trades_repository
 from app.repositories.artisans import ArtisanSearchFilters, ArtisanSort
-from app.repositories.requests import to_point
 from app.schemas.artisans import (
     ArtisanDetailOut,
     ArtisanListItemOut,
-    ArtisanProfileUpdateIn,
     ArtisanStatsPrivateOut,
     ArtisanStatsPublicOut,
-    ArtisanTradeCreateIn,
     ArtisanTradeOut,
 )
 from app.schemas.pagination import Page
 from app.schemas.trades import TradeOut
+from app.services.artisan_errors import (
+    ArtisanIntrouvableError,
+    PageHorsBornesError,
+    PositionInvalideError,
+    RayonRechercheInvalideError,
+    StatistiquesPriveesInterditesError,
+    TriDistanceSansPositionError,
+)
 from app.services.identity import public_display_name
 from app.services.verification import compute_verified_status
-
-
-class PositionInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="POSITION_INVALIDE",
-            message="La position fournie (near) est invalide. Format attendu : lat,lng.",
-            status_code=422,
-        )
-
-
-class RayonRechercheInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="RAYON_RECHERCHE_INVALIDE",
-            message="Le rayon de recherche demandé est invalide ou dépasse le maximum autorisé.",
-            status_code=422,
-        )
-
-
-class TriDistanceSansPositionError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="TRI_DISTANCE_SANS_POSITION",
-            message="Le tri par distance (sort=distance) nécessite une position (near).",
-            status_code=422,
-        )
-
-
-class PageHorsBornesError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PAGE_HORS_BORNES",
-            message="Le numéro de page demandé dépasse le maximum autorisé.",
-            status_code=422,
-        )
-
-
-class ArtisanIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(code="ARTISAN_NOT_FOUND", message="Artisan introuvable.", status_code=404)
-
-
-class StatistiquesPriveesInterditesError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="STATISTIQUES_PRIVEES_INTERDITES",
-            message="Vous n'avez pas accès aux statistiques financières de cet artisan.",
-            status_code=403,
-        )
-
-
-class ArtisanProfilIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_PROFIL_INTROUVABLE",
-            message="Aucun profil artisan n'est associé à ce compte.",
-            status_code=404,
-        )
-
-
-class MetierIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="METIER_INTROUVABLE",
-            message="Ce métier n'existe pas ou n'est plus actif.",
-            status_code=422,
-        )
-
-
-class ArtisanMetierDejaDeclareError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_METIER_DEJA_DECLARE",
-            message="Vous exercez déjà ce métier -- retirez-le d'abord pour en changer les"
-            " conditions.",
-            status_code=409,
-        )
-
-
-class ArtisanTradeIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_TRADE_NOT_FOUND",
-            message="Ce métier déclaré est introuvable.",
-            status_code=404,
-        )
-
-
-class ZoneInterventionInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ZONE_INTERVENTION_INVALIDE",
-            message="La zone d'intervention fournie est invalide (le polygone doit être fermé).",
-            status_code=422,
-        )
 
 
 def _parse_near(raw: str) -> tuple[float, float]:
@@ -356,116 +261,3 @@ async def get_stats(
         revenue_fcfa = await artisans_repository.sum_revenue_fcfa(session, artisan_id)
         return ArtisanStatsPrivateOut(**public.model_dump(), revenue_fcfa=revenue_fcfa or 0)
     raise StatistiquesPriveesInterditesError()
-
-
-async def get_own_profile(session: AsyncSession, user: User) -> ArtisanProfile:
-    """Résout le `artisan_profile` de l'utilisateur courant depuis `user.id`
-    (JWT) -- jamais un id reçu du client. Réutilisé par `update_profile`,
-    les métiers déclarés et `app.services.documents`."""
-    artisan_id = await artisans_repository.get_artisan_profile_id_by_user_id(session, user.id)
-    if artisan_id is None:
-        raise ArtisanProfilIntrouvableError()
-    return await get_artisan_or_404(session, artisan_id)
-
-
-async def update_profile(
-    session: AsyncSession, *, user: User, payload: ArtisanProfileUpdateIn, settings: Settings
-) -> ArtisanDetailOut:
-    """`PATCH /artisans/me` (BUILD_PLAN.md §3.2, onboarding artisan) : édite
-    le `artisan_profile` de l'utilisateur courant -- jamais celui d'un tiers.
-
-    Mise à jour partielle : seuls les champs réellement présents dans le
-    JSON (`exclude_unset`) sont appliqués, pour que ce même endpoint serve
-    aussi bien le toggle historique (`{is_available}` seul, Lot 12c) que
-    l'édition complète de l'onboarding, sans qu'omettre un champ ne
-    l'efface. Ne touche jamais `verified_status` (toujours dérivé) ni le
-    rôle -- absents du schéma d'entrée."""
-    profile = await get_own_profile(session, user)
-    fields = payload.model_dump(exclude_unset=True)
-
-    if "is_available" in fields:
-        profile.is_available = fields["is_available"]
-    if fields.get("full_name") is not None:
-        # Vit sur `user`, pas sur `artisan_profile` -- `profile.user` est
-        # déjà eager-loadé par `get_own_profile` (pas de requête N+1). Un
-        # `full_name: null` explicite est ignoré plutôt que rejeté : la
-        # colonne est NOT NULL, il n'existe pas de "nom effacé" valide.
-        profile.user.full_name = validate_full_name(fields["full_name"])
-    if "bio" in fields:
-        profile.bio = fields["bio"]
-    if "years_experience" in fields:
-        profile.years_experience = fields["years_experience"]
-    if "avatar_url" in fields:
-        profile.avatar_url = fields["avatar_url"]
-    if "cover_url" in fields:
-        profile.cover_url = fields["cover_url"]
-    if "base_location" in fields:
-        location = fields["base_location"]
-        profile.base_location = to_point(lat=location["lat"], lng=location["lng"])
-
-    await session.flush()
-    required_doc_types = list(settings.verification_required_doc_types)
-    return to_detail(profile, required_doc_types=required_doc_types)
-
-
-def _to_polygon(points: Sequence[Any]) -> WKTElement:
-    """Convertit une liste de points (`LocationIn`) en `geography(Polygon)` --
-    exige un anneau fermé (premier point == dernier point), même convention
-    que `tests/factories.bounding_box_polygon`."""
-    first, last = points[0], points[-1]
-    if (first.lat, first.lng) != (last.lat, last.lng):
-        raise ZoneInterventionInvalideError()
-    coords = ", ".join(f"{p.lng} {p.lat}" for p in points)
-    return WKTElement(f"POLYGON(({coords}))", srid=4326)
-
-
-async def add_trade(
-    session: AsyncSession, *, user: User, payload: ArtisanTradeCreateIn, settings: Settings
-) -> ArtisanDetailOut:
-    """`POST /artisans/me/trades` (BUILD_PLAN.md §3.2, onboarding artisan) :
-    déclare un métier exercé par l'artisan courant, avec son tarif indicatif
-    et sa zone d'intervention (rayon, ou polygone précis optionnel)."""
-    profile = await get_own_profile(session, user)
-
-    trade = await trades_repository.get_active_trade_by_code(session, payload.trade_code)
-    if trade is None:
-        raise MetierIntrouvableError()
-
-    if await artisans_repository.artisan_exercises_trade(
-        session, artisan_id=profile.id, trade_id=trade.id
-    ):
-        raise ArtisanMetierDejaDeclareError()
-
-    service_area = _to_polygon(payload.service_area) if payload.service_area else None
-    await artisans_repository.create_artisan_trade(
-        session,
-        artisan=profile,
-        trade_id=trade.id,
-        hourly_rate_fcfa=payload.hourly_rate_fcfa,
-        service_radius_m=payload.service_radius_m,
-        service_area=service_area,
-    )
-
-    required_doc_types = list(settings.verification_required_doc_types)
-    return to_detail(profile, required_doc_types=required_doc_types)
-
-
-async def remove_trade(
-    session: AsyncSession, *, user: User, artisan_trade_id: uuid.UUID, settings: Settings
-) -> ArtisanDetailOut:
-    """`DELETE /artisans/me/trades/{id}` (BUILD_PLAN.md §3.2, onboarding
-    artisan) : retire un métier déclaré par l'artisan courant -- jamais
-    celui d'un tiers (scopé par `artisan_id`, résolu depuis le token)."""
-    profile = await get_own_profile(session, user)
-    artisan_trade = await artisans_repository.get_owned_artisan_trade(
-        session, artisan_trade_id=artisan_trade_id, artisan_id=profile.id
-    )
-    if artisan_trade is None:
-        raise ArtisanTradeIntrouvableError()
-
-    await artisans_repository.delete_artisan_trade(
-        session, artisan=profile, artisan_trade=artisan_trade
-    )
-
-    required_doc_types = list(settings.verification_required_doc_types)
-    return to_detail(profile, required_doc_types=required_doc_types)

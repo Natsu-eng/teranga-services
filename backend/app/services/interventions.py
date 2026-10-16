@@ -61,7 +61,8 @@ from app.services import commission as commission_service
 from app.services import conversations as conversations_service
 from app.services import payments as payments_service
 from app.services import requests as requests_service
-from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.artisan_errors import PageHorsBornesError
+from app.services.artisans import get_artisan_or_404
 from app.services.engagement import evaluate_engagement
 from app.services.identity import public_display_name
 from app.services.intervention_errors import (

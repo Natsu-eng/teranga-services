@@ -42,7 +42,7 @@ from app.schemas.conversations import (
     ParticipantOut,
 )
 from app.schemas.pagination import Page
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 from app.services.contact_masking import mask_contacts
 from app.services.conversation_errors import (
     ConversationAccesInterditError,
