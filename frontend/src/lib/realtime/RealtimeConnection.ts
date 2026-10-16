@@ -1,4 +1,5 @@
-import { mapChatMessage, type BackendChatMessage } from '../api/http-impl';
+import type { BackendChatMessage } from '../api/backend-types';
+import { mapChatMessage } from '../api/mappers';
 import type { ChatMessage } from '../../types';
 import {
   REALTIME_CONFIG,
