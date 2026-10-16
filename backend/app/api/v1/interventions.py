@@ -22,7 +22,7 @@ from app.schemas.payments import DisputeOpenIn, InterventionCancelIn
 from app.schemas.quotes import QuoteCreateIn
 from app.schemas.reviews import ReviewCreateIn, ReviewOut
 from app.services import interventions as interventions_service
-from app.services import payments as payments_service
+from app.services import payouts as payouts_service
 from app.services import quotes as quotes_service
 from app.services import reviews as reviews_service
 from app.services.payment_providers.base import PaymentProvider
@@ -118,7 +118,7 @@ async def complete_intervention(
     # fait APRÈS le commit, dans sa propre transaction -- un fournisseur
     # indisponible ne fait jamais échouer la confirmation du client.
     if result.payout_id is not None:
-        await payments_service.dispatch_payout(
+        await payouts_service.dispatch_payout(
             session_factory, result.payout_id, provider=provider, settings=settings
         )
         # Relecture fraîche : le versement a été mis à jour par une autre

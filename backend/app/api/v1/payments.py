@@ -25,7 +25,9 @@ from app.schemas.payments import (
     PayoutSettingsIn,
     PayoutSettingsOut,
 )
+from app.services import payment_queries as payment_queries_service
 from app.services import payments as payments_service
+from app.services import payouts as payouts_service
 from app.services.payment_providers.base import PaymentProvider
 from app.services.rate_limit import RateLimiter, get_payment_init_rate_limiter
 
@@ -107,7 +109,7 @@ async def list_my_payments(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int | None, Query(ge=1)] = None,
 ) -> Page[ClientPaymentOut]:
-    return await payments_service.list_client_payments(
+    return await payment_queries_service.list_client_payments(
         session,
         user=client,
         page=page,
@@ -124,7 +126,7 @@ async def get_my_earnings(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int | None, Query(ge=1)] = None,
 ) -> ArtisanEarningsOut:
-    return await payments_service.artisan_earnings(
+    return await payment_queries_service.artisan_earnings(
         session,
         user=artisan,
         page=page,
@@ -139,7 +141,7 @@ async def get_my_payout_settings(
     settings: SettingsDep,
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> PayoutSettingsOut:
-    return await payments_service.get_payout_settings(session, user=artisan, settings=settings)
+    return await payouts_service.get_payout_settings(session, user=artisan, settings=settings)
 
 
 @router.put("/me/payout-settings", response_model=PayoutSettingsOut)
@@ -149,7 +151,7 @@ async def set_my_payout_settings(
     settings: SettingsDep,
     artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
 ) -> PayoutSettingsOut:
-    result = await payments_service.set_payout_settings(
+    result = await payouts_service.set_payout_settings(
         session, user=artisan, payload=payload, settings=settings
     )
     await session.commit()

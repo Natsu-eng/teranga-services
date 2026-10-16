@@ -58,7 +58,7 @@ from app.services import admin_users as admin_users_service
 from app.services import admin_verification as admin_verification_service
 from app.services import audit as audit_service
 from app.services import interventions as interventions_service
-from app.services import payments as payments_service
+from app.services import payouts as payouts_service
 from app.services.file_validation import MIME_BY_TYPE
 from app.services.payment_providers.base import PaymentProvider
 from app.services.storage import get_storage_backend
@@ -249,7 +249,7 @@ async def resolve_dispute(
     await session.commit()
     if result.payout_id is None:
         return result.intervention
-    await payments_service.dispatch_payout(
+    await payouts_service.dispatch_payout(
         session_factory, result.payout_id, provider=provider, settings=settings
     )
     return await interventions_service.get_intervention_for_admin(

@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import async_session_maker  # noqa: E402
 from app.models.enums import PayoutStatus  # noqa: E402
-from app.services import payments as payments_service  # noqa: E402
+from app.services import payouts as payouts_service  # noqa: E402
 from app.services.payment_providers import build_payment_provider  # noqa: E402
 
 # Nombre de versements traités par exécution : borne la durée d'un passage
@@ -41,7 +41,7 @@ async def _run(limit: int) -> int:
     if provider is None:
         print("Paiement en ligne désactivé (PAYMENT_PROVIDER=disabled) : rien à verser.")
         return 0
-    results = await payments_service.dispatch_pending_payouts(
+    results = await payouts_service.dispatch_pending_payouts(
         async_session_maker, provider=provider, settings=settings, limit=limit
     )
     if not results:

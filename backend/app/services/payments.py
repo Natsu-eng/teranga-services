@@ -32,8 +32,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import AppError
-from app.db.session import SessionFactory
 from app.models.enums import (
     InterventionStatus,
     PaymentChannel,
@@ -47,28 +45,29 @@ from app.models.enums import (
 from app.models.intervention import Intervention
 from app.models.payment import Payment, Payout, PlatformFee
 from app.models.user import User
-from app.repositories import artisans as artisans_repository
 from app.repositories import interventions as interventions_repository
 from app.repositories import payments as payments_repository
-from app.schemas.pagination import Page
 from app.schemas.payments import (
-    ArtisanEarningsOut,
-    ClientPaymentOut,
-    EarningItemOut,
-    EarningsTotalsOut,
     PaymentInitIn,
     PaymentOptionsOut,
     PaymentSummaryOut,
-    PayoutSettingsIn,
-    PayoutSettingsOut,
 )
-from app.services.artisans import PageHorsBornesError, get_own_profile
 from app.services.commission_calculation import compute_commission
-from app.services.identity import public_display_name
 from app.services.intervention_errors import (
     ActionReserveeAutrePartieError,
     InterventionAccesInterditError,
     InterventionIntrouvableError,
+)
+from app.services.payment_errors import (
+    FournisseurPaiementIndisponibleError,
+    MoyenPaiementIndisponibleError,
+    PaiementDejaEffectueError,
+    PaiementEnCoursError,
+    PaiementEnLigneDesactiveError,
+    PaiementEnLigneIndisponibleError,
+    PaiementNonExigibleError,
+    WebhookIllisibleError,
+    WebhookSignatureInvalideError,
 )
 from app.services.payment_providers.base import (
     CheckoutRequest,
@@ -76,7 +75,6 @@ from app.services.payment_providers.base import (
     MalformedWebhookError,
     PaymentProvider,
     PaymentProviderError,
-    PayoutRequest,
     ProviderEvent,
     RefundRequest,
 )
@@ -89,90 +87,6 @@ from app.services.payment_summary import (
 from app.services.payment_summary import summarize as summarize_payment
 
 logger = logging.getLogger(__name__)
-
-
-# ------------------------------------------------------------------ erreurs
-
-
-class PaiementNonExigibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PAIEMENT_NON_EXIGIBLE",
-            message="Le paiement s'ouvre une fois le devis accepté, avant la fin des travaux.",
-            status_code=409,
-        )
-
-
-class PaiementDejaEffectueError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PAIEMENT_DEJA_EFFECTUE",
-            message="Cette intervention est déjà réglée.",
-            status_code=409,
-        )
-
-
-class MoyenPaiementIndisponibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="MOYEN_DE_PAIEMENT_INDISPONIBLE",
-            message="Ce moyen de paiement n'est pas disponible pour le moment.",
-            status_code=422,
-        )
-
-
-class PaiementEnLigneIndisponibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PAIEMENT_EN_LIGNE_INDISPONIBLE",
-            message=(
-                "Le paiement en ligne n'est pas encore disponible : réglez l'artisan en "
-                "espèces, en main propre, et déclarez-le ici."
-            ),
-            status_code=422,
-        )
-
-
-class FournisseurPaiementIndisponibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="FOURNISSEUR_PAIEMENT_INDISPONIBLE",
-            message="Le service de paiement ne répond pas. Réessayez dans un instant.",
-            status_code=502,
-        )
-
-
-class PaiementEnCoursError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PAIEMENT_EN_COURS",
-            message=(
-                "Un paiement en ligne est en cours pour cette intervention : terminez-le "
-                "ou attendez son expiration."
-            ),
-            status_code=409,
-        )
-
-
-class PaiementEnLigneDesactiveError(AppError):
-    def __init__(self) -> None:
-        super().__init__(code="NOT_FOUND", message="Ressource introuvable.", status_code=404)
-
-
-class WebhookSignatureInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="WEBHOOK_SIGNATURE_INVALIDE",
-            message="Notification non authentifiée.",
-            status_code=401,
-        )
-
-
-class WebhookIllisibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="WEBHOOK_ILLISIBLE", message="Notification illisible.", status_code=400
-        )
 
 
 # ------------------------------------------------------------------ outils
@@ -596,203 +510,6 @@ async def settle_on_cancellation(
 def has_retained_funds(intervention: Intervention) -> bool:
     payment = current_payment(intervention)
     return payment is not None and payment.status is PaymentStatus.RETENU
-
-
-# ------------------------------------------------------------------ versement
-
-
-async def dispatch_payout(
-    session_factory: SessionFactory,
-    payout_id: uuid.UUID,
-    *,
-    provider: PaymentProvider | None,
-    settings: Settings,
-) -> PayoutStatus | None:
-    """Envoie un versement, dans sa PROPRE transaction (après le commit de la
-    complétion) : un fournisseur indisponible ne fait jamais échouer la
-    confirmation du client. Ne lève jamais ; un échec laisse le versement
-    `echoue`, relançable (`scripts/dispatch_payouts.py`). Clé d'idempotence
-    `payout-<id>` : relancer ne verse jamais deux fois."""
-    try:
-        async with session_factory() as session:
-            payout = await payments_repository.get_payout_for_update(session, payout_id)
-            if payout is None or payout.status is PayoutStatus.ENVOYE:
-                return payout.status if payout is not None else None
-            payout.attempts += 1
-            payout.last_attempt_at = _now()
-            try:
-                if provider is None or provider.name != payout.provider:
-                    raise PaymentProviderError(
-                        f"fournisseur {payout.provider!r} indisponible pour ce versement"
-                    )
-                async with asyncio.timeout(settings.payment_provider_timeout_seconds):
-                    operation = await provider.send_payout(
-                        PayoutRequest(
-                            amount_fcfa=payout.amount_fcfa,
-                            currency=settings.payment_currency,
-                            channel=payout.channel,
-                            destination_phone=payout.destination_phone,
-                            idempotency_key=f"payout-{payout.id}",
-                            description="Téranga — versement de votre intervention",
-                        )
-                    )
-            except (PaymentProviderError, TimeoutError) as exc:
-                payout.status = PayoutStatus.ECHOUE
-                payout.failure_reason = str(exc) or exc.__class__.__name__
-                logger.warning("Versement %s en échec : %s", payout.id, payout.failure_reason)
-            else:
-                payout.status = PayoutStatus.ENVOYE
-                payout.provider_ref = operation.reference
-                payout.sent_at = _now()
-                payout.failure_reason = None
-            status = payout.status
-            await session.commit()
-            return status
-    except Exception:
-        logger.exception("Versement %s : erreur inattendue, à relancer.", payout_id)
-        return None
-
-
-async def dispatch_pending_payouts(
-    session_factory: SessionFactory,
-    *,
-    provider: PaymentProvider | None,
-    settings: Settings,
-    limit: int,
-) -> dict[PayoutStatus | None, int]:
-    """Relance les versements en attente ou en échec (script d'exploitation)."""
-    async with session_factory() as session:
-        payout_ids = await payments_repository.list_payout_ids_to_dispatch(session, limit=limit)
-    results: dict[PayoutStatus | None, int] = {}
-    for payout_id in payout_ids:
-        status = await dispatch_payout(
-            session_factory, payout_id, provider=provider, settings=settings
-        )
-        results[status] = results.get(status, 0) + 1
-    return results
-
-
-# ------------------------------------------------------------------ consultation
-
-
-def _page_bounds(page: int, page_size: int, settings: Settings) -> tuple[int, int]:
-    if page > settings.pagination_max_page:
-        raise PageHorsBornesError()
-    resolved = min(page_size, settings.pagination_page_size_max)
-    return resolved, (page - 1) * resolved
-
-
-async def list_client_payments(
-    session: AsyncSession, *, user: User, page: int, page_size: int, settings: Settings
-) -> Page[ClientPaymentOut]:
-    resolved, offset = _page_bounds(page, page_size, settings)
-    payments = await payments_repository.list_payments_for_client(
-        session, user.id, limit=resolved, offset=offset
-    )
-    total = await payments_repository.count_payments_for_client(session, user.id)
-    items = [
-        ClientPaymentOut(
-            id=payment.id,
-            intervention_id=payment.intervention_id,
-            trade_label=payment.intervention.service_request.trade.label_fr,
-            artisan_name=public_display_name(payment.intervention.artisan.user.full_name),
-            amount_fcfa=payment.amount_fcfa,
-            channel=payment.channel,
-            status=payment.status,
-            created_at=payment.created_at,
-            paid_at=payment.paid_at,
-            released_at=payment.released_at,
-            refunded_at=payment.refunded_at,
-        )
-        for payment in payments
-    ]
-    return Page.of(items, page=page, page_size=resolved, total=total)
-
-
-async def artisan_earnings(
-    session: AsyncSession, *, user: User, page: int, page_size: int, settings: Settings
-) -> ArtisanEarningsOut:
-    """Gains de l'artisan courant : synthèse + détail par intervention, avec
-    pour chacune le total, la commission prélevée et le net."""
-    resolved, offset = _page_bounds(page, page_size, settings)
-    artisan_id = await artisans_repository.get_artisan_profile_id_by_user_id(session, user.id)
-    if artisan_id is None:
-        return ArtisanEarningsOut(
-            totals=EarningsTotalsOut(
-                paid_out_fcfa=0,
-                payout_pending_fcfa=0,
-                in_escrow_fcfa=0,
-                commission_collected_fcfa=0,
-                cash_received_fcfa=0,
-                commission_due_fcfa=0,
-            ),
-            items=[],
-            pagination=Page.of([], page=page, page_size=resolved, total=0).pagination,
-        )
-
-    totals = await payments_repository.artisan_earnings_totals(session, artisan_id)
-    ids = await payments_repository.list_paid_intervention_ids_for_artisan(
-        session, artisan_id, limit=resolved, offset=offset
-    )
-    total = await payments_repository.count_paid_interventions_for_artisan(session, artisan_id)
-    interventions = await interventions_repository.list_by_ids(session, ids)
-    items = []
-    for intervention in interventions:
-        summary = summarize_payment(
-            intervention,
-            rounding=settings.commission_rounding,
-            online_available=online_payment_available(settings),
-        )
-        if summary is None:
-            continue
-        items.append(
-            EarningItemOut(
-                intervention_id=intervention.id,
-                trade_label=intervention.service_request.trade.label_fr,
-                client_name=public_display_name(intervention.client.full_name),
-                intervention_status=intervention.status,
-                payment=summary,
-            )
-        )
-    return ArtisanEarningsOut(
-        totals=EarningsTotalsOut(**totals),
-        items=items,
-        pagination=Page.of(items, page=page, page_size=resolved, total=total).pagination,
-    )
-
-
-class MoyenDeVersementIndisponibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="MOYEN_DE_VERSEMENT_INDISPONIBLE",
-            message="Ce moyen de versement n'est pas disponible.",
-            status_code=422,
-        )
-
-
-async def get_payout_settings(
-    session: AsyncSession, *, user: User, settings: Settings
-) -> PayoutSettingsOut:
-    profile = await get_own_profile(session, user)
-    return PayoutSettingsOut(
-        channel=profile.payout_channel or settings.payout_default_channel,
-        chosen=profile.payout_channel is not None,
-        allowed_channels=list(settings.payout_allowed_channels),
-        destination_phone=profile.user.phone,
-    )
-
-
-async def set_payout_settings(
-    session: AsyncSession, *, user: User, payload: PayoutSettingsIn, settings: Settings
-) -> PayoutSettingsOut:
-    """Choix du moyen de versement ; s'applique aux versements créés ensuite
-    (un versement déjà créé garde le moyen copié à sa création)."""
-    if payload.channel not in settings.payout_allowed_channels:
-        raise MoyenDeVersementIndisponibleError()
-    profile = await get_own_profile(session, user)
-    profile.payout_channel = payload.channel
-    await session.flush()
-    return await get_payout_settings(session, user=user, settings=settings)
 
 
 def viewer_role(intervention: Intervention, user: User) -> Role | None:

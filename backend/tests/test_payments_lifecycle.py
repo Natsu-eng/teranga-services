@@ -23,7 +23,7 @@ from app.models.enums import (
 )
 from app.models.request import ServiceRequest
 from app.models.user import User
-from app.services import payments as payments_service
+from app.services import payouts as payouts_service
 from app.services.payment_providers.base import (
     PaymentProviderError,
     PayoutRequest,
@@ -210,7 +210,7 @@ async def test_a_payout_outage_never_blocks_completion_and_can_be_retried(
 
     # Le fournisseur revient : la relance verse, une seule fois.
     app.dependency_overrides.pop(get_payment_provider)
-    results = await payments_service.dispatch_pending_payouts(
+    results = await payouts_service.dispatch_pending_payouts(
         app.dependency_overrides[get_session_factory](),
         provider=_sandbox(),
         settings=current_settings(),
