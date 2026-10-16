@@ -1,0 +1,10 @@
+# Fichiers de déploiement : toujours en fin de ligne LF, quel que soit le
+# poste qui extrait le dépôt (core.autocrlf=true sous Windows les passerait
+# sinon en CRLF). Ils sont lus par Docker, Caddy et Railway sous Linux, et
+# le test de parité des en-têtes (frontend/src/deploymentConfig.test.ts)
+# analyse le Caddyfile ligne à ligne.
+**/Dockerfile        text eol=lf
+**/.dockerignore     text eol=lf
+**/Caddyfile         text eol=lf
+**/railway.json      text eol=lf
+docker-compose*.yml  text eol=lf
