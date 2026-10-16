@@ -22,14 +22,12 @@ Principes (documentés dans BUILD_PLAN.md) :
    et servies uniquement aux participants.
 """
 
-import asyncio
 import uuid
 from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import AppError
 from app.models.enums import InterventionStatus, Role
 from app.models.intervention import Intervention
 from app.models.messaging import Conversation, Message
@@ -46,119 +44,18 @@ from app.schemas.conversations import (
 from app.schemas.pagination import Page
 from app.services.artisans import PageHorsBornesError
 from app.services.contact_masking import mask_contacts
-from app.services.file_validation import (
-    EXTENSION_BY_TYPE,
-    MIME_BY_TYPE,
-    DetectedFileType,
-    detect_file_type,
+from app.services.conversation_errors import (
+    ConversationAccesInterditError,
+    ConversationFermeeError,
+    CurseursIncompatiblesError,
+    MessageTropLongError,
+    MessageVideError,
 )
 from app.services.identity import public_display_name
-from app.services.image_processing import (
-    ImageNonDecodableError,
-    ImageTropGrandeError,
-    reencode_image,
-)
-from app.services.storage import StorageBackend, StorageObjectIntrouvableError
-
-# Seules des photos sont acceptées dans le fil (jamais un PDF ni un autre
-# format) : elles sont réencodées, donc on sait exactement ce qu'on sert.
-_ALLOWED_ATTACHMENT_TYPES = frozenset({DetectedFileType.JPEG, DetectedFileType.PNG})
 
 # Aperçu du dernier message dans la liste : tronqué, la conversation
 # complète se lit dans le fil.
 _PREVIEW_MAX_CHARS = 120
-
-
-class ConversationAccesInterditError(AppError):
-    """Même réponse pour « n'existe pas » et « pas participant » : rien ne
-    permet à un tiers de deviner qu'un fil existe."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            code="CONVERSATION_ACCES_INTERDIT",
-            message="Vous n'avez pas accès à cette conversation.",
-            status_code=403,
-        )
-
-
-class ConversationFermeeError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="CONVERSATION_FERMEE",
-            message=(
-                "Cette mise en relation a été refusée : la conversation n'accepte plus "
-                "de nouveaux messages."
-            ),
-            status_code=409,
-        )
-
-
-class MessageVideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(code="MESSAGE_VIDE", message="Le message est vide.", status_code=422)
-
-
-class MessageTropLongError(AppError):
-    def __init__(self, max_length: int) -> None:
-        super().__init__(
-            code="MESSAGE_TROP_LONG",
-            message=f"Le message dépasse la longueur maximale ({max_length} caractères).",
-            status_code=422,
-        )
-
-
-class CurseursIncompatiblesError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="CURSEURS_INCOMPATIBLES",
-            message="Les paramètres « before » et « since » ne peuvent pas être combinés.",
-            status_code=422,
-        )
-
-
-class PieceJointeVideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PIECE_JOINTE_VIDE", message="Le fichier envoyé est vide.", status_code=422
-        )
-
-
-class PieceJointeTypeInvalideError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PIECE_JOINTE_TYPE_INVALIDE",
-            message="Seules les photos JPEG ou PNG peuvent être envoyées (vérifié par leur "
-            "contenu, pas par leur nom).",
-            status_code=422,
-        )
-
-
-class PieceJointeTropVolumineuseError(AppError):
-    def __init__(self, max_bytes: int) -> None:
-        max_mo = max_bytes // (1024 * 1024)
-        super().__init__(
-            code="PIECE_JOINTE_TROP_VOLUMINEUSE",
-            message=f"La photo dépasse la taille maximale autorisée ({max_mo} Mo).",
-            status_code=413,
-        )
-
-
-class PieceJointeDimensionsExcessivesError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PIECE_JOINTE_DIMENSIONS_EXCESSIVES",
-            message="Les dimensions de cette photo sont trop grandes.",
-            status_code=422,
-        )
-
-
-class PieceJointeIntrouvableError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="PIECE_JOINTE_INTROUVABLE",
-            message="Cette pièce jointe est introuvable.",
-            status_code=404,
-        )
 
 
 @dataclass(frozen=True)
@@ -439,94 +336,3 @@ async def send_text_message(
         recipient_ids=(conversation.client_id, conversation.artisan_id),
         stored_attachment_key=None,
     )
-
-
-async def send_image_message(
-    session: AsyncSession,
-    *,
-    conversation_id: uuid.UUID,
-    sender: User,
-    content: bytes,
-    caption: str,
-    settings: Settings,
-    storage: StorageBackend,
-) -> SentMessage:
-    """Image jointe, avec légende facultative (masquée elle aussi).
-
-    Jamais les octets envoyés : l'image est entièrement décodée puis
-    réencodée (EXIF et position GPS retirés, redimensionnée) — voir
-    app/services/image_processing.py. Stockée en PRIVÉ sous une clé
-    aléatoire, jamais le nom du fichier fourni par le client.
-    """
-    conversation = await _writable_conversation(
-        session, conversation_id=conversation_id, sender=sender
-    )
-    cleaned_caption = _clean_body(caption, settings=settings, allow_empty=True)
-
-    if not content:
-        raise PieceJointeVideError()
-    if len(content) > settings.message_attachment_max_upload_bytes:
-        raise PieceJointeTropVolumineuseError(settings.message_attachment_max_upload_bytes)
-    detected = detect_file_type(content)
-    if detected is None or detected not in _ALLOWED_ATTACHMENT_TYPES:
-        raise PieceJointeTypeInvalideError()
-
-    try:
-        processed = await asyncio.to_thread(
-            reencode_image,
-            content,
-            max_side_px=settings.message_attachment_max_side_px,
-            max_pixels=settings.message_attachment_max_pixels,
-        )
-    except ImageNonDecodableError:
-        raise PieceJointeTypeInvalideError() from None
-    except ImageTropGrandeError:
-        raise PieceJointeDimensionsExcessivesError() from None
-
-    key = f"{conversation.id}/{uuid.uuid4().hex}.{EXTENSION_BY_TYPE[processed.detected]}"
-    reference = await storage.store(processed.content, key)
-
-    masking = mask_contacts(cleaned_caption)
-    try:
-        message = await conversations_repository.add_message(
-            session,
-            conversation=conversation,
-            sender_id=sender.id,
-            body=masking.text,
-            contact_masked=masking.masked,
-            attachment_key=reference,
-            attachment_content_type=MIME_BY_TYPE[processed.detected],
-        )
-    except Exception:
-        # Jamais de fichier orphelin : si l'écriture en base échoue, l'image
-        # déjà stockée est effacée.
-        await storage.delete(reference)
-        raise
-
-    return SentMessage(
-        message=to_message_out(message),
-        recipient_ids=(conversation.client_id, conversation.artisan_id),
-        stored_attachment_key=reference,
-    )
-
-
-async def read_attachment(
-    session: AsyncSession,
-    *,
-    conversation_id: uuid.UUID,
-    message_id: uuid.UUID,
-    user: User,
-    storage: StorageBackend,
-) -> tuple[bytes, str]:
-    """Contenu d'une image jointe, réservé aux deux participants."""
-    conversation = await get_for_participant(session, conversation_id=conversation_id, user=user)
-    message = await conversations_repository.get_message(
-        session, conversation_id=conversation.id, message_id=message_id
-    )
-    if message is None or message.attachment_key is None or not message.attachment_content_type:
-        raise PieceJointeIntrouvableError()
-    try:
-        content = await storage.retrieve(message.attachment_key)
-    except StorageObjectIntrouvableError:
-        raise PieceJointeIntrouvableError() from None
-    return content, message.attachment_content_type
