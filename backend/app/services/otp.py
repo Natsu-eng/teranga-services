@@ -11,6 +11,7 @@ Exigences de sécurité (BUILD_PLAN.md §4) :
 """
 
 import hashlib
+import logging
 import secrets
 import string
 from datetime import UTC, datetime, timedelta
@@ -22,7 +23,10 @@ from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.core.phone import normalize_phone
 from app.models.otp import OtpCode
+from app.services.otp_test_mode import staging_test_code_for
 from app.services.sms import SmsProvider, get_sms_provider
+
+logger = logging.getLogger(__name__)
 
 _HASH_ALGO = "pbkdf2_sha256"
 
@@ -124,7 +128,11 @@ async def request_otp(
     for otp in previous.scalars():
         otp.consumed_at = now
 
-    code = generate_code(settings.otp_code_length)
+    # Mode de test (staging uniquement, numéros listés) : seul le code et sa
+    # livraison changent ; hachage, expiration, usage unique et tentatives
+    # restent ceux d'un code normal (app/services/otp_test_mode.py).
+    test_code = staging_test_code_for(phone, settings)
+    code = test_code if test_code is not None else generate_code(settings.otp_code_length)
     otp = OtpCode(
         phone=phone,
         code_hash=hash_code(code, iterations=settings.otp_hash_iterations),
@@ -140,6 +148,11 @@ async def request_otp(
     session.add(otp)
     await session.flush()
 
+    if test_code is not None:
+        # Aucun SMS : le collaborateur connaît le code de test. Journalisé
+        # sans le numéro ni le code (rien de rejouable dans les journaux).
+        logger.info("[staging] code OTP de test émis pour un numéro de la liste de test.")
+        return
     await sms_provider.send_otp(phone, code)
 
 
