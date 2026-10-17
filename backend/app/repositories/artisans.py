@@ -284,7 +284,7 @@ async def delete_artisan_trade(
     # `ArtisanProfile.artisan_trades`, et laisse la collection en mémoire
     # cohérente avec l'état persistant sans requête supplémentaire --
     # important ici puisque `artisan.artisan_trades` est resérialisé juste
-    # après par `app.services.artisans.remove_trade`.
+    # après par `app.services.artisan_profile.remove_trade`.
     artisan.artisan_trades.remove(artisan_trade)
     await session.flush()
 
