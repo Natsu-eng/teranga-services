@@ -1,15 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Camera,
-  Check,
-  FileText,
-  MapPin,
-  Plus,
-  Trash2,
-  UploadCloud,
-  UserRound,
-  Wrench,
-} from 'lucide-react';
+import { Camera, MapPin, Plus, Trash2, UploadCloud, UserRound, Wrench } from 'lucide-react';
 import { RoleRestricted } from '../../components/auth/RoleRestricted';
 import { AppBar } from '../../components/ui/AppBar';
 import { Avatar } from '../../components/ui/Avatar';
@@ -22,7 +12,6 @@ import { IconButton } from '../../components/ui/IconButton';
 import { SafeImage } from '../../components/ui/SafeImage';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { buttonClasses } from '../../components/ui/styles';
 import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
@@ -31,6 +20,9 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
+import { ChecklistItem } from './components/OnboardingChecklistItem';
+import { VerificationDocumentsSection } from './components/VerificationDocumentsSection';
+import { REQUIRED_DOCS, latestDocumentsByType } from './onboardingDocuments';
 import { acceptAttribute, constraintsHint } from './profileMedia';
 import { useArtisanProfileActions } from './hooks/useArtisanProfileActions';
 import { useDocumentUpload } from './hooks/useDocumentUpload';
@@ -38,55 +30,7 @@ import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
 import { useProfileMediaConstraints } from './hooks/useProfileMediaConstraints';
 import { useMyVerification } from './hooks/useMyVerification';
 import { useTrades } from './hooks/useTrades';
-import type { VerificationDocType, VerificationDocument, VerificationDocStatus } from '../../types';
-
-const REQUIRED_DOCS: { type: VerificationDocType; label: string; hint: string }[] = [
-  { type: 'cni', label: "Carte d'identité (CNI)", hint: 'Recto lisible — image ou PDF' },
-  { type: 'selfie', label: 'Selfie', hint: 'Votre visage bien visible — image uniquement' },
-];
-
-const DOC_STATUS: Record<VerificationDocStatus, { label: string; tone: StatusTone }> = {
-  pending: { label: 'En attente de revue', tone: 'warning' },
-  approved: { label: 'Validé', tone: 'success' },
-  rejected: { label: 'Refusé', tone: 'danger' },
-};
-
-function latestDocumentsByType(
-  documents: VerificationDocument[],
-): Partial<Record<VerificationDocType, VerificationDocument>> {
-  const result: Partial<Record<VerificationDocType, VerificationDocument>> = {};
-  for (const doc of documents) {
-    const current = result[doc.docType];
-    if (!current || new Date(doc.createdAt).getTime() > new Date(current.createdAt).getTime()) {
-      result[doc.docType] = doc;
-    }
-  }
-  return result;
-}
-
-/** Une étape de la checklist, posée sur le bandeau vert profond. */
-const ChecklistItem: React.FC<{ done: boolean; label: string }> = ({ done, label }) => (
-  <li className="flex items-center gap-3">
-    <span
-      aria-hidden
-      className={cn(
-        'inline-flex w-6 h-6 shrink-0 items-center justify-center rounded-full',
-        done ? 'bg-accent text-primary' : 'ring-2 ring-inset ring-white/35',
-      )}
-    >
-      {done && <Check className="w-4 h-4" strokeWidth={3} />}
-    </span>
-    <span
-      className={cn(
-        'text-sm',
-        done ? 'text-white font-semibold' : 'text-primary-emerald-foreground',
-      )}
-    >
-      {label}
-      <span className="sr-only">{done ? ' : fait' : ' : à faire'}</span>
-    </span>
-  </li>
-);
+import type { VerificationDocType } from '../../types';
 
 /**
  * Onboarding artisan (/pro/onboarding) : profil, métiers et documents de
@@ -603,89 +547,15 @@ export const ArtisanOnboardingScreen: React.FC = () => {
           </>
         ) : null}
 
-        <Card
-          as="section"
-          padding="lg"
-          aria-labelledby="onboarding-documents"
-          className="space-y-4"
-        >
-          <div className="space-y-1">
-            <h2
-              id="onboarding-documents"
-              className="font-display text-display-sm font-semibold text-primary flex items-center gap-2"
-            >
-              <FileText aria-hidden className="w-5 h-5" /> Documents de vérification
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Vos documents restent privés : seule l&apos;équipe Téranga les consulte pour vérifier
-              votre identité.
-            </p>
-          </div>
-
-          {isVerificationLoading && !verification ? (
-            <Skeleton className="h-32 rounded-field" />
-          ) : verificationError && !verification ? (
-            <ErrorState message={verificationError.message} onRetry={reloadVerification} />
-          ) : (
-            <ul className="space-y-3">
-              {REQUIRED_DOCS.map(({ type, label, hint }) => {
-                const doc = latestByType[type];
-                const uploadState = documentUpload.stateFor(type);
-                return (
-                  <li key={type} className="rounded-field bg-surface-muted p-3 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{label}</p>
-                        <p className="text-sm text-muted-foreground">{hint}</p>
-                      </div>
-                      {doc && (
-                        <StatusPill tone={DOC_STATUS[doc.status].tone}>
-                          {DOC_STATUS[doc.status].label}
-                        </StatusPill>
-                      )}
-                    </div>
-
-                    {doc?.status === 'rejected' && doc.note && (
-                      <p className="text-sm text-destructive">Motif : {doc.note}</p>
-                    )}
-
-                    <label
-                      className={cn(
-                        buttonClasses({ variant: 'outline', size: 'sm' }),
-                        'focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary-emerald',
-                      )}
-                    >
-                      <UploadCloud aria-hidden className="w-4 h-4" />
-                      <span>
-                        {uploadState.isUploading
-                          ? 'Envoi...'
-                          : doc
-                            ? 'Renvoyer un document'
-                            : 'Envoyer un document'}
-                      </span>
-                      {/* sr-only (et non hidden) : atteignable au clavier, nommé
-                          pour les lecteurs d'écran. */}
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,application/pdf"
-                        aria-label={`Envoyer : ${label}`}
-                        className="sr-only"
-                        disabled={uploadState.isUploading}
-                        onChange={(e) => handleFileSelected(type, e)}
-                      />
-                    </label>
-
-                    {uploadState.error && (
-                      <p role="alert" className="text-sm text-destructive">
-                        {uploadState.error}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+        <VerificationDocumentsSection
+          isVerificationLoading={isVerificationLoading}
+          verification={verification}
+          verificationError={verificationError}
+          reloadVerification={reloadVerification}
+          latestByType={latestByType}
+          documentUpload={documentUpload}
+          handleFileSelected={handleFileSelected}
+        />
       </main>
     </>
   );

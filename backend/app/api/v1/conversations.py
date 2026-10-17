@@ -31,6 +31,7 @@ from app.schemas.conversations import (
     UnreadCountOut,
 )
 from app.schemas.pagination import Page
+from app.services import conversation_attachments as conversation_attachments_service
 from app.services import conversations as conversations_service
 from app.services.rate_limit import (
     RateLimiter,
@@ -180,7 +181,7 @@ async def send_image_message(
     # fichier trop lourd sans charger un envoi démesuré.
     content = await file.read(settings.message_attachment_max_upload_bytes + 1)
     storage = get_message_attachment_storage_backend(settings)
-    sent = await conversations_service.send_image_message(
+    sent = await conversation_attachments_service.send_image_message(
         session,
         conversation_id=conversation_id,
         sender=user,
@@ -210,7 +211,7 @@ async def get_message_attachment(
     settings: SettingsDep,
     user: Participant,
 ) -> Response:
-    content, content_type = await conversations_service.read_attachment(
+    content, content_type = await conversation_attachments_service.read_attachment(
         session,
         conversation_id=conversation_id,
         message_id=message_id,

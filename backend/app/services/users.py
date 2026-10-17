@@ -14,7 +14,7 @@ from app.services.auth import to_user_out
 
 async def update_full_name(session: AsyncSession, *, user: User, raw_full_name: str) -> UserOut:
     """Édite le nom du compte COURANT (résolu depuis le token, jamais un id
-    reçu du client -- même principe que `app.services.artisans.get_own_profile`) :
+    reçu du client -- même principe que `app.services.artisan_profile.get_own_profile`) :
     aucun endpoint ne permet d'éditer le nom d'un tiers."""
     user.full_name = validate_full_name(raw_full_name)
     await session.flush()

@@ -29,7 +29,9 @@ from app.repositories import reviews as reviews_repository
 from app.schemas.pagination import Page
 from app.schemas.reviews import ArtisanOwnReviewOut, ReviewCreateIn, ReviewOut
 from app.services import interventions as interventions_service
-from app.services.artisans import PageHorsBornesError, get_artisan_or_404, get_own_profile
+from app.services.artisan_errors import PageHorsBornesError
+from app.services.artisan_profile import get_own_profile
+from app.services.artisans import get_artisan_or_404
 from app.services.identity import public_display_name
 
 

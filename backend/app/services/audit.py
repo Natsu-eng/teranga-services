@@ -23,7 +23,7 @@ from app.repositories import audit as audit_repository
 from app.repositories.audit import AuditFilters
 from app.schemas.audit import AuditEntryOut
 from app.schemas.pagination import Page
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 
 
 def _jsonable(value: Any) -> Any:

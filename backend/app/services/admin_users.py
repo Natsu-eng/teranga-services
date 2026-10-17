@@ -31,7 +31,7 @@ from app.models.user import User
 from app.schemas.admin import AdminUserOut
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 from app.services.text_search import LIKE_ESCAPE, contains_pattern
 
 

@@ -9,13 +9,13 @@ from app.core.config import get_settings
 from app.repositories.artisans import ArtisanSort
 from app.schemas.artisans import ArtisanListItemOut
 from app.schemas.pagination import Page
-from app.services.artisans import (
+from app.services.artisan_errors import (
     PageHorsBornesError,
     PositionInvalideError,
     RayonRechercheInvalideError,
     TriDistanceSansPositionError,
-    list_artisans,
 )
+from app.services.artisans import list_artisans
 
 SETTINGS = get_settings()
 

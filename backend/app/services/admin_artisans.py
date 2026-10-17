@@ -26,7 +26,8 @@ from app.models.user import User
 from app.schemas.admin import AdminArtisanListItemOut
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
-from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.artisan_errors import PageHorsBornesError
+from app.services.artisans import get_artisan_or_404
 from app.services.text_search import LIKE_ESCAPE, contains_pattern
 
 # Filtre « suspendu » en plus des statuts de vérification.

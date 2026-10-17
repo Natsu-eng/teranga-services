@@ -35,46 +35,45 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.errors import AppError
-from app.models.artisan import ArtisanProfile
 from app.models.enums import (
-    ArtisanVerifiedStatus,
-    AuditAction,
-    AuditTargetType,
-    DisputeOutcome,
     EngagementBlocker,
     InterventionCancellationKind,
     InterventionStatus,
     Role,
     ServiceRequestStatus,
 )
-from app.models.intervention import Intervention, InterventionDispute
+from app.models.intervention import Intervention
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories import interventions as interventions_repository
-from app.repositories import payments as payments_repository
 from app.repositories import requests as requests_repository
-from app.repositories import trades as trades_repository
 from app.repositories.requests import location_to_lat_lng
 from app.schemas.interventions import (
     CancellationOut,
-    EngagementCheckOut,
     InterventionCreateIn,
     InterventionOut,
-    RequestEligibilityOut,
 )
 from app.schemas.pagination import Page
 from app.schemas.payments import DisputeOut
 from app.schemas.quotes import QuoteOut
 from app.schemas.reviews import ReviewOut
-from app.services import audit as audit_service
 from app.services import commission as commission_service
 from app.services import conversations as conversations_service
 from app.services import payments as payments_service
 from app.services import requests as requests_service
-from app.services.artisans import PageHorsBornesError, get_artisan_or_404
+from app.services.artisan_errors import PageHorsBornesError
+from app.services.artisans import get_artisan_or_404
+from app.services.engagement import evaluate_engagement
 from app.services.identity import public_display_name
 from app.services.intervention_errors import (
     ActionReserveeAutrePartieError,
+    AnnulationFondsRetenusError,
+    ArtisanHorsZoneError,
+    ArtisanIndisponibleError,
+    ArtisanMetierNonExerceError,
+    ArtisanNonVerifieError,
+    DemandeAutruiInterditeError,
+    DemandeNonOuverteError,
     InterventionAccesInterditError,
     InterventionIntrouvableError,
     InterventionTransitionInvalideError,
@@ -82,8 +81,6 @@ from app.services.intervention_errors import (
 from app.services.payment_providers.base import PaymentProvider
 from app.services.payment_summary import online_payment_available
 from app.services.payment_summary import summarize as summarize_payment
-from app.services.requests import MetierInconnuError
-from app.services.verification import compute_verified_status
 
 # Transitions autorisées, par statut de départ (BUILD_PLAN.md §6 Lot 12b).
 # Seule source de vérité : `transition_intervention` est le seul endroit qui
@@ -114,18 +111,6 @@ _CANCELLABLE_BY: dict[Role, frozenset[InterventionStatus]] = {
 }
 
 
-class AnnulationFondsRetenusError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ANNULATION_FONDS_RETENUS",
-            message=(
-                "Votre paiement est en séquestre : signalez un problème, un conseiller "
-                "Téranga tranchera et vous serez remboursé si les travaux n'ont pas été faits."
-            ),
-            status_code=409,
-        )
-
-
 @dataclass(frozen=True)
 class SettledIntervention:
     """Intervention après une transition qui peut déclencher un versement :
@@ -133,60 +118,6 @@ class SettledIntervention:
 
     intervention: InterventionOut
     payout_id: uuid.UUID | None
-
-
-class DemandeAutruiInterditeError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="DEMANDE_AUTRUI_INTERDITE",
-            message="Cette demande n'appartient pas au client courant.",
-            status_code=403,
-        )
-
-
-class DemandeNonOuverteError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="DEMANDE_NON_OUVERTE",
-            message="Cette demande n'est plus ouverte à une mise en relation.",
-            status_code=409,
-        )
-
-
-class ArtisanNonVerifieError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_NON_VERIFIE",
-            message="Cet artisan n'est pas encore vérifié.",
-            status_code=422,
-        )
-
-
-class ArtisanIndisponibleError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_INDISPONIBLE",
-            message="Cet artisan ne peut pas recevoir de nouvelles demandes pour le moment.",
-            status_code=422,
-        )
-
-
-class ArtisanMetierNonExerceError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_METIER_NON_EXERCE",
-            message="Cet artisan n'exerce pas le métier demandé.",
-            status_code=422,
-        )
-
-
-class ArtisanHorsZoneError(AppError):
-    def __init__(self) -> None:
-        super().__init__(
-            code="ARTISAN_HORS_ZONE",
-            message="Cet artisan ne couvre pas géographiquement cette demande.",
-            status_code=422,
-        )
 
 
 def transition_intervention(intervention: Intervention, to: InterventionStatus) -> None:
@@ -303,90 +234,6 @@ _BLOCKER_ERRORS: dict[EngagementBlocker, Callable[[], AppError]] = {
     EngagementBlocker.METIER_NON_EXERCE: ArtisanMetierNonExerceError,
     EngagementBlocker.HORS_ZONE: ArtisanHorsZoneError,
 }
-
-
-async def evaluate_engagement(
-    session: AsyncSession,
-    *,
-    artisan: ArtisanProfile,
-    trade_id: uuid.UUID,
-    lat: float,
-    lng: float,
-    settings: Settings,
-) -> EngagementBlocker | None:
-    """La règle d'engagement côté artisan, SOURCE UNIQUE (règles 3 à 5 de
-    `create_intervention`) : artisan vérifié, métier exercé, zone
-    d'intervention (`service_area`, sinon `service_radius_m` autour de
-    `base_location`) qui couvre le point. Renvoie le premier obstacle, ou
-    `None`.
-
-    Utilisée par la création d'intervention (refus) ET par les lectures
-    d'éligibilité (marquage avant envoi) : l'écran ne peut jamais annoncer
-    « dans sa zone » une demande que le serveur refuserait, ni l'inverse.
-    """
-    verified_status = compute_verified_status(
-        artisan.verifications, settings.verification_required_doc_types
-    )
-    if verified_status is not ArtisanVerifiedStatus.VERIFIED:
-        return EngagementBlocker.ARTISAN_NON_VERIFIE
-    if artisan.suspended_at is not None:
-        return EngagementBlocker.ARTISAN_INDISPONIBLE
-    if not await artisans_repository.artisan_exercises_trade(
-        session, artisan_id=artisan.id, trade_id=trade_id
-    ):
-        return EngagementBlocker.METIER_NON_EXERCE
-    if not await artisans_repository.is_artisan_reachable_for_trade(
-        session, artisan_id=artisan.id, trade_id=trade_id, lat=lat, lng=lng
-    ):
-        return EngagementBlocker.HORS_ZONE
-    return None
-
-
-async def list_request_eligibility(
-    session: AsyncSession, *, client: User, artisan_id: uuid.UUID, settings: Settings
-) -> list[RequestEligibilityOut]:
-    """Pour chaque demande OUVERTE du client courant : peut-elle être
-    adressée à cet artisan ? Lecture seule, rien n'est créé. Seules les
-    demandes du client sont lues (jamais celles d'autrui)."""
-    artisan = await get_artisan_or_404(session, artisan_id)
-    requests = await requests_repository.list_open_by_client(
-        session,
-        client.id,
-        created_after=requests_service.expiry_cutoff(settings),
-        limit=settings.pagination_page_size_max,
-    )
-    results: list[RequestEligibilityOut] = []
-    for request in requests:
-        lat, lng = location_to_lat_lng(request)
-        blocker = await evaluate_engagement(
-            session, artisan=artisan, trade_id=request.trade_id, lat=lat, lng=lng, settings=settings
-        )
-        results.append(
-            RequestEligibilityOut(request_id=request.id, eligible=blocker is None, reason=blocker)
-        )
-    return results
-
-
-async def check_coverage(
-    session: AsyncSession,
-    *,
-    artisan_id: uuid.UUID,
-    trade_code: str,
-    lat: float,
-    lng: float,
-    settings: Settings,
-) -> EngagementCheckOut:
-    """Cet artisan peut-il intervenir pour ce métier à ce lieu ? Lecture
-    seule, avant même qu'une demande existe (écran de description d'un
-    besoin adressé à un artisan) : rien n'est créé ni réservé."""
-    artisan = await get_artisan_or_404(session, artisan_id)
-    trade = await trades_repository.get_active_trade_by_code(session, trade_code)
-    if trade is None:
-        raise MetierInconnuError()
-    blocker = await evaluate_engagement(
-        session, artisan=artisan, trade_id=trade.id, lat=lat, lng=lng, settings=settings
-    )
-    return EngagementCheckOut(eligible=blocker is None, reason=blocker)
 
 
 async def create_intervention(
@@ -647,105 +494,3 @@ async def cancel_intervention(
     )
     await session.flush()
     return to_intervention_out(intervention)
-
-
-async def open_dispute(
-    session: AsyncSession, *, intervention_id: uuid.UUID, user: User, reason: str
-) -> InterventionOut:
-    """Une partie signale un problème sur des travaux en cours
-    (`en_cours` -> `litige`). L'argent est GELÉ tel quel -- ni versement ni
-    remboursement -- jusqu'à la décision d'un admin. C'est aussi le recours
-    de l'artisan quand un client ne confirme jamais la fin des travaux."""
-    intervention = await _get_for_update_or_404(session, intervention_id)
-    role = _party_role(intervention, user)
-    transition_intervention(intervention, InterventionStatus.LITIGE)
-    dispute = InterventionDispute(
-        intervention=intervention,
-        opened_by_id=user.id,
-        opened_by_role=role,
-        reason=reason,
-        created_at=datetime.now(UTC),
-    )
-    session.add(dispute)
-    await session.flush()
-    return to_intervention_out(intervention)
-
-
-async def resolve_dispute(
-    session: AsyncSession,
-    *,
-    intervention_id: uuid.UUID,
-    admin: User,
-    outcome: DisputeOutcome,
-    note: str,
-    settings: Settings,
-    provider: PaymentProvider | None,
-) -> SettledIntervention:
-    """Un admin tranche un litige (BUILD_PLAN.md §3.5) :
-
-    - `libere` : travaux reconnus faits -> `terminee`, même enchaînement
-      qu'une complétion (séquestre libéré, versement du net) ;
-    - `rembourse` : -> `annulee` (arbitrage), client remboursé, ni
-      versement ni commission.
-    """
-    intervention = await _get_for_update_or_404(session, intervention_id)
-    dispute = intervention.dispute
-    if intervention.status is not InterventionStatus.LITIGE or dispute is None:
-        raise InterventionTransitionInvalideError()
-
-    payout = None
-    if outcome is DisputeOutcome.LIBERE:
-        transition_intervention(intervention, InterventionStatus.TERMINEE)
-        intervention.completed_at = datetime.now(UTC)
-        payout = payments_service.settle_on_completion(session, intervention, settings=settings)
-    else:
-        transition_intervention(intervention, InterventionStatus.ANNULEE)
-        mark_cancelled(
-            intervention, by=Role.ADMIN, kind=InterventionCancellationKind.ARBITRAGE, reason=note
-        )
-        await payments_service.settle_on_cancellation(
-            session, intervention, settings=settings, provider=provider
-        )
-        await requests_repository.set_status(
-            session, intervention.service_request, ServiceRequestStatus.OUVERTE
-        )
-    dispute.outcome = outcome
-    dispute.resolved_by_id = admin.id
-    dispute.resolved_at = datetime.now(UTC)
-    dispute.resolution_note = note
-    await session.flush()
-    await audit_service.record(
-        session,
-        actor=admin,
-        action=AuditAction.DISPUTE_RESOLVE,
-        target_type=AuditTargetType.INTERVENTION,
-        target_id=intervention.id,
-        details={
-            "outcome": outcome,
-            "note": note,
-            "opened_by": dispute.opened_by_role,
-            "payout_id": payout.id if payout is not None else None,
-        },
-    )
-    return SettledIntervention(
-        intervention=to_intervention_out(intervention),
-        payout_id=payout.id if payout is not None else None,
-    )
-
-
-async def list_disputes(
-    session: AsyncSession, *, resolved: bool, page: int, page_size: int, settings: Settings
-) -> Page[InterventionOut]:
-    """File des litiges pour l'admin : ouverts (premier ouvert, premier
-    tranché) ou déjà tranchés."""
-    if page > settings.pagination_max_page:
-        raise PageHorsBornesError()
-    resolved_page_size = min(page_size, settings.pagination_page_size_max)
-    offset = (page - 1) * resolved_page_size
-    ids = await payments_repository.list_disputed_intervention_ids(
-        session, resolved=resolved, limit=resolved_page_size, offset=offset
-    )
-    total = await payments_repository.count_disputes(session, resolved=resolved)
-    interventions = await interventions_repository.list_by_ids(session, ids)
-    items = [to_intervention_out(intervention) for intervention in interventions]
-    return Page.of(items, page=page, page_size=resolved_page_size, total=total)

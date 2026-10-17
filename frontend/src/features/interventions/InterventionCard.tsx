@@ -4,97 +4,20 @@ import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextAreaField, TextField } from '../../components/ui/Field';
 import { RatingInput, StarRow } from '../../components/ui/Rating';
-import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
+import { StatusPill } from '../../components/ui/StatusPill';
 import { ApiError, api } from '../../lib/api';
-import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
-import type { Intervention, InterventionStatus, UserRole } from '../../types';
+import type { Intervention, UserRole } from '../../types';
 import { PaymentPanel } from '../payments/components/PaymentPanel';
-
-const STATUS: Record<InterventionStatus, { label: string; tone: StatusTone }> = {
-  proposee: { label: 'En attente de réponse', tone: 'warning' },
-  acceptee: { label: 'Acceptée', tone: 'info' },
-  en_cours: { label: 'En cours', tone: 'info' },
-  terminee: { label: 'Terminée', tone: 'success' },
-  annulee: { label: 'Annulée', tone: 'danger' },
-  litige: { label: 'Litige', tone: 'danger' },
-};
-
-/**
- * Étapes affichées dans la frise d'avancement, et position de chaque
- * statut sur cette frise. Annulée et litige sortent du parcours normal :
- * pas de frise, l'état est expliqué en clair.
- */
-const STEPS = ['Mise en relation', 'Devis', 'Travaux', 'Terminée'] as const;
-const STEP_INDEX: Partial<Record<InterventionStatus, number>> = {
-  proposee: 0,
-  acceptee: 1,
-  en_cours: 2,
-  terminee: 3,
-};
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('fr-FR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-/** Frise d'avancement : l'étape courante est annoncée aux lecteurs d'écran. */
-const ProgressSteps: React.FC<{ current: number }> = ({ current }) => (
-  <ol aria-label="Avancement" className="grid grid-cols-4 gap-1.5">
-    {STEPS.map((step, index) => {
-      const isDone = index < current || (index === current && index === STEPS.length - 1);
-      const isCurrent = index === current;
-      return (
-        <li key={step} className="space-y-1.5" aria-current={isCurrent ? 'step' : undefined}>
-          <span
-            aria-hidden
-            className={cn(
-              'block h-1.5 rounded-full',
-              isDone || isCurrent ? 'bg-primary-emerald' : 'bg-border-subtle',
-            )}
-          />
-          <span
-            className={cn(
-              'block text-caption leading-tight',
-              isCurrent ? 'font-semibold text-primary' : 'text-muted-foreground',
-            )}
-          >
-            {step}
-          </span>
-        </li>
-      );
-    })}
-  </ol>
-);
-
-/** Un litige se décrit : en dessous, il ne serait pas exploitable (même borne que le serveur). */
-const DISPUTE_REASON_MIN_LENGTH = 10;
-
-function partyLabel(party: UserRole | 'admin'): string {
-  if (party === 'client') return 'par le client';
-  if (party === 'artisan') return "par l'artisan";
-  return 'par Téranga';
-}
-
-/** Comment une intervention annulée a été close, du point de vue du lecteur. */
-function cancellationText(intervention: Intervention, role: UserRole): string {
-  const cancellation = intervention.cancellation;
-  if (!cancellation || cancellation.kind === 'refus') {
-    return role === 'client'
-      ? "Cette mise en relation a été refusée par l'artisan."
-      : 'Vous avez refusé cette mise en relation.';
-  }
-  if (cancellation.kind === 'arbitrage') {
-    return 'Litige tranché par Téranga : le client a été remboursé, aucune commission prélevée.';
-  }
-  if (cancellation.by === role) return 'Vous avez annulé cette mise en relation.';
-  return cancellation.by === 'client'
-    ? 'Le client a annulé cette mise en relation.'
-    : "L'artisan a annulé cette mise en relation.";
-}
+import { ProgressSteps } from './components/ProgressSteps';
+import {
+  DISPUTE_REASON_MIN_LENGTH,
+  STATUS,
+  STEP_INDEX,
+  cancellationText,
+  formatDate,
+  partyLabel,
+} from './interventionText';
 
 interface InterventionCardProps {
   intervention: Intervention;

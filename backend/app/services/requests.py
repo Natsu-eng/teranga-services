@@ -22,7 +22,7 @@ from app.repositories.requests import location_to_lat_lng
 from app.schemas.pagination import Page
 from app.schemas.requests import LocationOut, ServiceRequestCreateIn, ServiceRequestOut
 from app.schemas.trades import TradeOut
-from app.services.artisans import PageHorsBornesError
+from app.services.artisan_errors import PageHorsBornesError
 
 
 class MetierInconnuError(AppError):
