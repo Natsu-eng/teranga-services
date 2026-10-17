@@ -243,6 +243,17 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"OTP_TEST_CODE doit compter exactement {self.otp_code_length} chiffres."
             )
+        # Non-énumération : avec le fournisseur `unconfigured`, un numéro HORS
+        # liste ferait échouer request-otp (erreur 500) quand un numéro listé
+        # obtient 204 -- la différence révélerait qui figure sur la liste.
+        # Sans fournisseur réel en staging : `console` (le code n'y est jamais
+        # journalisé hors development/test, la réponse reste identique).
+        if self.sms_provider == "unconfigured":
+            raise ValueError(
+                "Mode OTP de test avec SMS_PROVIDER=unconfigured : les numéros hors liste "
+                "échoueraient (500) et révéleraient la liste. Utiliser SMS_PROVIDER=console "
+                "en staging tant qu'aucun fournisseur réel n'est branché."
+            )
         return self
 
     # Secret de signature des JWT. Obligatoire, sans valeur par défaut :

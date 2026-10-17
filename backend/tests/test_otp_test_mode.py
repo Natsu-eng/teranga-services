@@ -111,6 +111,16 @@ def test_test_mode_is_staging_only_even_locally(environment: str) -> None:
         ({"otp_test_whitelist": ["+221770000001"], "otp_test_code": "12345"}, "6 chiffres"),
         ({"otp_test_whitelist": ["+221770000001"], "otp_test_code": "12a456"}, "6 chiffres"),
         ({"otp_test_whitelist": ["770000001"], "otp_test_code": TEST_CODE}, "E.164"),
+        # Non-énumération : un fournisseur qui échoue pour les numéros hors
+        # liste (500) les distinguerait des numéros listés (204).
+        (
+            {
+                "otp_test_whitelist": ["+221770000001"],
+                "otp_test_code": TEST_CODE,
+                "sms_provider": "unconfigured",
+            },
+            "révéleraient la liste",
+        ),
     ],
 )
 def test_incomplete_or_malformed_test_configuration_is_refused(
