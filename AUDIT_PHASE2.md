@@ -762,6 +762,49 @@ Points de cet audit concernés :
 - **Reste hors périmètre (documenté)** : annulation d'un taux programmé,
   taux par palier (non appliqués par le moteur), export du journal.
 
+## Mise à jour — `feat/beta-enablement`
+
+Beta de test sans fournisseur SMS, application installable, transparence.
+Référence : [DEPLOYMENT.md §10 et §11](DEPLOYMENT.md).
+
+- **Mode OTP de test (staging seulement).** Pour un numéro de
+  `OTP_TEST_WHITELIST`, le code est `OTP_TEST_CODE` et aucun SMS ne part ;
+  hachage, usage unique, expiration, tentatives, débit et réponse non
+  énumérante inchangés (testés sur ce chemin). **Impossible en production**
+  par deux verrous indépendants : refus au démarrage (production,
+  development, test) et garde à l'exécution (sans effet hors staging même
+  si la validation était contournée). 6 tests de mutation, 6 tuées.
+- **`GET /api/v1/meta`** (public) : `environment` et un booléen
+  `otp_test_mode` ; ni la liste ni le code (testé), toujours faux en
+  production.
+- **Application installable (PWA)** : manifeste, icônes générées depuis le
+  monogramme, balises iOS, service worker minimal (pages en réseau
+  d'abord, `/assets/` hachés en cache ; jamais l'API, l'authentifié, le
+  non-GET, une autre origine ni une réponse `no-store`/`private`), mises à
+  jour automatiques avec purge des anciens caches. Comportement prouvé en
+  exécutant le service worker produit dans un bac à sable (8 mutations
+  tuées) ; installabilité vérifiée dans Chrome réel (protocole DevTools :
+  aucune erreur d'installabilité, service worker actif, mise à jour d'une
+  version à l'autre constatée, aucune réponse d'API en cache). Conseil
+  discret « Installer l'app » dans le profil.
+- **Bandeau « Version de test · données temporaires »** hors production,
+  d'après le backend ; sûr par défaut (absent avant réponse, en cas
+  d'échec et en production ; 2 mutations tuées).
+- **Constaté pendant le lot, corrigé** :
+  - **Caddyfile** : les routes SPA (`/accueil`…) servies par le fallback
+    n'avaient aucun `Cache-Control` (le filtre `@html` porte sur le chemin
+    demandé, avant réécriture) ; un navigateur pouvait garder une ancienne
+    version. Tout ce qui n'est pas `/assets/*` est désormais revalidé ;
+  - **énumération en staging** : avec `SMS_PROVIDER=unconfigured`, un
+    numéro hors liste aurait obtenu une erreur 500 et un numéro listé un
+    204, révélant la liste ; cette combinaison est refusée au démarrage.
+- **Vérification** : porte backend verte (ruff, format, mypy strict,
+  pytest), porte front verte (typecheck, lint, vitest).
+- **Non vérifié sur appareil physique** : l'installation sur un vrai
+  téléphone Android et un vrai iPhone reste à faire en beta (Chrome desktop
+  applique les mêmes critères qu'Android ; Safari iOS n'a pas d'outil
+  d'audit, sa configuration est vérifiée par tests sur les fichiers servis).
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

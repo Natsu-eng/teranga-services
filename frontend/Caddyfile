@@ -21,12 +21,20 @@
 		-Server
 	}
 
-	# Assets hachés : immuables, cache d'un an. index.html : toujours revalidé
-	# (sinon un déploiement ne serait pas vu avant expiration du cache).
+	# Assets hachés : immuables, cache d'un an. Tout le reste est revalidé à
+	# chaque fois (sinon un déploiement ne serait pas vu avant expiration du
+	# cache) : index.html, MAIS AUSSI les routes SPA (/accueil...) servies par
+	# le fallback ci-dessous -- le filtre porte sur le chemin demandé, avant
+	# réécriture --, le service worker (sw.js), le manifeste et les icônes.
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
-	@html path / /index.html
-	header @html Cache-Control "no-cache"
+	@revalidated not path /assets/*
+	header @revalidated Cache-Control "no-cache"
+
+	# Manifeste de l'application installable : type MIME explicite (absent
+	# de la table par défaut de certains serveurs).
+	@manifest path /manifest.webmanifest
+	header @manifest Content-Type "application/manifest+json"
 
 	# Fallback SPA : toute route inconnue sert index.html.
 	try_files {path} /index.html

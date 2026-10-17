@@ -8,6 +8,7 @@ from app.api.v1 import (
     conversations,
     health,
     interventions,
+    meta,
     payments,
     realtime,
     requests,
@@ -18,6 +19,7 @@ from app.api.v1 import (
 
 router = APIRouter()
 router.include_router(health.router)
+router.include_router(meta.router)
 router.include_router(auth.router)
 router.include_router(users.router)
 router.include_router(artisans.router)

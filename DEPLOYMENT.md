@@ -115,7 +115,7 @@ coup) si l'une manque, garde une valeur d'exemple, ou pointe vers du local.
 ### 3.3 Backend — réglages avec défaut sûr
 
 À ne modifier qu'en connaissance de cause (détail dans `backend/.env.example`) :
-OTP (`OTP_*`, `RATE_LIMIT_OTP_*`), JWT (`JWT_ACCESS_TTL_SECONDS`,
+OTP (`OTP_*` ; `OTP_TEST_*` : staging uniquement, §10 ; `RATE_LIMIT_OTP_*`), JWT (`JWT_ACCESS_TTL_SECONDS`,
 `JWT_REFRESH_TTL_SECONDS`), téléphone (`PHONE_DEFAULT_REGION`,
 `PHONE_ALLOWED_REGIONS`), recherche et pagination (`ARTISAN_SEARCH_*`,
 `PAGINATION_*`), vérification (`VERIFICATION_REQUIRED_DOC_TYPES`), Mistral
@@ -262,6 +262,9 @@ qu'avec le paiement en ligne.
 - [ ] Messagerie : un message arrive en temps réel chez l'autre partie.
 - [ ] Paiement : seule l'option espèces est proposée, aucune mention de séquestre.
 - [ ] Le back-office s'ouvre pour l'admin ; « Page introuvable » pour un client.
+- [ ] Aucun bandeau « Version de test » (`GET /api/v1/meta` → `"environment": "production"`, `"otp_test_mode": false`).
+- [ ] `https://teranga.sn/manifest.webmanifest` et `/sw.js` → 200, `Cache-Control: no-cache` ;
+      Chrome Android propose « Installer l'application » (§11).
 
 ---
 
@@ -298,6 +301,8 @@ brancher en plus une supervision externe sur `/api/v1/health`.
       jamais dans le dépôt (aucun n'y figure : vérifié dans l'historique git).
 - [ ] Paiement `sandbox` refusé en production (automatique) ; `disabled` au lancement.
 - [ ] SMS console refusé (automatique) ; fournisseur réel branché.
+- [ ] `OTP_TEST_WHITELIST` / `OTP_TEST_CODE` absents (refusés automatiquement
+      en production : le mode OTP de test n'existe qu'en staging, §10).
 - [ ] HTTPS partout ; HSTS envoyé par l'API et le front ; URL publiques en `https://` (vérifié au démarrage).
 - [ ] `CORS_ORIGINS` = origine exacte du front, sans joker (vérifié au démarrage).
 - [ ] `TRUSTED_PROXY_HOPS=1` derrière Railway (sinon le rate limiting par IP
@@ -342,3 +347,100 @@ Puis dans `backend/.env` : `REDIS_URL=redis://localhost:6379/0`,
 `S3_PUBLIC_BUCKET=teranga-public`,
 `S3_PUBLIC_BASE_URL=http://localhost:9000/teranga-public`. Retirer ces lignes
 pour revenir au fonctionnement local habituel.
+
+## 10. Beta de test (staging)
+
+Objectif : faire essayer l'application à des collaborateurs **avant**
+d'avoir un fournisseur SMS, sur une instance séparée de la production.
+
+### 10.1 L'instance
+
+- Un **environnement Railway distinct** (ex. `staging`), avec sa **propre**
+  base PostgreSQL, son Redis et ses **propres** buckets : jamais la base ni
+  les buckets de production (données de test, documents de test).
+- `ENVIRONMENT=staging`, `SMS_PROVIDER=console` (obligatoire avec le mode de
+  test, voir ci-dessous), `PAYMENT_PROVIDER=disabled`, URL publiques et
+  `CORS_ORIGINS` de l'instance de staging.
+- Le front de staging est construit avec le `VITE_API_BASE_URL` du backend
+  de staging. Il affiche de lui-même le bandeau « Version de test · données
+  temporaires » (d'après `GET /api/v1/meta`, partout sauf en production).
+
+### 10.2 Mode OTP de test
+
+| Variable | Valeur |
+|---|---|
+| `OTP_TEST_WHITELIST` | Numéros E.164 des testeurs, séparés par des virgules (ex. `+221770000001,+221770000002`). De préférence des numéros dédiés aux tests. |
+| `OTP_TEST_CODE` | Le code commun, exactement `OTP_CODE_LENGTH` chiffres (6 par défaut). Tiré au hasard (`python -c "import secrets; print(f'{secrets.randbelow(10**6):06d}')"`), jamais `000000` ni `123456`. |
+
+Pour un numéro de la liste, `request-otp` n'envoie **aucun SMS** : le code à
+saisir est `OTP_TEST_CODE`. **Rien d'autre ne change** : le code est haché en
+base, à usage unique, expire (`OTP_TTL_SECONDS`), est invalidé après
+`OTP_MAX_ATTEMPTS` erreurs, les demandes restent limitées en débit, et la
+réponse est identique pour tous les numéros (non-énumération). Un numéro
+hors liste suit le flux normal (avec `console`, il ne reçoit rien : seuls les
+testeurs listés peuvent se connecter).
+
+Procédure :
+
+1. Collecter les numéros des testeurs ; les écrire dans `OTP_TEST_WHITELIST`.
+2. Tirer `OTP_TEST_CODE` ; le transmettre **aux seuls testeurs**, par un canal
+   privé (jamais dans un ticket, un dépôt ou un groupe public).
+3. Déployer ; vérifier `GET /api/v1/meta` → `"environment": "staging"`,
+   `"otp_test_mode": true`. Les journaux montrent
+   `[staging] code OTP de test émis…` à chaque demande d'un testeur (sans le
+   numéro ni le code).
+4. Fin de beta, ou départ d'un testeur : retirer son numéro (ou vider les
+   deux variables) et **changer `OTP_TEST_CODE`** si le code a pu circuler.
+
+### 10.3 Pourquoi c'est impossible en production
+
+Deux verrous **indépendants**, chacun prouvé par ses propres tests
+(`backend/tests/test_otp_test_mode.py`) et par des tests de mutation (chaque
+verrou retiré fait échouer la suite) :
+
+1. **Au démarrage** : avec `ENVIRONMENT=production`, une liste ou un code de
+   test fait **refuser le démarrage** (avec les autres problèmes de
+   configuration) ; en `development`/`test` aussi. Un mode de test incomplet,
+   un code mal formé, un numéro non E.164 ou `SMS_PROVIDER=unconfigured`
+   (dont les erreurs révéleraient la liste) sont refusés en staging.
+2. **À l'exécution** : même une configuration qui aurait échappé à la
+   validation n'a aucun effet hors `ENVIRONMENT=staging` : vrai SMS, code
+   aléatoire, code de test refusé.
+
+Et la production exige toujours un vrai fournisseur SMS (§0, bloquant n°1) :
+le mode de test ne le remplace pas.
+
+## 11. Application installable (PWA)
+
+Le front est installable comme une application, en plein écran :
+
+- **Android (Chrome)** : menu ⋮ > « Installer l'application », ou le bouton
+  « Installer » du conseil « Installer l'app » (écran Profil).
+- **iPhone / iPad (Safari)** : bouton Partager > « Sur l'écran d'accueil »
+  (expliqué dans le même conseil). L'icône et le nom « Téranga » viennent de
+  `apple-touch-icon` et des balises `apple-mobile-web-app-*` d'`index.html`.
+
+Pièces : `frontend/public/manifest.webmanifest`, `frontend/public/icons/`
+(régénérables : `uv run --no-project --with pillow python
+frontend/scripts/generate_pwa_icons.py`), service worker `frontend/pwa/sw.js`
+(versionné au build en `dist/sw.js` par `frontend/pwa/serviceWorkerPlugin.ts`).
+
+Ce que fait le service worker, et surtout ce qu'il ne fait pas :
+
+- pages : **réseau d'abord**, toujours ; la coquille en cache ne sert que
+  hors connexion ;
+- fichiers hachés `/assets/*` : cache d'abord (immuables par construction) ;
+- **jamais** l'API, une requête authentifiée, non-GET ou d'une autre origine
+  (documents d'identité compris), ni une réponse `no-store`/`private`/en erreur ;
+- chaque déploiement produit une nouvelle version : elle s'installe seule,
+  prend la main tout de suite et supprime les anciens caches.
+
+En-têtes requis (déjà en place, testés) : `sw.js` et le manifeste en
+`Cache-Control: no-cache`, manifeste en `application/manifest+json`
+(`vercel.json`, `Caddyfile`).
+
+**Désactiver le service worker en urgence** : remplacer `frontend/pwa/sw.js`
+par un script qui se désinscrit (`self.addEventListener('install', () =>
+self.skipWaiting()); self.addEventListener('activate', (e) =>
+e.waitUntil(self.registration.unregister()));`) et redéployer : chaque
+appareil le récupère à sa prochaine visite (sw.js n'est jamais mis en cache).

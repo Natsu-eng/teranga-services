@@ -1,3 +1,4 @@
+import re
 from functools import lru_cache
 from typing import Annotated, Literal, get_args
 
@@ -32,6 +33,8 @@ _PLACEHOLDER_MARKERS = (
     "xxxx",
 )
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})
+# Numéro E.164 : « + », indicatif sans zéro initial, 8 à 15 chiffres au total.
+_E164_RE = re.compile(r"\+[1-9]\d{7,14}")
 
 
 def normalize_environment_name(raw: str) -> str:
@@ -177,6 +180,81 @@ class Settings(BaseSettings):
     # rendrait une fuite de la table `otp_code` triviale à bruteforcer hors
     # ligne. 600 000 est la recommandation OWASP (2023) pour PBKDF2-SHA256.
     otp_hash_iterations: int = 600_000
+
+    # --- Mode OTP de TEST (beta, DEPLOYMENT.md) ---------------------------
+    # Permis UNIQUEMENT avec ENVIRONMENT=staging (refusé au démarrage
+    # partout ailleurs, production comprise). Pour un numéro de la liste,
+    # `request-otp` ne passe pas par le fournisseur SMS : le code émis est
+    # OTP_TEST_CODE. Seule la LIVRAISON change : le code est haché, à usage
+    # unique, expirant, limité en tentatives et en débit, exactement comme un
+    # code normal. Les numéros hors liste suivent le flux normal.
+    # Numéros E.164 (ex. +221770000001), séparés par des virgules.
+    otp_test_whitelist: Annotated[list[str], NoDecode] = []
+    # Code de test : exactement OTP_CODE_LENGTH chiffres. Aucune valeur par
+    # défaut (jamais un code en dur) ; obligatoire si la liste est remplie.
+    otp_test_code: str | None = None
+
+    @field_validator("otp_test_whitelist", mode="before")
+    @classmethod
+    def split_otp_test_whitelist(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [number.strip() for number in v.split(",") if number.strip()]
+        return v
+
+    @field_validator("otp_test_whitelist")
+    @classmethod
+    def validate_otp_test_whitelist(cls, v: list[str]) -> list[str]:
+        for number in v:
+            if not _E164_RE.fullmatch(number):
+                raise ValueError(
+                    f"OTP_TEST_WHITELIST : {number!r} n'est pas un numéro E.164 "
+                    "(ex. +221770000001)."
+                )
+        return v
+
+    @field_validator("otp_test_code", mode="before")
+    @classmethod
+    def empty_otp_test_code_means_none(cls, v: object) -> object:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+    @model_validator(mode="after")
+    def validate_otp_test_mode(self) -> "Settings":
+        configured = bool(self.otp_test_whitelist) or self.otp_test_code is not None
+        # Production : refusé par `validate_production`, avec la liste complète
+        # de ses autres problèmes. Ici, tout autre environnement que staging.
+        if not configured or self.environment == "production":
+            return self
+        if self.environment != "staging":
+            raise ValueError(
+                f"OTP_TEST_WHITELIST / OTP_TEST_CODE ne sont permis qu'avec ENVIRONMENT=staging "
+                f"(reçu {self.environment})."
+            )
+        if not self.otp_test_whitelist or self.otp_test_code is None:
+            raise ValueError(
+                "Mode OTP de test incomplet : OTP_TEST_WHITELIST et OTP_TEST_CODE vont ensemble."
+            )
+        if not (
+            self.otp_test_code.isascii()
+            and self.otp_test_code.isdigit()
+            and len(self.otp_test_code) == self.otp_code_length
+        ):
+            raise ValueError(
+                f"OTP_TEST_CODE doit compter exactement {self.otp_code_length} chiffres."
+            )
+        # Non-énumération : avec le fournisseur `unconfigured`, un numéro HORS
+        # liste ferait échouer request-otp (erreur 500) quand un numéro listé
+        # obtient 204 -- la différence révélerait qui figure sur la liste.
+        # Sans fournisseur réel en staging : `console` (le code n'y est jamais
+        # journalisé hors development/test, la réponse reste identique).
+        if self.sms_provider == "unconfigured":
+            raise ValueError(
+                "Mode OTP de test avec SMS_PROVIDER=unconfigured : les numéros hors liste "
+                "échoueraient (500) et révéleraient la liste. Utiliser SMS_PROVIDER=console "
+                "en staging tant qu'aucun fournisseur réel n'est branché."
+            )
+        return self
 
     # Secret de signature des JWT. Obligatoire, sans valeur par défaut :
     # même principe fail-fast que DATABASE_URL (Lot 6). Générer une valeur
@@ -694,6 +772,11 @@ class Settings(BaseSettings):
         if self.payment_webhook_secret and looks_like_placeholder(self.payment_webhook_secret):
             problems.append("PAYMENT_WEBHOOK_SECRET est une valeur d'exemple.")
 
+        if self.otp_test_whitelist or self.otp_test_code is not None:
+            problems.append(
+                "OTP_TEST_WHITELIST / OTP_TEST_CODE sont interdits en production : le mode OTP "
+                "de test (connexion sans SMS) n'existe qu'en staging."
+            )
         if self.sms_provider == "console":
             problems.append("SMS_PROVIDER=console est interdit en production : aucun SMS ne part.")
         elif self.sms_provider == "unconfigured":
