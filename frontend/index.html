@@ -8,6 +8,20 @@
     <meta name="color-scheme" content="light" />
     <!-- Favicon local (même origine, conforme à la CSP img-src 'self'). -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Application installable (PWA, DEPLOYMENT.md) : manifeste pour Android
+      (Chrome propose « Installer l'application »), balises Apple pour
+      iPhone/iPad (Safari : Partager > « Sur l'écran d'accueil »). Barre
+      d'état iOS « default » : le contenu commence SOUS l'heure et la
+      batterie, sans chevauchement.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Téranga" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="application-name" content="Téranga" />
     <title>Téranga Services - Artisans de confiance au Sénégal</title>
     <!--
       Aucune police externe : Fraunces et Figtree sont auto-hébergées via

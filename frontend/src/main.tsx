@@ -8,7 +8,14 @@ import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/fraunces/opsz.css';
 import '@fontsource-variable/figtree';
 import App from './App.tsx';
+import { captureInstallPrompt } from './lib/pwa/installPrompt';
+import { setupServiceWorker } from './lib/pwa/serviceWorker';
 import './index.css';
+
+// Application installable : l'invitation d'installation (Android) peut
+// survenir avant tout écran, et le service worker s'enregistre au chargement.
+captureInstallPrompt();
+setupServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

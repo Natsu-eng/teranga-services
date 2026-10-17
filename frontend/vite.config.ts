@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
+import { serviceWorkerPlugin } from './pwa/serviceWorkerPlugin';
 
 // Port du front en dev et en `vite preview` -- 3000 conservé depuis l'ère
 // Express : c'est l'origine déjà autorisée par `CORS_ORIGINS` côté backend
@@ -79,7 +80,9 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [react(), tailwindcss()],
+    // serviceWorkerPlugin : build uniquement, produit dist/sw.js (application
+    // installable, voir pwa/sw.js) ; aucun service worker en développement.
+    plugins: [react(), tailwindcss(), serviceWorkerPlugin()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

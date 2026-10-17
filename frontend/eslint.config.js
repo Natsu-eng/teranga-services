@@ -76,11 +76,21 @@ export default tseslint.config(
     },
   },
   {
-    files: ['vite.config.ts', 'vitest.config.ts', 'vitest.setup.ts'],
+    files: ['vite.config.ts', 'vitest.config.ts', 'vitest.setup.ts', 'pwa/serviceWorkerPlugin.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: globals.node,
+    },
+  },
+  {
+    // Modèle du service worker (application installable) : script classique
+    // exécuté dans le contexte d'un service worker (self, caches, clients).
+    files: ['pwa/sw.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: globals.serviceworker,
     },
   },
   eslintConfigPrettier,

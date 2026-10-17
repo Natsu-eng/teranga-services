@@ -29,6 +29,7 @@ import { toDisplayRole } from '../auth/role';
 import { VerificationStatusBanner } from '../artisans/VerificationStatusBanner';
 import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
 import { IdentityCard } from './components/IdentityCard';
+import { InstallAppHint } from './components/InstallAppHint';
 import { useCurrentUser } from './hooks/useCurrentUser';
 
 interface MenuLinkProps {
@@ -185,6 +186,8 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
       </Card>
     </section>
 
+    <InstallAppHint />
+
     <LogoutCard />
   </>
 );
@@ -257,6 +260,8 @@ const ArtisanProfile: React.FC<{
           </ul>
         </Card>
       </section>
+
+      <InstallAppHint />
 
       <LogoutCard />
     </>
