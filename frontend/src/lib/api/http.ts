@@ -6,8 +6,16 @@ import { resolveApiBaseUrl } from './base-url';
 // voir base-url.ts pour les deux modes de déploiement.
 const API_BASE = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const DEFAULT_TIMEOUT_MS = 10_000;
+// Envois de fichiers (multipart : documents de vérification, photos,
+// pièces jointes) : le délai couvre aussi la MONTÉE du fichier. Une photo
+// prise au téléphone pèse souvent 3 à 8 Mo (plafond serveur : 8 Mo) ; à
+// ~1,5 Mbit/s en 4G, 8 Mo prennent ~45 s. 10 s coupaient l'envoi en
+// cours de route, affiché comme un faux problème de connexion.
+export const UPLOAD_TIMEOUT_MS = 60_000;
 
 const NETWORK_ERROR_MESSAGE = "Impossible de contacter le serveur. Vérifiez votre connexion.";
+export const UPLOAD_TIMEOUT_MESSAGE =
+  "L'envoi du fichier a pris trop de temps. Vérifiez votre connexion ou choisissez un fichier plus léger, puis réessayez.";
 const SESSION_EXPIRED_MESSAGE = 'Votre session a expiré, merci de vous reconnecter.';
 
 interface BackendErrorBody {
@@ -63,8 +71,9 @@ function buildHeaders(skipAuth: boolean | undefined, hasJsonBody: boolean): Head
 }
 
 async function rawFetch(path: string, options: RequestOptions): Promise<Response> {
+  const isUpload = options.formData !== undefined;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), isUpload ? UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
   try {
     return await fetch(`${API_BASE}${path}`, {
       method: options.method ?? 'GET',
@@ -73,6 +82,11 @@ async function rawFetch(path: string, options: RequestOptions): Promise<Response
       signal: controller.signal,
     });
   } catch {
+    // Envoi de fichier interrompu par NOTRE délai : message dédié (connexion
+    // trop lente ou fichier trop lourd), plutôt que « serveur injoignable ».
+    if (isUpload && controller.signal.aborted) {
+      throw new ApiError('network', UPLOAD_TIMEOUT_MESSAGE);
+    }
     throw new ApiError('network', NETWORK_ERROR_MESSAGE);
   } finally {
     clearTimeout(timer);
