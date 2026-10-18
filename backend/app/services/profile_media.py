@@ -35,7 +35,11 @@ from app.core.errors import AppError
 from app.schemas.artisans import ArtisanDetailOut, MediaUploadLimitsOut, ProfileMediaConstraintsOut
 from app.services.file_validation import EXTENSION_BY_TYPE, MIME_BY_TYPE, DetectedFileType
 from app.services.image_processing import ImageTropGrandeError, ProcessedImage, reencode_image
-from app.services.storage import S3_PUBLIC_MEDIA_PREFIX, StorageBackend
+from app.services.storage import (
+    S3_PUBLIC_MEDIA_PREFIX,
+    StockageIndisponibleError,
+    StorageBackend,
+)
 
 # Chemin public sous lequel `app.main` monte le stockage des médias de
 # profil -- partagé par l'avatar et la couverture (même régime public).
@@ -171,8 +175,10 @@ def owned_media_key(
 async def discard_obsolete_media(storage: StorageBackend, key: str | None) -> None:
     """Efface l'ancien média, en best-effort : appelé après le commit, un
     échec ici ne laisse qu'un fichier orphelin sur disque -- jamais pire
-    qu'un échec de la mise à jour du profil elle-même."""
+    qu'un échec de la mise à jour du profil elle-même. Stockage local
+    (`OSError`, `ValueError`) comme S3 (`StockageIndisponibleError`, déjà
+    journalisée) : la mise à jour, commitée, ne doit jamais échouer ici."""
     if key is None:
         return
-    with contextlib.suppress(OSError, ValueError):
+    with contextlib.suppress(OSError, ValueError, StockageIndisponibleError):
         await storage.delete(key)
