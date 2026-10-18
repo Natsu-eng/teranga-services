@@ -22,6 +22,7 @@ from app.api.v1.admin import (
     artisans,
     audit,
     commissions,
+    diagnostics,
     disputes,
     overview,
     reviews,
@@ -33,3 +34,5 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 # Ordre d'inclusion = ordre des routes dans l'ancien module unique.
 for section in (verifications, artisans, disputes, audit, overview, users, reviews, commissions):
     router.include_router(section.router)
+# Diagnostic d'exploitation (réglage des proxys), ajouté après la découpe.
+router.include_router(diagnostics.router)

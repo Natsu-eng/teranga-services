@@ -165,6 +165,18 @@ class Settings(BaseSettings):
                 "DATABASE_URL doit utiliser le driver asyncpg pour SQLAlchemy async "
                 f"(postgresql+asyncpg://...) — reçu : {url.drivername}://..."
             )
+        # Pooler TRANSACTION de Supabase (port 6543) : il n'accepte pas les
+        # instructions préparées qu'asyncpg emploie pour chaque requête
+        # (erreurs aléatoires « prepared statement ... does not exist ») et ne
+        # garde pas la même connexion serveur d'une transaction à l'autre (le
+        # verrou des migrations de scripts/serve.py n'y tiendrait pas).
+        # Refus net plutôt que des pannes intermittentes en beta.
+        host = (url.host or "").lower()
+        if host.endswith(".pooler.supabase.com") and url.port == 6543:
+            raise ValueError(
+                "DATABASE_URL vise le pooler TRANSACTION de Supabase (port 6543), incompatible "
+                "avec asyncpg : utiliser le session pooler, port 5432 (DEPLOYMENT.md §12.4)."
+            )
         return v
 
     # Longueur du code OTP (chiffres). 6 est le standard de l'industrie
@@ -475,6 +487,19 @@ class Settings(BaseSettings):
     # URL publique du bucket public (domaine personnalisé R2/CDN ou URL
     # publique du bucket), en HTTPS : base des URL d'avatar renvoyées au front.
     s3_public_base_url: str | None = None
+    # Adressage « path-style » (https://endpoint/bucket/clé) plutôt que
+    # « virtual-host » (https://bucket.endpoint/clé). EXIGÉ par Supabase
+    # Storage et MinIO, toléré par R2. Vide (défaut) : activé dès que
+    # S3_ENDPOINT_URL est renseigné, laissé au choix de boto3 sur AWS S3 (sans
+    # endpoint, comportement inchangé). `true` / `false` pour forcer.
+    s3_force_path_style: bool | None = None
+
+    @property
+    def s3_addressing_style(self) -> Literal["path", "virtual"] | None:
+        """Adressage S3 effectif : "path", "virtual", ou None (choix de boto3)."""
+        if self.s3_force_path_style is None:
+            return "path" if self.s3_endpoint_url else None
+        return "path" if self.s3_force_path_style else "virtual"
 
     @field_validator(
         "avatar_storage_backend",
@@ -485,6 +510,7 @@ class Settings(BaseSettings):
         "s3_private_bucket",
         "s3_public_bucket",
         "s3_public_base_url",
+        "s3_force_path_style",
         mode="before",
     )
     @classmethod

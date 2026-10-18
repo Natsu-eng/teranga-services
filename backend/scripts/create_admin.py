@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.core.phone import PhoneInvalideError, normalize_phone  # noqa: E402
 from app.db.session import async_session_maker  # noqa: E402
+from app.db.target import describe_database  # noqa: E402
 from app.models.enums import AuditAction, AuditTargetType, Role  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services import audit as audit_service  # noqa: E402
@@ -81,6 +82,9 @@ async def _run(raw_phone: str, *, skip_confirmation: bool) -> int:
         print(f"Erreur : {exc.message}", file=sys.stderr)
         return 1
 
+    # Base visée affichée AVANT la confirmation (exécution depuis un poste
+    # contre une base distante, DEPLOYMENT.md §12.6) -- jamais le mot de passe.
+    print(f"Base visée : {describe_database(settings.database_url)}")
     if not skip_confirmation:
         answer = input(f"Promouvoir {phone} au rôle admin ? [y/N] ").strip().lower()
         if answer != "y":

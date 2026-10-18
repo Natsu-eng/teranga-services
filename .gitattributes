@@ -8,3 +8,4 @@
 **/Caddyfile         text eol=lf
 **/railway.json      text eol=lf
 docker-compose*.yml  text eol=lf
+render.yaml          text eol=lf

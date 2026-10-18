@@ -5,9 +5,11 @@ main :
 
     uv run python scripts/seed.py
 
-REFUSÉ en production (ENVIRONMENT=production) : faux artisans, faux avis et
-client de démo n'ont rien à y faire. Pour la production, seules les données
-de référence (métiers, taux initial) sont semées, par
+RÉSERVÉ au poste de développement : REFUSÉ hors ENVIRONMENT=development/test
+(staging et production) ET contre toute base non locale (ex. Supabase visée
+depuis un poste de dev, DEPLOYMENT.md §12.6) -- faux artisans, faux avis et
+client de démo n'ont rien à faire dans une base partagée. Ailleurs, seules
+les données de référence (métiers, taux initial) sont semées, par
 `scripts/seed_reference.py` (DEPLOYMENT.md).
 
 Sème :
@@ -50,8 +52,9 @@ from geoalchemy2.elements import WKTElement
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.session import async_session_maker
+from app.db.target import describe_database, is_local_database
 from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
 from app.models.commission import CommissionRate
 from app.models.enums import (
@@ -395,12 +398,23 @@ async def seed(session: AsyncSession) -> None:
     print(f"  + rating_avg/review_count recalculés pour {len(artisan_profiles)} artisan(s)")
 
 
+def demo_seed_refusal(settings: Settings) -> str | None:
+    """Raison du refus, ou None si le jeu de démonstration peut être semé."""
+    reason = (
+        "Refusé : scripts/seed.py sème des données de DÉMONSTRATION (faux artisans, faux "
+        "avis). Hors poste de développement, utilisez scripts/seed_reference.py (DEPLOYMENT.md)."
+    )
+    if not settings.is_local:
+        return f"{reason} (ENVIRONMENT={settings.environment})"
+    if not is_local_database(settings.database_url):
+        return f"{reason} (base non locale : {describe_database(settings.database_url)})"
+    return None
+
+
 async def main() -> None:
-    if get_settings().is_production:
-        sys.exit(
-            "Refusé : scripts/seed.py sème des données de DÉMONSTRATION (faux artisans, faux "
-            "avis). En production, utilisez scripts/seed_reference.py (DEPLOYMENT.md)."
-        )
+    refusal = demo_seed_refusal(get_settings())
+    if refusal:
+        sys.exit(refusal)
     async with async_session_maker() as session, session.begin():
         await seed(session)
     print("Seed terminé.")

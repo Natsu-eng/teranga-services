@@ -805,6 +805,40 @@ Référence : [DEPLOYMENT.md §10 et §11](DEPLOYMENT.md).
   applique les mêmes critères qu'Android ; Safari iOS n'a pas d'outil
   d'audit, sa configuration est vérifiée par tests sur les fichiers servis).
 
+## Mise à jour — `feat/render-supabase-deploy`
+
+Second chemin de déploiement pour la beta : Render + Supabase + Vercel.
+Référence : [DEPLOYMENT.md §12](DEPLOYMENT.md). Chemin Railway inchangé
+(vérifié par les tests), développement local inchangé.
+
+- **Démarrage sans pré-déploiement** (`backend/scripts/serve.py`,
+  `render.yaml`) : configuration validée d'abord (refus net, jamais de
+  valeur secrète affichée), port lu dans `$PORT`, `alembic upgrade head`
+  sous verrou consultatif PostgreSQL, puis uvicorn (mêmes options que le
+  CMD du Dockerfile). Vérifié par un vrai démarrage local sur `PORT=8765`.
+- **S3 path-style explicite** (`S3_FORCE_PATH_STYLE`, automatique avec un
+  endpoint) : exigé par Supabase Storage ; prouvé sur le vrai client boto3
+  (URL exacte appelée, réseau coupé), séparation privé/public intacte.
+- **DATABASE_URL Supabase** : session pooler (5432) + `ssl=require`
+  documenté et testé ; pooler transaction (6543) refusé au démarrage.
+- **Constaté pendant le lot, corrigé** :
+  - `scripts/seed.py` (faux artisans, faux avis) n'était refusé qu'en
+    production : lancé depuis un poste de dev avec `DATABASE_URL` vers
+    Supabase, il aurait pollué la beta. Refusé désormais hors
+    development/test ET contre toute base non locale ;
+  - `TRUSTED_PROXY_HOPS` ne se devine pas sur Render (relevés publiés
+    divergents : 1, 2 ou 3) : diagnostic admin en lecture seule
+    `GET /admin/diagnostics/client-ip` pour le mesurer (utile aussi sur
+    Railway, dont la valeur 1 n'avait jamais été mesurée) ;
+  - l'API de données Supabase exposerait le schéma `public` (tables sans
+    RLS) : désactivation obligatoire et vérification documentées ;
+  - `seed_reference.py` et `create_admin.py` affichent la base visée (sans
+    mot de passe) avant d'agir.
+- 10 tests de mutation, 10 tuées.
+- **Non vérifié** : aucun déploiement réel sur Render, Supabase ou Vercel
+  (aucun compte) ; à valider au premier déploiement avec le test de fumée
+  du §12.8. `/docs` reste public en staging (comportement existant).
+
 ## Résumé exécutif
 
 Le socle technique de la Phase 2 est solide et conforme au plan : FastAPI + PostgreSQL/PostGIS, 16 tables + `refresh_token` toutes modélisées et migrées, auth OTP + JWT avec rotation réelle, lecture des artisans géolocalisée, triage IA provider-agnostique. Le front a un vrai routeur (React Router 7), un vrai contexte d'auth, des états de chargement/erreur/vide gérés proprement.

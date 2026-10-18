@@ -6,7 +6,8 @@ existante (un taux global déjà en place est conservé tel quel). La création
 du taux initial est inscrite au journal d'audit (auteur : script), comme
 tout ajout de taux fait depuis le back-office.
 
-Usage (Railway : `railway run --service backend python scripts/seed_reference.py`) :
+Usage (Railway : dans le conteneur, DEPLOYMENT.md §4.6 ; Render + Supabase :
+depuis un poste, DEPLOYMENT.md §12.6) :
 
     uv run python scripts/seed_reference.py
     uv run python scripts/seed_reference.py --rate-bps 0   # lancement sans commission
@@ -26,7 +27,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
+from app.core.config import get_settings  # noqa: E402
 from app.db.session import async_session_maker  # noqa: E402
+from app.db.target import describe_database  # noqa: E402
 from app.models.enums import AuditAction, AuditTargetType  # noqa: E402
 from app.services import audit as audit_service  # noqa: E402
 from app.services.reference_data import (  # noqa: E402
@@ -70,6 +73,9 @@ def _rate(value: str) -> int:
 
 
 async def main(rate_bps: int) -> None:
+    # Base visée affichée AVANT d'agir (exécution depuis un poste contre une
+    # base distante, DEPLOYMENT.md §12.6) -- jamais le mot de passe.
+    print(f"Base visée : {describe_database(get_settings().database_url)}")
     async with async_session_maker() as session, session.begin():
         created = await seed_reference(session, rate_bps=rate_bps)
     if created:

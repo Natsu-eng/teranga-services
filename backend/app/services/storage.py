@@ -129,14 +129,19 @@ S3_DOCUMENTS_PREFIX = "verification-documents"
 S3_ATTACHMENTS_PREFIX = "message-attachments"
 S3_PUBLIC_MEDIA_PREFIX = "profile-media"
 
-_s3_clients: dict[tuple[str | None, str | None, str], "S3Client"] = {}
+_s3_clients: dict[tuple[str | None, str | None, str, str | None], "S3Client"] = {}
 
 
 def get_s3_client(settings: Settings) -> "S3Client":
     """Client boto3 unique par configuration (pool de connexions partagé)."""
     from app.services.s3_storage import build_s3_client
 
-    key = (settings.s3_endpoint_url, settings.s3_access_key_id, settings.s3_region)
+    key = (
+        settings.s3_endpoint_url,
+        settings.s3_access_key_id,
+        settings.s3_region,
+        settings.s3_addressing_style,
+    )
     if key not in _s3_clients:
         _s3_clients[key] = build_s3_client(settings)
     return _s3_clients[key]
