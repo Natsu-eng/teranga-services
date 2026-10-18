@@ -12,6 +12,10 @@ images Docker n'ont pas pu être exécutées lors de la préparation (aucun
 compte Railway, Docker arrêté) : à valider avec `railway --help` et un
 premier `docker build` avant le jour J.
 
+**Autre chemin, pour la beta de test** : Render (backend) + Supabase
+(PostgreSQL/PostGIS et stockage) + Vercel (front), décrit au **§12**. Il ne
+modifie rien au chemin Railway ci-dessous.
+
 ---
 
 ## 0. À lire avant tout : bloquants et risques
@@ -306,7 +310,9 @@ brancher en plus une supervision externe sur `/api/v1/health`.
 - [ ] HTTPS partout ; HSTS envoyé par l'API et le front ; URL publiques en `https://` (vérifié au démarrage).
 - [ ] `CORS_ORIGINS` = origine exacte du front, sans joker (vérifié au démarrage).
 - [ ] `TRUSTED_PROXY_HOPS=1` derrière Railway (sinon le rate limiting par IP
-      bloquerait tout le monde à la fois ; vérifié au démarrage).
+      bloquerait tout le monde à la fois ; vérifié au démarrage). Valeur à
+      **confirmer par la mesure** après le premier déploiement, avec le
+      diagnostic admin du §12.7 (même procédure sur Railway).
 - [ ] En-têtes de sécurité (CSP, X-Frame-Options, nosniff, Referrer-Policy,
       Permissions-Policy) : API (middleware) et front (`vercel.json` / `Caddyfile`).
 - [ ] Documentation interactive de l'API désactivée (automatique en production).
@@ -444,3 +450,286 @@ par un script qui se désinscrit (`self.addEventListener('install', () =>
 self.skipWaiting()); self.addEventListener('activate', (e) =>
 e.waitUntil(self.registration.unregister()));`) et redéployer : chaque
 appareil le récupère à sa prochaine visite (sw.js n'est jamais mis en cache).
+
+## 12. Render + Supabase + Vercel (beta staging)
+
+Second chemin de déploiement, **indépendant** du runbook Railway ci-dessus
+(qui reste valable tel quel) : backend sur **Render**, base PostgreSQL +
+PostGIS et fichiers sur **Supabase**, front sur **Vercel**. Cible : la beta
+de test (§10), `ENVIRONMENT=staging`, espèces seulement, connexion par OTP de
+test. Le développement local n'est pas concerné : sans ces variables, tout
+tourne comme avant.
+
+Pièces du dépôt : `render.yaml` (Blueprint Render), `backend/scripts/serve.py`
+(démarrage), `frontend/vercel.json` (déjà utilisé, §4.5).
+
+### 12.1 Topologie
+
+```
+Navigateur ──HTTPS──▶ Vercel : front statique (frontend/, vercel.json)
+     │
+     └──HTTPS / WSS──▶ Render : backend FastAPI (image backend/Dockerfile,
+                       démarrage scripts/serve.py)
+                          ├── Supabase Postgres + PostGIS (session pooler, port 5432, TLS)
+                          └── Supabase Storage (API S3, path-style)
+                                 ├── bucket PRIVÉ  : documents d'identité, pièces jointes
+                                 └── bucket PUBLIC : photos de profil et de couverture
+```
+
+Pas de Redis : le rate limiting passe par PostgreSQL (`RATE_LIMIT_BACKEND`
+vide), le temps réel tient sur l'instance unique (`WEB_CONCURRENCY=1`).
+
+### 12.2 Limites des offres gratuites (à connaître avant d'inviter des testeurs)
+
+| Limite | Conséquence | Parade |
+|---|---|---|
+| **Render free : mise en veille après ~15 min sans trafic** | La première requête qui réveille le service attend son démarrage (souvent 30 s à 1 min) ; le front abandonne une requête au bout de 10 s (« Impossible de contacter le serveur ») | Recharger la page après quelques secondes ; ou une sonde externe gratuite (UptimeRobot, Better Stack) sur `GET /api/v1/health` toutes les 10 min, qui garde le service éveillé (un seul service gratuit tient dans les 750 h/mois offertes) |
+| **Render free : ni shell, ni pré-déploiement, ni tâche planifiée** | Migrations au démarrage (`serve.py`) ; seed et admin depuis votre poste (§12.6) | — |
+| **Render : disque éphémère** | Rien n'est écrit sur le disque du service | `STORAGE_BACKEND=s3` (fixé dans `render.yaml`) |
+| **Supabase free : projet mis en pause après ~7 jours sans activité** | Le backend ne joint plus la base (`/health/ready` en 503) | Le relancer depuis le tableau de bord Supabase ; une sonde (ligne 1) l'évite tant que le service répond |
+| **Supabase : connexions du pooler limitées** (taille du pool : *Database > Settings*) | Le backend ouvre jusqu'à 15 connexions (pool SQLAlchemy 5 + 10) ; au-delà de la taille du pool, erreur « max clients » | Suffisant pour une beta ; garder `WEB_CONCURRENCY=1` |
+| **`expire_requests.py` non planifié** | Rien de bloquant : la règle d'expiration des demandes s'applique déjà sans lui (§4.8) | Le lancer de temps en temps depuis votre poste (§12.6) |
+
+### 12.3 Variables d'environnement
+
+**Backend (Render).** Les valeurs « fixée » sont écrites dans `render.yaml`
+(comportement de la beta) ; les autres sont demandées par Render à la
+création du Blueprint (`sync: false`), puis modifiables dans *Environment*.
+
+| Variable | Valeur pour cette pile | Source |
+|---|---|---|
+| `ENVIRONMENT` | `staging` | fixée |
+| `SMS_PROVIDER` | `console` (obligatoire avec le mode OTP de test, §10.2 ; aucun code n'est journalisé hors dev) | fixée |
+| `PAYMENT_PROVIDER` | `disabled` (espèces seulement) | fixée |
+| `STORAGE_BACKEND` | `s3` (couvre aussi photos et pièces jointes) | fixée |
+| `WEB_CONCURRENCY` | `1` | fixée |
+| `JWT_SECRET` | aléatoire, 256 bits | générée par Render |
+| `DATABASE_URL` | session pooler Supabase, §12.4 | à saisir |
+| `FRONTEND_PUBLIC_BASE_URL` | `https://<projet>.vercel.app` | à saisir |
+| `BACKEND_PUBLIC_BASE_URL` | `https://teranga-backend.onrender.com` (URL affichée par Render) | à saisir |
+| `CORS_ORIGINS` | `https://<projet>.vercel.app` (origine exacte, sans `/` final) | à saisir |
+| `TRUSTED_PROXY_HOPS` | `1` au premier déploiement, **puis la valeur mesurée** (§12.7) | à saisir |
+| `S3_ENDPOINT_URL` | `https://<ref>.storage.supabase.co/storage/v1/s3` | à saisir |
+| `S3_REGION` | région affichée par Supabase (*Storage > S3 Configuration*), ex. `eu-central-1` | à saisir |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | clé d'accès S3 Supabase (§12.4) | à saisir |
+| `S3_PRIVATE_BUCKET` | `teranga-prive` | à saisir |
+| `S3_PUBLIC_BUCKET` | `teranga-public` | à saisir |
+| `S3_PUBLIC_BASE_URL` | `https://<ref>.supabase.co/storage/v1/object/public/teranga-public` | à saisir |
+| `OTP_TEST_WHITELIST` | numéros E.164 des testeurs (§10.2) | à saisir |
+| `OTP_TEST_CODE` | code tiré au hasard, 6 chiffres (§10.2) | à saisir |
+
+Laisser **absentes** (défaut sûr) : `S3_FORCE_PATH_STYLE` (path-style activé
+automatiquement par `S3_ENDPOINT_URL`), `REDIS_URL`, `RATE_LIMIT_BACKEND`,
+`PORT` (fourni par Render), `AI_TRIAGE_PROVIDER` (heuristique sans clé),
+`*_STORAGE_BACKEND` (héritent de `STORAGE_BACKEND`).
+
+**Front (Vercel).** `VITE_API_BASE_URL=https://teranga-backend.onrender.com/api/v1`
+(figée au build : la changer impose de redéployer le front).
+
+### 12.4 Supabase
+
+**Projet.** Région **Francfort (eu-central-1)**, la même que le service Render
+(`region: frankfurt` dans `render.yaml`) : chaque requête SQL fait
+l'aller-retour, la distance compte.
+
+**DATABASE_URL — session pooler, port 5432.** Dans *Connect*, copier la chaîne
+**Session pooler** et la convertir ainsi :
+
+```
+# Copiée depuis Supabase :
+postgresql://postgres.<ref>:<MOT_DE_PASSE>@aws-<n>-<region>.pooler.supabase.com:5432/postgres
+# À renseigner (driver asyncpg + TLS exigé) :
+postgresql+asyncpg://postgres.<ref>:<MOT_DE_PASSE>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?ssl=require
+```
+
+- Utilisateur `postgres.<ref>` (avec le suffixe du projet), port **5432**.
+- Mot de passe : celui de la base, défini à la création du projet. S'il
+  contient des caractères spéciaux (`@`, `:`, `/`, `#`, `%`…), les encoder en
+  URL (`python -c "import urllib.parse; print(urllib.parse.quote('<mdp>', safe=''))"`).
+- `?ssl=require` : la connexion est refusée si elle n'est pas chiffrée.
+- **Pourquoi pas le port 6543 (transaction pooler)** : il n'accepte pas les
+  instructions préparées qu'asyncpg utilise pour chaque requête (erreurs
+  aléatoires « prepared statement … does not exist »), et ne garde pas une
+  même connexion serveur d'une transaction à l'autre (le verrou des
+  migrations de `serve.py` n'y tiendrait pas). Cette URL est **refusée au
+  démarrage** avec un message explicite.
+- **Pourquoi pas la connexion directe** (`db.<ref>.supabase.co`) : elle n'est
+  joignable qu'en IPv6 sur l'offre gratuite, que Render ne sait pas joindre.
+
+**PostGIS.** Ne rien faire à la main : la première migration exécute
+`CREATE EXTENSION IF NOT EXISTS postgis`. Après le premier déploiement, dans
+*SQL Editor* : `SELECT postgis_full_version();` doit répondre.
+
+**API de données Supabase : à DÉSACTIVER (obligatoire).** Supabase expose
+par défaut le schéma `public` via son API REST (PostgREST), accessible avec
+la clé `anon` du projet. Nos migrations créent toutes les tables dans
+`public` (utilisateurs, téléphones, codes OTP hachés, métadonnées des
+documents…) **sans RLS** : l'application n'utilise pas cette API, qui doit
+donc être fermée.
+
+1. *Project Settings > Data API* : désactiver l'API de données (ou retirer
+   `public` des schémas exposés).
+2. Défense en profondeur, dans *SQL Editor* :
+   ```sql
+   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+   REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public FROM anon, authenticated;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM anon, authenticated;
+   ```
+   À relancer après chaque migration qui ajoute une table si les privilèges
+   par défaut ont été modifiés depuis.
+3. Vérifier (clé `anon` : *Project Settings > API Keys*) :
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}\n" \
+     "https://<ref>.supabase.co/rest/v1/user?select=id&limit=1" \
+     -H "apikey: <CLE_ANON>" -H "Authorization: Bearer <CLE_ANON>"
+   ```
+   Attendu : **pas 200** (404 si l'API est désactivée, 401/403 sinon).
+   Un 200 signifie que les tables sont lisibles publiquement : ne pas inviter
+   de testeurs avant d'avoir corrigé.
+
+**Storage.**
+
+1. *Storage* : créer `teranga-prive` (**Public : désactivé**) et
+   `teranga-public` (**Public : activé**). Deux buckets différents sont exigés
+   au démarrage : une CNI ne peut pas atterrir dans le bucket public.
+2. *Storage > S3 Configuration* : noter l'endpoint et la région ; créer une
+   **clé d'accès S3** → `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`. Cette clé
+   contourne la RLS et donne accès à tous les buckets : uniquement dans les
+   variables de Render, jamais dans le front ni dans un fichier.
+3. Adressage : Supabase exige le path-style
+   (`https://<ref>.storage.supabase.co/storage/v1/s3/<bucket>/<clé>`). Il est
+   **activé automatiquement** dès que `S3_ENDPOINT_URL` est renseigné
+   (`S3_FORCE_PATH_STYLE`, testé).
+4. Photos de profil : servies par
+   `S3_PUBLIC_BASE_URL/profile-media/<clé>`, soit
+   `https://<ref>.supabase.co/storage/v1/object/public/teranga-public/profile-media/<clé>`
+   (autorisé par la CSP du front, `img-src https:`). Les documents d'identité
+   n'ont **aucune** URL publique : ils ne sortent que par les endpoints
+   authentifiés du backend.
+
+### 12.5 Pas-à-pas
+
+1. **Supabase** : créer le projet (Francfort), désactiver l'API de données
+   et vérifier (§12.4), créer les deux buckets et la clé S3.
+2. **Migrations, depuis votre poste**, contre Supabase (facultatif : le
+   démarrage Render les applique de toute façon ; utile pour vérifier la
+   connexion avant de déployer) — §12.6 :
+   `uv run alembic upgrade head`.
+3. **Render** : *New > Blueprint*, choisir le dépôt ; Render lit
+   `render.yaml` et demande les variables `sync: false` (§12.3). Pour
+   `TRUSTED_PROXY_HOPS`, saisir `1` (valeur provisoire, §12.7). Au
+   démarrage, les journaux montrent :
+   ```
+   Migrations : alembic upgrade head (sous verrou)...
+   Migrations à jour. Démarrage d'uvicorn sur 0.0.0.0:<PORT>.
+   ```
+   Une configuration incomplète arrête le démarrage avec la liste des
+   variables en cause (aucune valeur secrète affichée) ; une migration en
+   échec aussi. Dans les deux cas, la version précédente reste en service.
+4. **Données de référence, depuis votre poste** (§12.6) :
+   `uv run python scripts/seed_reference.py`.
+5. **Vercel** : *Add New > Project*, même dépôt, **Root Directory =
+   `frontend`** (framework Vite détecté, `vercel.json` appliqué), variable
+   `VITE_API_BASE_URL` (§12.3). Reporter l'URL obtenue dans
+   `FRONTEND_PUBLIC_BASE_URL` et `CORS_ORIGINS` côté Render (le service
+   redémarre). Les déploiements *Preview* de Vercel ont une autre origine :
+   refusée par CORS, c'est voulu (seule l'URL de production de la beta parle
+   au backend).
+6. **Premier administrateur** : la personne s'inscrit sur le site avec un
+   numéro de la liste de test et le code de test (§10.2), puis, depuis votre
+   poste (§12.6) : `uv run python scripts/create_admin.py +221XXXXXXXXX`.
+7. **Mesurer `TRUSTED_PROXY_HOPS`** (§12.7), le corriger dans Render.
+8. **Test de fumée** (§12.8).
+
+Mises à jour ensuite : un push sur `main` modifiant `backend/` redéploie le
+backend (`buildFilter` de `render.yaml`) ; Vercel redéploie le front. Les
+migrations passent au démarrage, sous verrou.
+
+### 12.6 Seed, admin et migrations sans shell (depuis votre poste)
+
+Render gratuit n'a pas de shell ; Supabase est joignable de partout : les
+scripts tournent sur votre poste, avec `DATABASE_URL` pointée **pour la seule
+commande** vers le session pooler (§12.4). Le reste de votre `backend/.env`
+de développement est sans effet sur ces scripts.
+
+Bash (Git Bash, macOS, Linux), depuis `backend/` :
+
+```bash
+export DATABASE_URL='postgresql+asyncpg://postgres.<ref>:<MDP>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?ssl=require'
+uv run alembic upgrade head                          # facultatif (fait au démarrage Render)
+uv run python scripts/seed_reference.py              # métiers + taux initial ; --rate-bps 0 pour 0 %
+uv run python scripts/create_admin.py +221XXXXXXXXX  # après l'inscription de la personne
+uv run python scripts/expire_requests.py             # facultatif, de temps en temps
+unset DATABASE_URL                                   # retour à la base locale
+```
+
+PowerShell, depuis `backend\` :
+
+```powershell
+$env:DATABASE_URL = 'postgresql+asyncpg://postgres.<ref>:<MDP>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?ssl=require'
+uv run python scripts/seed_reference.py
+uv run python scripts/create_admin.py +221XXXXXXXXX
+Remove-Item Env:DATABASE_URL
+```
+
+- `seed_reference.py` et `create_admin.py` **affichent la base visée**
+  (hôte, port, base ; jamais le mot de passe) avant d'agir : vérifier qu'il
+  s'agit bien de Supabase (`create_admin.py` demande en plus confirmation).
+- Ces scripts sont **idempotents** : les relancer ne duplique rien.
+- `scripts/seed.py` (données de **démonstration** : faux artisans, faux avis)
+  **refuse** de s'exécuter contre une base non locale ou hors
+  development/test : il ne peut pas polluer la beta, même par erreur.
+- Une variable d'environnement prime sur `backend/.env` : penser à la retirer
+  (`unset` / `Remove-Item`) pour retrouver la base locale.
+
+Proposition (non activée) : semer les données de référence au démarrage
+serait sûr (script idempotent, sans aucune donnée de démonstration), mais le
+taux de commission initial deviendrait implicite. La commande unique ci-dessus
+reste explicite et journalisée ; à reconsidérer si les redéploiements à zéro
+se multiplient.
+
+### 12.7 Mesurer TRUSTED_PROXY_HOPS (obligatoire)
+
+Le rate limiting par IP (OTP, triage IA) lit l'adresse du client dans
+`X-Forwarded-For`, à `TRUSTED_PROXY_HOPS` crans **en partant de la droite**
+(`backend/app/core/client_ip.py`). Render ne documente pas le nombre de proxys
+qui s'ajoutent à la chaîne, et les relevés publiés divergent (1, 2 ou 3). Une
+valeur trop basse met tous les testeurs dans **un seul compteur** (quelques
+demandes de code bloquent tout le monde) ; trop haute, elle laisse un client
+**falsifier** son adresse. Il faut donc la mesurer, une fois :
+
+1. Connecté en admin, ouvrir
+   `https://teranga-backend.onrender.com/api/v1/admin/diagnostics/client-ip`
+   (avec le jeton : depuis l'onglet Réseau du navigateur, ou
+   `curl -H "Authorization: Bearer <jeton>" …`). Réponse :
+   ```json
+   {"peer": "10.x.x.x", "x_forwarded_for": ["<A>", "<B>", "<C>"],
+    "trusted_proxy_hops": 1, "client_ip": "<C>"}
+   ```
+2. Comparer avec votre adresse publique (ex. `curl https://ifconfig.me`) :
+   sa position **en partant de la droite** dans `x_forwarded_for` (1 = la
+   dernière) est la bonne valeur. Exemple : votre IP est `<B>` → `2`.
+3. La reporter dans `TRUSTED_PROXY_HOPS` (Render redémarre), puis vérifier
+   que `client_ip` est bien votre adresse. Refaire la mesure depuis un
+   deuxième réseau (4G) : `client_ip` doit changer avec lui.
+
+### 12.8 Test de fumée (beta)
+
+- [ ] `GET https://teranga-backend.onrender.com/api/v1/health/ready` → 200.
+- [ ] `GET /api/v1/meta` → `{"environment": "staging", "otp_test_mode": true}`.
+- [ ] Le front Vercel s'ouvre, bandeau « Version de test » visible ; une page
+      profonde rechargée (`/recherche`) s'affiche.
+- [ ] Un numéro de la liste se connecte avec le code de test ; un numéro hors
+      liste ne reçoit rien (réponse identique).
+- [ ] `SELECT postgis_full_version();` répond ; recherche par proximité OK.
+- [ ] API de données Supabase fermée (commande `curl` du §12.4 : pas 200).
+- [ ] Un artisan envoie une pièce d'identité : l'objet est dans
+      `teranga-prive` (*Storage*), jamais dans `teranga-public` ; l'admin la
+      voit dans `/admin/verifications`.
+- [ ] Une photo de profil s'affiche depuis `…/object/public/teranga-public/…`.
+- [ ] Messagerie : un message arrive en temps réel chez l'autre partie (WSS).
+- [ ] `client_ip` du diagnostic = votre adresse (§12.7).
+- [ ] Paiement : seule l'option espèces est proposée.
