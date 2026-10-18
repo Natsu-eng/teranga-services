@@ -1,6 +1,8 @@
 import re
+import unicodedata
 from functools import lru_cache
 from typing import Annotated, Literal, get_args
+from urllib.parse import urlsplit
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -52,6 +54,56 @@ def looks_like_placeholder(value: str) -> bool:
     """Vrai pour une valeur d'exemple manifeste (« change-me », « exemple »...)."""
     lowered = value.strip().lower()
     return any(marker in lowered for marker in _PLACEHOLDER_MARKERS)
+
+
+# Caractères invisibles qui ne sont PAS des « blancs » pour `str.strip()` mais
+# arrivent avec un copier-coller depuis un tableau de bord ou une page web :
+# indicateur d'ordre des octets (BOM), espaces et liants de largeur nulle.
+_INVISIBLE_EDGE_CHARS = "\ufeff\u200b\u200c\u200d\u2060"
+# Nom d'hôte DNS : même règle que botocore (botocore.utils.is_valid_endpoint_url),
+# qui refuse sinon le client S3 au premier envoi (« Invalid endpoint »).
+_HOSTNAME_LABELS_RE = re.compile(
+    r"^((?!-)[A-Z\d-]{1,63}(?<!-)\.)*((?!-)[A-Z\d-]{1,63}(?<!-))$", re.IGNORECASE
+)
+# Région S3 : « auto » (R2), « eu-central-1 » (AWS, Supabase), « local »...
+_S3_REGION_RE = re.compile(r"[a-z0-9-]+")
+
+
+def clean_setting_value(value: str) -> str:
+    """Retire les blancs (espaces, tabulations, retours à la ligne, espaces
+    insécables) et les caractères invisibles en bordure d'une valeur collée."""
+    previous = None
+    while previous != value:
+        previous = value
+        value = value.strip().strip(_INVISIBLE_EDGE_CHARS)
+    return value
+
+
+def has_hidden_characters(value: str) -> bool:
+    """Vrai si la valeur contient un blanc ou un caractère de contrôle ou de
+    format (invisible), où que ce soit."""
+    return any(
+        char.isspace() or unicodedata.category(char) in ("Cc", "Cf", "Zs", "Zl", "Zp")
+        for char in value
+    )
+
+
+def is_valid_s3_endpoint(url: str) -> bool:
+    """URL d'endpoint S3 que botocore acceptera : http(s), nom d'hôte DNS
+    valide, port numérique, aucun caractère invisible."""
+    if has_hidden_characters(url):
+        return False
+    try:
+        parts = urlsplit(url)
+        _ = parts.port  # lève ValueError si le port n'est pas un entier
+    except ValueError:
+        return False
+    hostname = (parts.hostname or "").removesuffix(".")
+    return (
+        parts.scheme in ("http", "https")
+        and 0 < len(hostname) <= 255
+        and _HOSTNAME_LABELS_RE.match(hostname) is not None
+    )
 
 
 class Settings(BaseSettings):
@@ -515,9 +567,20 @@ class Settings(BaseSettings):
     )
     @classmethod
     def empty_storage_value_means_none(cls, v: object) -> object:
-        if isinstance(v, str) and not v.strip():
-            return None
+        # Valeurs COLLÉES dans un tableau de bord (Render, Railway) : un retour
+        # à la ligne ou un espace en bordure, invisibles à l'écran, rendaient
+        # l'endpoint inutilisable par boto3 (« Invalid endpoint ») au premier
+        # envoi de fichier. Retirés ici ; vide après nettoyage = absent.
+        if isinstance(v, str):
+            v = clean_setting_value(v)
+            return v or None
         return v
+
+    @field_validator("s3_region", mode="before")
+    @classmethod
+    def clean_s3_region(cls, v: object) -> object:
+        # Même nettoyage ; une région vide est signalée par `validate_storage`.
+        return clean_setting_value(v) if isinstance(v, str) else v
 
     @model_validator(mode="after")
     def validate_storage(self) -> "Settings":
@@ -531,6 +594,11 @@ class Settings(BaseSettings):
         public_on_s3 = self.avatar_storage_backend == "s3"
         if not (private_on_s3 or public_on_s3):
             return self
+        # Tous les problèmes d'un coup (pas un redéploiement par variable),
+        # sans JAMAIS recopier une clé ou un secret : seules les valeurs non
+        # secrètes (endpoint, région, buckets, URL publique) sont citées, en
+        # repr() pour rendre visible un caractère invisible.
+        problems: list[str] = []
         missing = [
             name
             for name, value, needed in (
@@ -543,14 +611,54 @@ class Settings(BaseSettings):
             if needed and not value
         ]
         if missing:
-            raise ValueError(f"Stockage S3 incomplet, à renseigner : {', '.join(missing)}.")
+            problems.append(f"Stockage S3 incomplet, à renseigner : {', '.join(missing)}.")
+        for name, secret in (
+            ("S3_ACCESS_KEY_ID", self.s3_access_key_id),
+            ("S3_SECRET_ACCESS_KEY", self.s3_secret_access_key),
+        ):
+            if secret and has_hidden_characters(secret):
+                problems.append(
+                    f"{name} contient un espace ou un caractère invisible (valeur non affichée) : "
+                    "la ressaisir."
+                )
+        if self.s3_endpoint_url and not is_valid_s3_endpoint(self.s3_endpoint_url):
+            problems.append(
+                f"S3_ENDPOINT_URL n'est pas une URL d'endpoint valide ({self.s3_endpoint_url!r}) : "
+                "attendu https://hote/chemin, sans espace ni caractère invisible."
+            )
+        if not _S3_REGION_RE.fullmatch(self.s3_region):
+            problems.append(
+                f"S3_REGION invalide ({self.s3_region!r}) : attendu une région comme "
+                "« auto » ou « eu-central-1 »."
+            )
+        for name, bucket in (
+            ("S3_PRIVATE_BUCKET", self.s3_private_bucket),
+            ("S3_PUBLIC_BUCKET", self.s3_public_bucket),
+        ):
+            if bucket and (has_hidden_characters(bucket) or "/" in bucket):
+                problems.append(
+                    f"{name} invalide ({bucket!r}) : un nom de bucket, sans espace, « / » ni "
+                    "caractère invisible."
+                )
         if self.s3_private_bucket and self.s3_private_bucket == self.s3_public_bucket:
-            raise ValueError(
+            problems.append(
                 "S3_PRIVATE_BUCKET et S3_PUBLIC_BUCKET doivent être deux buckets différents : "
                 "un document d'identité ne doit jamais pouvoir se retrouver dans un bucket public."
             )
-        if public_on_s3 and not (self.s3_public_base_url or "").startswith(("https://", "http://")):
-            raise ValueError("S3_PUBLIC_BASE_URL doit être une URL http(s) absolue.")
+        base_url = self.s3_public_base_url or ""
+        if (
+            public_on_s3
+            and base_url
+            and (
+                not base_url.startswith(("https://", "http://")) or has_hidden_characters(base_url)
+            )
+        ):
+            problems.append(
+                f"S3_PUBLIC_BASE_URL doit être une URL http(s) absolue, sans espace ni caractère "
+                f"invisible ({base_url!r})."
+            )
+        if problems:
+            raise ValueError("Stockage S3 mal configuré :\n- " + "\n- ".join(problems))
         return self
 
     # Rate limiting sur POST /api/v1/artisans/me/documents, même mécanisme
