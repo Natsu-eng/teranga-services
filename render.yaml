@@ -1,0 +1,75 @@
+# Blueprint Render : backend FastAPI de la BETA (staging) -- DEPLOYMENT.md §12.
+#
+# Pile : Render (backend, ce fichier) + Supabase (PostgreSQL/PostGIS et
+# Storage S3) + Vercel (front, frontend/vercel.json). Le runbook Railway
+# (backend/railway.json) reste inchangé et indépendant de ce fichier.
+#
+# - Image construite depuis backend/Dockerfile (la même que Railway).
+# - Démarrage : scripts/serve.py -- configuration validée, migrations
+#   (alembic upgrade head, sous verrou), puis uvicorn sur $PORT. Le plan
+#   gratuit n'a ni shell ni étape de pré-déploiement : les migrations
+#   passent donc au démarrage.
+# - Aucun secret ici : les valeurs `sync: false` sont demandées par Render à
+#   la création du Blueprint (puis modifiables dans le tableau de bord) ;
+#   JWT_SECRET est tiré au hasard par Render (256 bits).
+services:
+  - type: web
+    name: teranga-backend
+    runtime: docker
+    plan: free
+    # Même région que le projet Supabase (Francfort, eu-central-1) : chaque
+    # requête SQL traverse le réseau, la distance compte. Non modifiable ensuite.
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python scripts/serve.py
+    healthCheckPath: /api/v1/health/ready
+    autoDeployTrigger: commit
+    # Ne reconstruire le backend que si le backend change.
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      # --- Comportement de la beta (valeurs fixées, DEPLOYMENT.md §12.3) ---
+      - key: ENVIRONMENT
+        value: staging
+      - key: SMS_PROVIDER
+        value: console
+      - key: PAYMENT_PROVIDER
+        value: disabled
+      - key: STORAGE_BACKEND
+        value: s3
+      - key: WEB_CONCURRENCY
+        value: "1"
+      # --- Secrets et adresses propres au déploiement (saisis à la création) ---
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_PUBLIC_BASE_URL
+        sync: false
+      - key: BACKEND_PUBLIC_BASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # À MESURER après le premier déploiement (DEPLOYMENT.md §12.6).
+      - key: TRUSTED_PROXY_HOPS
+        sync: false
+      - key: S3_ENDPOINT_URL
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_PRIVATE_BUCKET
+        sync: false
+      - key: S3_PUBLIC_BUCKET
+        sync: false
+      - key: S3_PUBLIC_BASE_URL
+        sync: false
+      - key: OTP_TEST_WHITELIST
+        sync: false
+      - key: OTP_TEST_CODE
+        sync: false
