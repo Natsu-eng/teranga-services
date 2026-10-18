@@ -165,6 +165,18 @@ class Settings(BaseSettings):
                 "DATABASE_URL doit utiliser le driver asyncpg pour SQLAlchemy async "
                 f"(postgresql+asyncpg://...) — reçu : {url.drivername}://..."
             )
+        # Pooler TRANSACTION de Supabase (port 6543) : il n'accepte pas les
+        # instructions préparées qu'asyncpg emploie pour chaque requête
+        # (erreurs aléatoires « prepared statement ... does not exist ») et ne
+        # garde pas la même connexion serveur d'une transaction à l'autre (le
+        # verrou des migrations de scripts/serve.py n'y tiendrait pas).
+        # Refus net plutôt que des pannes intermittentes en beta.
+        host = (url.host or "").lower()
+        if host.endswith(".pooler.supabase.com") and url.port == 6543:
+            raise ValueError(
+                "DATABASE_URL vise le pooler TRANSACTION de Supabase (port 6543), incompatible "
+                "avec asyncpg : utiliser le session pooler, port 5432 (DEPLOYMENT.md §12.4)."
+            )
         return v
 
     # Longueur du code OTP (chiffres). 6 est le standard de l'industrie
