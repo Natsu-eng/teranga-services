@@ -609,6 +609,14 @@ donc être fermée.
    (autorisé par la CSP du front, `img-src https:`). Les documents d'identité
    n'ont **aucune** URL publique : ils ne sortent que par les endpoints
    authentifiés du backend.
+5. Valeurs collées dans Render : les blancs et caractères invisibles en
+   **bordure** (retour à la ligne final, espace, BOM…) sont retirés des sept
+   variables `S3_*` ; une valeur encore invalide (caractère invisible à
+   l'intérieur, guillemets, région ou nom de bucket mal formé) **arrête le
+   démarrage** avec la liste des variables en cause (jamais la valeur d'une
+   clé). Une panne du stockage pendant un envoi répond `503`
+   `STOCKAGE_INDISPONIBLE` (message affiché au testeur), la cause exacte
+   (code d'erreur du fournisseur) étant dans les journaux Render.
 
 ### 12.5 Pas-à-pas
 
