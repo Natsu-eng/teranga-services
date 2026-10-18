@@ -73,7 +73,13 @@ async def test_the_initial_rate_is_journaled_and_never_overwrites_one(
 
 
 async def test_demo_seed_refuses_to_run_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(demo_seed, "get_settings", lambda: SimpleNamespace(is_production=True))
+    production = SimpleNamespace(
+        is_production=True,
+        is_local=False,
+        environment="production",
+        database_url="postgresql+asyncpg://u:p@db.example.com:5432/teranga",
+    )
+    monkeypatch.setattr(demo_seed, "get_settings", lambda: production)
 
     with pytest.raises(SystemExit, match="données de DÉMONSTRATION"):
         await demo_seed.main()
