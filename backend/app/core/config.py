@@ -475,6 +475,19 @@ class Settings(BaseSettings):
     # URL publique du bucket public (domaine personnalisé R2/CDN ou URL
     # publique du bucket), en HTTPS : base des URL d'avatar renvoyées au front.
     s3_public_base_url: str | None = None
+    # Adressage « path-style » (https://endpoint/bucket/clé) plutôt que
+    # « virtual-host » (https://bucket.endpoint/clé). EXIGÉ par Supabase
+    # Storage et MinIO, toléré par R2. Vide (défaut) : activé dès que
+    # S3_ENDPOINT_URL est renseigné, laissé au choix de boto3 sur AWS S3 (sans
+    # endpoint, comportement inchangé). `true` / `false` pour forcer.
+    s3_force_path_style: bool | None = None
+
+    @property
+    def s3_addressing_style(self) -> Literal["path", "virtual"] | None:
+        """Adressage S3 effectif : "path", "virtual", ou None (choix de boto3)."""
+        if self.s3_force_path_style is None:
+            return "path" if self.s3_endpoint_url else None
+        return "path" if self.s3_force_path_style else "virtual"
 
     @field_validator(
         "avatar_storage_backend",
@@ -485,6 +498,7 @@ class Settings(BaseSettings):
         "s3_private_bucket",
         "s3_public_bucket",
         "s3_public_base_url",
+        "s3_force_path_style",
         mode="before",
     )
     @classmethod

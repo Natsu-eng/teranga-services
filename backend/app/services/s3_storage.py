@@ -1,4 +1,4 @@
-"""Stockage S3-compatible (AWS S3, Cloudflare R2, MinIO...) derrière le
+"""Stockage S3-compatible (AWS S3, Cloudflare R2, Supabase Storage, MinIO...) derrière le
 contrat `StorageBackend` (app/services/storage.py) -- DEPLOYMENT.md.
 
 **Pourquoi c'est obligatoire en production** : le disque d'un service
@@ -117,6 +117,11 @@ def build_s3_client(settings: "Settings") -> S3Client:
     import boto3
     from botocore.config import Config
 
+    # Adressage explicite (S3_FORCE_PATH_STYLE) : avec un endpoint
+    # personnalisé (Supabase, MinIO, R2), toujours « path-style », sans
+    # dépendre du choix par défaut de la version de botocore installée.
+    # Sans endpoint (AWS S3) et sans réglage : défaut de boto3, inchangé.
+    addressing = settings.s3_addressing_style
     client = boto3.client(
         "s3",
         endpoint_url=settings.s3_endpoint_url or None,
@@ -128,6 +133,7 @@ def build_s3_client(settings: "Settings") -> S3Client:
             connect_timeout=5,
             read_timeout=20,
             retries={"max_attempts": 3, "mode": "standard"},
+            s3={"addressing_style": addressing} if addressing else None,
         ),
     )
     # Le client boto3 couvre bien plus que le sous-ensemble utilisé ici.
