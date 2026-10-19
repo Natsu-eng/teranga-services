@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from app.core.config import Settings, get_settings
+from app.core.errors import AppError
 
 if TYPE_CHECKING:
     from app.services.s3_storage import S3Client
@@ -49,6 +50,28 @@ class StorageObjectIntrouvableError(Exception):
     def __init__(self, reference: str) -> None:
         super().__init__(f"Objet de stockage introuvable : {reference!r}")
         self.reference = reference
+
+
+class StockageIndisponibleError(AppError):
+    """Le fournisseur de stockage a échoué (configuration, réseau, refus).
+
+    Erreur APPLICATIVE (et non une exception brute) : elle est convertie en
+    réponse JSON 503 à l'intérieur de la pile de middlewares, donc AVEC les
+    en-têtes CORS. Une exception brute deviendrait une 500 produite hors du
+    middleware CORS, que le navigateur bloque : le front n'afficherait alors
+    qu'un faux « Impossible de contacter le serveur ». La cause exacte est
+    journalisée côté serveur, jamais envoyée au client.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="STOCKAGE_INDISPONIBLE",
+            message=(
+                "Le stockage des fichiers est momentanément indisponible, "
+                "merci de réessayer plus tard."
+            ),
+            status_code=503,
+        )
 
 
 class StorageBackend(Protocol):
@@ -134,6 +157,8 @@ _s3_clients: dict[tuple[str | None, str | None, str, str | None], "S3Client"] = 
 
 def get_s3_client(settings: Settings) -> "S3Client":
     """Client boto3 unique par configuration (pool de connexions partagé)."""
+    from botocore.exceptions import BotoCoreError
+
     from app.services.s3_storage import build_s3_client
 
     key = (
@@ -143,7 +168,14 @@ def get_s3_client(settings: Settings) -> "S3Client":
         settings.s3_addressing_style,
     )
     if key not in _s3_clients:
-        _s3_clients[key] = build_s3_client(settings)
+        try:
+            _s3_clients[key] = build_s3_client(settings)
+        except (ValueError, BotoCoreError) as exc:
+            # Défense en profondeur : Settings valide déjà l'endpoint au
+            # démarrage ; si boto3 refuse malgré tout le client, la cause est
+            # journalisée et l'appelant reçoit une erreur applicative.
+            logger.error("Stockage S3 : client impossible à créer (%s).", type(exc).__name__)
+            raise StockageIndisponibleError() from exc
     return _s3_clients[key]
 
 

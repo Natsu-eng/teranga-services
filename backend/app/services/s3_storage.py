@@ -26,13 +26,21 @@ tentatives sont bornés (`build_s3_client`).
 """
 
 import asyncio
+import logging
 import mimetypes
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
-from app.services.storage import StorageObjectIntrouvableError
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.services.storage import StockageIndisponibleError, StorageObjectIntrouvableError
 
 if TYPE_CHECKING:
     from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
 
 # Médias publics : clés aléatoires jamais réutilisées -> cache navigateur et
 # CDN d'un an. Contenus privés : jamais mis en cache par un intermédiaire.
@@ -48,6 +56,18 @@ class S3Client(Protocol):
     def get_object(self, **kwargs: Any) -> Any: ...
 
     def delete_object(self, **kwargs: Any) -> Any: ...
+
+
+def _error_label(exc: Exception) -> str:
+    """Cause d'un échec S3, pour les journaux : code d'erreur du fournisseur
+    et statut HTTP, ou type de l'exception (réseau, délai). Jamais de clé ni
+    de contenu d'objet."""
+    response = getattr(exc, "response", None)
+    if isinstance(response, dict):
+        code = response.get("Error", {}).get("Code", "?")
+        status = response.get("ResponseMetadata", {}).get("HTTPStatusCode", "?")
+        return f"{type(exc).__name__} {code} (HTTP {status})"
+    return type(exc).__name__
 
 
 def _is_missing(exc: Exception) -> bool:
@@ -76,15 +96,37 @@ class S3StorageBackend:
             raise ValueError(f"Clé de stockage invalide : {key!r}")
         return f"{self._prefix}{key}"
 
+    def _call(self, operation: str, run: Callable[[], _T]) -> _T:
+        """Exécute un appel boto3 (dans le thread de `asyncio.to_thread`) ;
+        toute erreur du fournisseur (refus, configuration, réseau, délai)
+        devient une `StockageIndisponibleError` applicative, journalisée avec
+        sa cause -- jamais une exception brute qui sortirait en 500 sans
+        en-têtes CORS."""
+        try:
+            return run()
+        except (BotoCoreError, ClientError) as exc:
+            logger.error(
+                "Stockage S3 : %s sur le bucket %r a échoué : %s.",
+                operation,
+                self._bucket,
+                _error_label(exc),
+                exc_info=exc,
+            )
+            raise StockageIndisponibleError() from exc
+
     async def store(self, content: bytes, key: str) -> str:
         content_type = mimetypes.guess_type(key)[0] or "application/octet-stream"
+        object_key = self._object_key(key)
         await asyncio.to_thread(
-            self._client.put_object,
-            Bucket=self._bucket,
-            Key=self._object_key(key),
-            Body=content,
-            ContentType=content_type,
-            CacheControl=self._cache_control,
+            self._call,
+            "PutObject",
+            lambda: self._client.put_object(
+                Bucket=self._bucket,
+                Key=object_key,
+                Body=content,
+                ContentType=content_type,
+                CacheControl=self._cache_control,
+            ),
         )
         # Même référence opaque qu'en local : la base ne connaît jamais le
         # bucket ni le fournisseur.
@@ -97,18 +139,23 @@ class S3StorageBackend:
             try:
                 response = self._client.get_object(Bucket=self._bucket, Key=object_key)
             except Exception as exc:
+                # Objet absent : erreur métier dédiée (404 côté appelant),
+                # pas une panne du stockage.
                 if _is_missing(exc):
                     raise StorageObjectIntrouvableError(reference) from exc
                 raise
             body: bytes = response["Body"].read()
             return body
 
-        return await asyncio.to_thread(_read)
+        return await asyncio.to_thread(self._call, "GetObject", _read)
 
     async def delete(self, reference: str) -> None:
         # Idempotent : S3 ne signale pas l'absence d'un objet supprimé.
+        object_key = self._object_key(reference)
         await asyncio.to_thread(
-            self._client.delete_object, Bucket=self._bucket, Key=self._object_key(reference)
+            self._call,
+            "DeleteObject",
+            lambda: self._client.delete_object(Bucket=self._bucket, Key=object_key),
         )
 
 

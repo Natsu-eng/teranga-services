@@ -9,6 +9,7 @@ Réservé aux comptes client et artisan (admin exclu de ce lot), et dans
 chaque conversation aux deux seuls participants.
 """
 
+import contextlib
 import uuid
 from typing import Annotated
 
@@ -43,7 +44,10 @@ from app.services.realtime import (
     message_created_event,
     realtime_bus,
 )
-from app.services.storage import get_message_attachment_storage_backend
+from app.services.storage import (
+    StockageIndisponibleError,
+    get_message_attachment_storage_backend,
+)
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -193,9 +197,12 @@ async def send_image_message(
     try:
         await session.commit()
     except Exception:
-        # Jamais de fichier orphelin si l'enregistrement échoue au commit.
+        # Jamais de fichier orphelin si l'enregistrement échoue au commit --
+        # au mieux : un échec du stockage ici (journalisé) ne doit pas
+        # masquer l'erreur d'origine, relancée.
         if sent.stored_attachment_key is not None:
-            await storage.delete(sent.stored_attachment_key)
+            with contextlib.suppress(StockageIndisponibleError):
+                await storage.delete(sent.stored_attachment_key)
         raise
     await realtime_bus().publish(
         sent.recipient_ids, message_created_event(sent.message.model_dump(mode="json"))

@@ -5,6 +5,7 @@ logique.
 """
 
 import asyncio
+import contextlib
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +39,11 @@ from app.services.image_processing import (
     ImageTropGrandeError,
     reencode_image,
 )
-from app.services.storage import StorageBackend, StorageObjectIntrouvableError
+from app.services.storage import (
+    StockageIndisponibleError,
+    StorageBackend,
+    StorageObjectIntrouvableError,
+)
 
 # Seules des photos sont acceptées dans le fil (jamais un PDF ni un autre
 # format) : elles sont réencodées, donc on sait exactement ce qu'on sert.
@@ -103,8 +108,10 @@ async def send_image_message(
         )
     except Exception:
         # Jamais de fichier orphelin : si l'écriture en base échoue, l'image
-        # déjà stockée est effacée.
-        await storage.delete(reference)
+        # déjà stockée est effacée -- au mieux : un échec du stockage ici
+        # (journalisé) ne doit pas masquer l'erreur d'origine, relancée.
+        with contextlib.suppress(StockageIndisponibleError):
+            await storage.delete(reference)
         raise
 
     return SentMessage(
