@@ -33,8 +33,6 @@ services:
       # --- Comportement de la beta (valeurs fixées, DEPLOYMENT.md §12.3) ---
       - key: ENVIRONMENT
         value: staging
-      - key: SMS_PROVIDER
-        value: console
       - key: PAYMENT_PROVIDER
         value: disabled
       - key: STORAGE_BACKEND
@@ -51,6 +49,17 @@ services:
       - key: BACKEND_PUBLIC_BASE_URL
         sync: false
       - key: CORS_ORIGINS
+        sync: false
+      # Livraison des codes : console (aucun code réel) ou termii (DEPLOYMENT.md
+      # §13). Non fixée ici : une synchronisation du Blueprint ne doit jamais
+      # écraser le choix fait dans le tableau de bord.
+      - key: SMS_PROVIDER
+        sync: false
+      - key: TERMII_API_KEY
+        sync: false
+      - key: TERMII_SENDER_ID
+        sync: false
+      - key: TERMII_BASE_URL
         sync: false
       # À MESURER après le premier déploiement (DEPLOYMENT.md §12.6).
       - key: TRUSTED_PROXY_HOPS
