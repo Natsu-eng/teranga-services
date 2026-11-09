@@ -1,17 +1,38 @@
-"""Envoi de SMS, derrière une interface indépendante du fournisseur.
+"""Livraison des codes OTP, derrière une interface indépendante du fournisseur.
 
 Le fournisseur actif est choisi par configuration (`SMS_PROVIDER`), jamais
-codé en dur -- voir `get_sms_provider`. Aucun fournisseur commercial n'est
-branché à ce stade (BUILD_PLAN.md §4) : `UnconfiguredSmsProvider` est le
-squelette qui échoue explicitement tant que ce choix n'est pas fait.
+codé en dur -- voir `get_sms_provider` : `console` (dev), `termii` (envoi
+réel, app/services/sms_termii.py) ou `unconfigured` (échoue explicitement).
+Le fournisseur ne fait que LIVRER : génération, hachage et vérification du
+code restent dans app/services/otp.py.
 """
 
 import logging
 from typing import Protocol
 
 from app.core.config import Settings, get_settings
+from app.core.errors import AppError
 
 logger = logging.getLogger(__name__)
+
+
+class OtpEnvoiIndisponibleError(AppError):
+    """Le fournisseur n'a pas pu livrer le code (panne, refus, délai).
+
+    Erreur APPLICATIVE (503) : convertie en réponse JSON à l'intérieur de la
+    pile de middlewares, donc avec les en-têtes CORS -- le front affiche ce
+    message au lieu d'un faux « Impossible de contacter le serveur ». La
+    cause est journalisée côté serveur, jamais renvoyée au client.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="OTP_ENVOI_INDISPONIBLE",
+            message=(
+                "L'envoi du code de connexion a échoué, merci de réessayer dans quelques instants."
+            ),
+            status_code=503,
+        )
 
 
 class SmsProvider(Protocol):
@@ -56,4 +77,10 @@ def get_sms_provider(settings: Settings | None = None) -> SmsProvider:
     settings = settings or get_settings()
     if settings.sms_provider == "console":
         return ConsoleSmsProvider(settings)
+    if settings.sms_provider == "termii":
+        # Import tardif : httpx et le module Termii ne sont chargés que si
+        # ce fournisseur est choisi.
+        from app.services.sms_termii import TermiiSmsProvider
+
+        return TermiiSmsProvider(settings)
     return UnconfiguredSmsProvider()
