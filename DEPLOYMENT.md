@@ -22,7 +22,7 @@ modifie rien au chemin Railway ci-dessous.
 
 | # | Sujet | Statut | Conséquence |
 |---|---|---|---|
-| 1 | **Fournisseur SMS réel** | **BLOQUANT** | Aucun fournisseur commercial n'est implémenté (`SMS_PROVIDER` : `console` ou `unconfigured`). En production, les deux sont **refusés au démarrage** : sans SMS, personne ne recevrait son code de connexion. Il faut choisir un fournisseur (Orange SMS API, Twilio…) et écrire son adaptateur dans `backend/app/services/sms.py` (contrat `SmsProvider`, une méthode `send_otp`). C'est le seul point qui empêche aujourd'hui la configuration de production de démarrer (testé : `test_complete_production_config_is_blocked_only_by_the_missing_sms_provider`). |
+| 1 | **Fournisseur SMS réel** | **À CONFIGURER ET VALIDER** | Termii est implémenté (`SMS_PROVIDER=termii`, §13). En production, `console` et `unconfigured` restent **refusés au démarrage**. Reste : compte Termii, identifiant d'expéditeur **enregistré**, variables `TERMII_*`, puis un premier envoi réel (jamais testé contre l'API réelle à ce jour : tests sur un faux serveur Termii). |
 | 2 | **PostGIS sur Railway** | **VÉRIFICATION OBLIGATOIRE** | Le Postgres standard de Railway ne garantit pas l'extension PostGIS. La première migration (`CREATE EXTENSION postgis`) doit réussir, sinon aucun déploiement ne passe. Voir §4.1. |
 | 3 | **Disque éphémère** | **Garde-fou en place** | Le disque d'un service Railway est **effacé à chaque déploiement**. Tout fichier stocké localement (CNI, selfies, photos) serait **perdu**. `STORAGE_BACKEND=local` est donc **refusé** en production : stockage S3/R2 obligatoire. Voir §4.3. |
 | 4 | **Clé Mistral** | À renouveler | Générer une **nouvelle** clé dédiée à la production (jamais celle du dev), voir §8. Facultatif : sans clé, le triage IA reste sur l'heuristique. |
@@ -57,7 +57,7 @@ Navigateur ──HTTPS──▶ Frontend (statique : Vercel, ou Railway + Caddy)
 - Railway (projet avec 4 services : backend, frontend, PostgreSQL+PostGIS, Redis).
 - Cloudflare (R2) ou AWS (S3) pour les fichiers.
 - Un nom de domaine (DNS) pour le front et l'API.
-- Un fournisseur SMS (bloquant n°1).
+- Un compte Termii, identifiant d'expéditeur enregistré (§13).
 - Facultatif : Mistral (triage IA), Vercel (si le front y est hébergé).
 - Plus tard : un agrégateur de paiement (PayDunya, CinetPay, Wave Business…).
 
@@ -88,7 +88,7 @@ coup) si l'une manque, garde une valeur d'exemple, ou pointe vers du local.
 | `ENVIRONMENT` | Ensemble fermé : `development`, `test`, `staging`, `production` | `production` |
 | `DATABASE_URL` | Base PostgreSQL+PostGIS, driver asyncpg | `postgresql+asyncpg://…` (mot de passe réel, hôte non local) |
 | `JWT_SECRET` | Signature des jetons (≥ 32 caractères) | secret aléatoire (§2) |
-| `SMS_PROVIDER` | Envoi des codes OTP | fournisseur réel (**bloquant n°1**) |
+| `SMS_PROVIDER` | Envoi des codes OTP | `termii`, avec `TERMII_API_KEY`, `TERMII_SENDER_ID`, `TERMII_BASE_URL` (§13) |
 | `FRONTEND_PUBLIC_BASE_URL` | URL publique du front (retours de paiement) | `https://teranga.sn` |
 | `BACKEND_PUBLIC_BASE_URL` | URL publique de l'API | `https://api.teranga.sn` |
 | `CORS_ORIGINS` | Origines autorisées, sans joker ni `/` final | `https://teranga.sn` (doit contenir l'origine du front) |
@@ -235,7 +235,7 @@ démonstration) : il refuse de toute façon de s'y exécuter.
 ### 4.7 Premier administrateur
 
 1. La personne crée son compte normalement sur le site (téléphone + code
-   SMS — d'où le bloquant n°1).
+   SMS, §13).
 2. Puis, dans le conteneur du backend (voir §4.6) :
    ```bash
    railway ssh --service backend
@@ -364,8 +364,10 @@ d'avoir un fournisseur SMS, sur une instance séparée de la production.
 - Un **environnement Railway distinct** (ex. `staging`), avec sa **propre**
   base PostgreSQL, son Redis et ses **propres** buckets : jamais la base ni
   les buckets de production (données de test, documents de test).
-- `ENVIRONMENT=staging`, `SMS_PROVIDER=console` (obligatoire avec le mode de
-  test, voir ci-dessous), `PAYMENT_PROVIDER=disabled`, URL publiques et
+- `ENVIRONMENT=staging`, `SMS_PROVIDER=console` (aucun code réel : seuls les
+  numéros de la liste se connectent) ou `termii` (les numéros hors liste
+  reçoivent un vrai code, §13) ; `unconfigured` est refusé avec le mode de
+  test, voir ci-dessous. `PAYMENT_PROVIDER=disabled`, URL publiques et
   `CORS_ORIGINS` de l'instance de staging.
 - Le front de staging est construit avec le `VITE_API_BASE_URL` du backend
   de staging. Il affiche de lui-même le bandeau « Version de test · données
@@ -413,7 +415,7 @@ verrou retiré fait échouer la suite) :
    validation n'a aucun effet hors `ENVIRONMENT=staging` : vrai SMS, code
    aléatoire, code de test refusé.
 
-Et la production exige toujours un vrai fournisseur SMS (§0, bloquant n°1) :
+Et la production exige toujours un vrai fournisseur SMS (§0, §13) :
 le mode de test ne le remplace pas.
 
 ## 11. Application installable (PWA)
@@ -499,7 +501,7 @@ création du Blueprint (`sync: false`), puis modifiables dans *Environment*.
 | Variable | Valeur pour cette pile | Source |
 |---|---|---|
 | `ENVIRONMENT` | `staging` | fixée |
-| `SMS_PROVIDER` | `console` (obligatoire avec le mode OTP de test, §10.2 ; aucun code n'est journalisé hors dev) | fixée |
+| `SMS_PROVIDER` | `console` (aucun code réel, seuls les numéros de test se connectent) ou `termii` (vrais codes pour les autres numéros, §13, avec ses `TERMII_*`) | à saisir |
 | `PAYMENT_PROVIDER` | `disabled` (espèces seulement) | fixée |
 | `STORAGE_BACKEND` | `s3` (couvre aussi photos et pièces jointes) | fixée |
 | `WEB_CONCURRENCY` | `1` | fixée |
@@ -741,3 +743,80 @@ demandes de code bloquent tout le monde) ; trop haute, elle laisse un client
 - [ ] Messagerie : un message arrive en temps réel chez l'autre partie (WSS).
 - [ ] `client_ip` du diagnostic = votre adresse (§12.7).
 - [ ] Paiement : seule l'option espèces est proposée.
+
+## 13. Termii : livraison réelle des codes OTP
+
+Termii n'est qu'un **canal de livraison** : le code est généré, haché,
+limité en tentatives et en débit, et vérifié par le backend
+(`backend/app/services/otp.py`). Implémentation :
+`backend/app/services/sms_termii.py`, choisie par `SMS_PROVIDER=termii`.
+
+### 13.1 Routage
+
+| Numéro | Code | Livraison |
+|---|---|---|
+| Dans `OTP_TEST_WHITELIST` (staging seulement, §10) | `OTP_TEST_CODE` | **aucune** (Termii jamais appelé) |
+| Tout autre numéro (E.164 normalisé) | aléatoire | Termii, canal selon `OTP_CHANNEL` |
+
+La réponse de `request-otp` reste `204`, identique quel que soit le
+numéro (non-énumération). Seule exception : si Termii est en panne, un
+numéro hors liste reçoit `503 OTP_ENVOI_INDISPONIBLE` (message lisible,
+en-têtes CORS conservés) ; le code n'est alors **pas** enregistré et le
+code précédent reste valable.
+
+### 13.2 Variables
+
+| Variable | Rôle | Valeur |
+|---|---|---|
+| `SMS_PROVIDER` | Canal de livraison | `termii` |
+| `TERMII_API_KEY` | Clé d'API (**secret**) | tableau de bord Termii, *Settings > API token* |
+| `TERMII_SENDER_ID` | Identifiant d'expéditeur **enregistré** chez Termii | 3 à 11 caractères alphanumériques, ex. `Teranga` |
+| `TERMII_BASE_URL` | Base de l'API **propre au compte** | copiée du même écran, en `https://` ; **pas de défaut** |
+| `OTP_CHANNEL` | `sms` (défaut), `whatsapp`, `whatsapp_then_sms` (WhatsApp puis repli SMS) | `sms` pour lancer |
+| `OTP_SMS_CHANNEL` | Route SMS de Termii : `dnd` (transactionnelle, passe en liste anti-pub) ou `generic` | `dnd` (défaut) |
+| `TERMII_WHATSAPP_CHANNEL` | Valeur `channel` pour WhatsApp : `whatsapp_otp` (canal de code documenté) ou `whatsapp` | `whatsapp_otp` (défaut) |
+| `TERMII_WHATSAPP_SENDER` | Expéditeur WhatsApp (nom de l'appareil chez Termii) | vide = `TERMII_SENDER_ID` |
+| `TERMII_TIMEOUT_SECONDS` / `TERMII_MAX_ATTEMPTS` / `TERMII_TOTAL_TIMEOUT_SECONDS` | Délai d'un appel, essais par canal, budget total | `4.0` / `2` / `8.0` (défauts) |
+
+- `SMS_PROVIDER=termii` sans les trois premières `TERMII_*` (ou avec une
+  valeur mal formée) : **démarrage refusé**, avec la liste des variables en
+  cause, jamais la clé. Valeurs collées nettoyées (retour à la ligne,
+  espaces, caractères invisibles en bordure), comme `S3_*`.
+- **Pourquoi pas de `TERMII_BASE_URL` par défaut** : la documentation
+  Termii ne publie plus d'hôte unique ; chaque compte a sa base, qui le
+  route vers sa région réglementaire (les anciens exemples citent
+  `api.ng.termii.com`). Un hôte deviné pourrait viser la mauvaise région.
+- Budget total < 10 s : au-delà, le front abandonnerait l'appel avant la
+  réponse. Nouvel essai seulement sur panne transitoire (réseau, délai,
+  HTTP 429/5xx) ; une erreur de requête (clé, expéditeur, numéro : 4xx)
+  n'est jamais répétée.
+- Journaux : canal, statut HTTP, numéro **masqué** (`+221*******67`) ;
+  jamais la clé, jamais le code.
+
+### 13.3 Mise en route
+
+1. Compte Termii : faire **enregistrer l'identifiant d'expéditeur** (délai
+   de validation chez Termii), créditer le compte, noter la clé et la base
+   URL (*Settings > API token*).
+2. Render (*Environment*) : ajouter `TERMII_API_KEY`, `TERMII_SENDER_ID`,
+   `TERMII_BASE_URL`, **puis** passer `SMS_PROVIDER` à `termii` (`render.yaml`
+   ne fixe plus cette variable : une synchronisation du Blueprint ne
+   l'écrase pas ; les nouvelles variables `sync: false` d'un Blueprint déjà
+   créé ne sont pas demandées par Render, il faut les ajouter à la main).
+3. Test : demander un code pour un numéro **hors** liste de test ; le SMS
+   arrive ; dans les journaux Render : `Termii : code envoyé par sms à
+   +221*******67.` Un numéro de la liste garde le code de test.
+4. WhatsApp (facultatif) : faire **activer le canal de code WhatsApp** par
+   le support Termii (« not enabled by default »), puis
+   `OTP_CHANNEL=whatsapp_then_sms` : en cas d'échec WhatsApp, repli SMS
+   automatique.
+
+### 13.4 Lire un échec dans les journaux
+
+| Journal | Sens | Action |
+|---|---|---|
+| `HTTP 401` / `403` (définitif) | clé refusée | vérifier `TERMII_API_KEY` |
+| `HTTP 400` / `422` (définitif) | requête refusée : expéditeur non enregistré, canal non activé, numéro | vérifier `TERMII_SENDER_ID`, l'activation du canal |
+| `HTTP 404` (définitif) | mauvaise base | vérifier `TERMII_BASE_URL` |
+| `HTTP 429` / `5xx` (transitoire), `ConnectError`, `ReadTimeout` | panne côté Termii ou réseau | nouvel essai automatique ; si persistant, statut Termii |
+| `budget total de 8.0 s dépassé` | Termii trop lent | vérifier le statut Termii |
