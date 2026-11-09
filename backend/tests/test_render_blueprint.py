@@ -17,7 +17,6 @@ BLUEPRINT = (REPO / "render.yaml").read_text(encoding="utf-8")
 # toutes les autres sont des secrets ou des adresses, jamais écrites ici.
 FIXED = {
     "ENVIRONMENT": "staging",
-    "SMS_PROVIDER": "console",
     "PAYMENT_PROVIDER": "disabled",
     "STORAGE_BACKEND": "s3",
     "WEB_CONCURRENCY": "1",
@@ -83,6 +82,11 @@ def test_every_variable_is_a_real_setting_and_the_required_ones_are_declared() -
         "S3_PUBLIC_BASE_URL",
         "OTP_TEST_WHITELIST",
         "OTP_TEST_CODE",
+        # Livraison des codes (console ou termii, DEPLOYMENT.md §13).
+        "SMS_PROVIDER",
+        "TERMII_API_KEY",
+        "TERMII_SENDER_ID",
+        "TERMII_BASE_URL",
     ):
         assert key in env, key
 

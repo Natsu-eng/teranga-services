@@ -67,6 +67,9 @@ _HOSTNAME_LABELS_RE = re.compile(
 )
 # Région S3 : « auto » (R2), « eu-central-1 » (AWS, Supabase), « local »...
 _S3_REGION_RE = re.compile(r"[a-z0-9-]+")
+# Identifiant d'expéditeur Termii : 3 à 11 caractères alphanumériques
+# (documentation Termii, Messaging API, champ `from`).
+_TERMII_SENDER_RE = re.compile(r"[A-Za-z0-9]{3,11}")
 
 
 def clean_setting_value(value: str) -> str:
@@ -85,6 +88,27 @@ def has_hidden_characters(value: str) -> bool:
     return any(
         char.isspace() or unicodedata.category(char) in ("Cc", "Cf", "Zs", "Zl", "Zp")
         for char in value
+    )
+
+
+def is_valid_https_base_url(url: str, *, allow_http: bool = False) -> bool:
+    """URL de base d'une API externe : https (http seulement si `allow_http`,
+    pour un faux serveur local), nom d'hôte DNS valide, aucun caractère
+    invisible, ni identifiants, ni paramètres, ni fragment."""
+    if has_hidden_characters(url):
+        return False
+    try:
+        parts = urlsplit(url)
+        _ = parts.port  # lève ValueError si le port n'est pas un entier
+    except ValueError:
+        return False
+    hostname = (parts.hostname or "").removesuffix(".")
+    schemes = ("https", "http") if allow_http else ("https",)
+    return (
+        parts.scheme in schemes
+        and not (parts.username or parts.password or parts.query or parts.fragment)
+        and 0 < len(hostname) <= 255
+        and _HOSTNAME_LABELS_RE.match(hostname) is not None
     )
 
 
@@ -140,13 +164,123 @@ class Settings(BaseSettings):
         admis."""
         return self.environment in ("development", "test")
 
-    # "console" (dev, log lisible) est le seul fournisseur implémenté à ce
-    # stade -- un fournisseur SMS commercial reste à choisir avant la prod
-    # (BUILD_PLAN.md §4, DEPLOYMENT.md). "unconfigured" échoue explicitement
-    # à l'envoi. En PRODUCTION, les deux sont refusés au démarrage
+    # Canal de LIVRAISON des codes OTP (la génération, le hachage et la
+    # vérification restent les nôtres, app/services/otp.py) :
+    # - "console" (dev) : code écrit dans les journaux, en development/test
+    #   seulement ;
+    # - "termii" : envoi réel par l'API Termii (app/services/sms_termii.py),
+    #   réglages TERMII_* ci-dessous ;
+    # - "unconfigured" : échoue explicitement à l'envoi.
+    # En PRODUCTION, "console" et "unconfigured" sont refusés au démarrage
     # (`validate_production`) : une prod où personne ne peut recevoir son
     # code de connexion ne doit jamais démarrer.
-    sms_provider: Literal["console", "unconfigured"] = "console"
+    sms_provider: Literal["console", "unconfigured", "termii"] = "console"
+
+    # --- Termii (SMS_PROVIDER=termii, DEPLOYMENT.md) -------------------------
+    # Clé d'API (tableau de bord Termii, Settings > API token). SECRET : jamais
+    # journalisée, envoyée dans le CORPS des requêtes (exigence Termii), donc
+    # jamais dans une URL.
+    termii_api_key: str | None = None
+    # Identifiant d'expéditeur enregistré chez Termii (3 à 11 caractères
+    # alphanumériques). Sur WhatsApp, Termii attend le nom de l'appareil :
+    # TERMII_WHATSAPP_SENDER s'il est renseigné, sinon cet identifiant.
+    termii_sender_id: str | None = None
+    termii_whatsapp_sender: str | None = None
+    # Base de l'API PROPRE AU COMPTE, affichée dans le tableau de bord Termii
+    # (Settings > API token) : Termii route chaque compte vers sa région
+    # réglementaire, la documentation ne publie plus d'hôte unique. Aucune
+    # valeur par défaut : un hôte deviné pourrait viser la mauvaise région.
+    termii_base_url: str | None = None
+    # Délai d'UN appel HTTP à Termii, nombre d'essais par canal (1 nouvel
+    # essai sur panne transitoire : réseau, délai, HTTP 429/5xx), et budget
+    # TOTAL de l'envoi, tous canaux et essais confondus. Le budget total doit
+    # rester sous le délai du front pour un appel court (10 s,
+    # frontend/src/lib/api/http.ts) : au-delà, le front abandonnerait avant
+    # la réponse.
+    termii_timeout_seconds: float = 4.0
+    termii_max_attempts: int = Field(default=2, ge=1, le=3)
+    termii_total_timeout_seconds: float = 8.0
+    # Valeur du champ `channel` de Termii pour un code par WhatsApp. La
+    # documentation Termii (« Send WhatsApp Token ») utilise "whatsapp_otp"
+    # (code numérique de 4 à 6 chiffres, activation par le support Termii) ;
+    # "whatsapp" est le canal conversationnel. Réglable sans toucher au code.
+    termii_whatsapp_channel: Literal["whatsapp_otp", "whatsapp"] = "whatsapp_otp"
+
+    # Route SMS de Termii pour les codes : "dnd" (transactionnelle, passe
+    # même sur les numéros inscrits en liste anti-publicité) ou "generic".
+    otp_sms_channel: Literal["dnd", "generic"] = "dnd"
+    # Canal de livraison des codes : "sms" (défaut), "whatsapp", ou
+    # "whatsapp_then_sms" (WhatsApp d'abord, repli SMS si WhatsApp échoue).
+    otp_channel: Literal["sms", "whatsapp", "whatsapp_then_sms"] = "sms"
+
+    @field_validator(
+        "termii_api_key",
+        "termii_sender_id",
+        "termii_whatsapp_sender",
+        "termii_base_url",
+        mode="before",
+    )
+    @classmethod
+    def clean_termii_value(cls, v: object) -> object:
+        # Valeurs collées dans un tableau de bord : même nettoyage que S3_*
+        # (retour à la ligne, espaces, caractères invisibles en bordure).
+        if isinstance(v, str):
+            v = clean_setting_value(v)
+            return v or None
+        return v
+
+    @model_validator(mode="after")
+    def validate_termii(self) -> "Settings":
+        """Fournisseur Termii : tous les problèmes listés d'un coup, jamais la
+        clé d'API. Sans effet si SMS_PROVIDER n'est pas `termii`."""
+        if self.sms_provider != "termii":
+            return self
+        problems: list[str] = []
+        missing = [
+            name
+            for name, value in (
+                ("TERMII_API_KEY", self.termii_api_key),
+                ("TERMII_SENDER_ID", self.termii_sender_id),
+                ("TERMII_BASE_URL", self.termii_base_url),
+            )
+            if not value
+        ]
+        if missing:
+            problems.append(f"Termii incomplet, à renseigner : {', '.join(missing)}.")
+        if self.termii_api_key and has_hidden_characters(self.termii_api_key):
+            problems.append(
+                "TERMII_API_KEY contient un espace ou un caractère invisible (valeur non "
+                "affichée) : la ressaisir."
+            )
+        for name, sender in (
+            ("TERMII_SENDER_ID", self.termii_sender_id),
+            ("TERMII_WHATSAPP_SENDER", self.termii_whatsapp_sender),
+        ):
+            if sender and not _TERMII_SENDER_RE.fullmatch(sender):
+                problems.append(
+                    f"{name} invalide ({sender!r}) : 3 à 11 caractères alphanumériques "
+                    "(exigence Termii)."
+                )
+        if self.termii_base_url and not is_valid_https_base_url(
+            self.termii_base_url, allow_http=self.is_local
+        ):
+            problems.append(
+                f"TERMII_BASE_URL invalide ({self.termii_base_url!r}) : l'URL https:// "
+                "affichée dans le tableau de bord Termii, sans espace ni caractère invisible."
+            )
+        if not 0 < self.termii_timeout_seconds <= self.termii_total_timeout_seconds:
+            problems.append(
+                "TERMII_TIMEOUT_SECONDS doit être positif et ne pas dépasser "
+                "TERMII_TOTAL_TIMEOUT_SECONDS."
+            )
+        if self.otp_channel != "sms" and not 4 <= self.otp_code_length <= 6:
+            problems.append(
+                f"OTP_CHANNEL={self.otp_channel} : le code WhatsApp de Termii compte 4 à 6 "
+                f"chiffres, OTP_CODE_LENGTH vaut {self.otp_code_length}."
+            )
+        if problems:
+            raise ValueError("Fournisseur SMS Termii mal configuré :\n- " + "\n- ".join(problems))
+        return self
 
     # Région par défaut pour interpréter un numéro écrit sans indicatif
     # (ex. "771234567" -> Sénégal). Code région ISO 3166-1 alpha-2 attendu
@@ -918,6 +1052,8 @@ class Settings(BaseSettings):
                 "SMS_PROVIDER=unconfigured : aucun fournisseur SMS réel n'est branché, personne "
                 "ne recevrait son code de connexion (voir DEPLOYMENT.md, prérequis)."
             )
+        if self.termii_api_key and looks_like_placeholder(self.termii_api_key):
+            problems.append("TERMII_API_KEY est une valeur d'exemple.")
 
         for name, backend in (
             ("STORAGE_BACKEND", self.storage_backend),
