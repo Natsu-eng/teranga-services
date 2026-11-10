@@ -2,27 +2,19 @@
  * Demandes des clients : triage IA, demande, éligibilité d'un artisan.
  */
 export interface AIAnalysisResult {
-  trade: string;
+  // `null` (avec `tradeCode`) : aucun métier reconnu dans la description --
+  // le client le choisit lui-même, jamais un métier imposé par défaut.
+  trade: string | null;
   // Backend trade code (e.g. "plomberie") backing `trade` (its French label) —
   // the value a service_request/artisan search actually filters on, kept
   // alongside the display label instead of forcing callers to reverse-map it.
-  tradeCode: string;
-  priceEstimate: string;
-  // Raw FCFA bounds backing `priceEstimate`'s formatted string — needed to
-  // relay the AI's estimate to `POST /requests` (ai_estimate_min/max_fcfa).
-  priceMinFcfa: number;
-  priceMaxFcfa: number;
-  recommendedCount: number;
-  explanation: string;
+  tradeCode: string | null;
   urgency: string;
   // Backend urgency enum backing `urgency` (its French display label).
   urgencyCode: 'normal' | 'urgent' | 'immediat';
-  suggestedDevis: {
-    title: string;
-    labor: number;
-    materials: number;
-    total: number;
-  };
+  // Aucune estimation de prix : sans fondement réel (table fixe par métier),
+  // elle n'est plus ni affichée ni transmise (prévu : la calculer un jour à
+  // partir des devis réellement acceptés).
 }
 
 export type ServiceRequestStatus = 'ouverte' | 'en_relation' | 'convertie' | 'annulee' | 'expiree';
@@ -37,8 +29,8 @@ export interface ServiceRequest {
   /** Lieu confirmé par le client (« Dakar Plateau »…) ; null pour les demandes antérieures. */
   locationLabel: string | null;
   urgency: string;
-  aiEstimateMinFcfa: number | null;
-  aiEstimateMaxFcfa: number | null;
+  // L'estimation enregistrée sur les anciennes demandes reste en base mais
+  // n'est plus lue : chiffre sans fondement réel, jamais réaffiché.
   status: ServiceRequestStatus;
   /** Demande ouverte : date à laquelle elle expirera sans artisan (sinon null). */
   expiresAt: string | null;

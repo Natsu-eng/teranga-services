@@ -14,6 +14,7 @@ import { formatFcfa } from '../../lib/format';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { ArtisanEarnings, PayoutChannel, PayoutSettings } from '../../types';
 import { MoneyBreakdown } from './components/MoneyBreakdown';
+import { isOnlinePaymentActive, usePaymentOptions } from './hooks/usePaymentOptions';
 import { CHANNEL_LABELS, paymentPill } from './paymentText';
 
 /**
@@ -94,12 +95,24 @@ const PayoutSettingsCard: React.FC = () => {
 };
 
 /**
- * Gains de l'artisan (/pro/gains) : ce qu'il a touché, ce qui est en
- * séquestre, et pour chaque intervention le prix du devis, la commission
- * prélevée par Téranga (taux figé) et son net — aucun montant ambigu.
+ * Gains de l'artisan (/pro/gains) : ce qu'il a encaissé et, pour chaque
+ * intervention, le prix du devis, la commission Téranga (taux figé) et son
+ * net — aucun montant ambigu.
+ *
+ * Suit la configuration RÉELLE (GET /payments/options) : en mode espèces,
+ * seuls les espèces encaissées et la commission due sont montrées ; les
+ * versements, le séquestre et le choix du moyen de versement n'apparaissent
+ * que si le paiement en ligne est actif.
  */
 export const EarningsScreen: React.FC = () => {
   const { data, isLoading, error, run, reload } = useAsyncResource<ArtisanEarnings>();
+  const {
+    data: options,
+    isLoading: isOptionsLoading,
+    error: optionsError,
+    reload: reloadOptions,
+  } = usePaymentOptions();
+  const online = options !== null && isOnlinePaymentActive(options);
 
   useEffect(() => {
     run(() => api.getMyEarnings());
@@ -109,7 +122,7 @@ export const EarningsScreen: React.FC = () => {
     <>
       <AppBar title="Mes gains" backTo="/pro" tone="pro" />
       <main className="w-full max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-10 space-y-7">
-        {isLoading && !data ? (
+        {(isLoading && !data) || (isOptionsLoading && !options) ? (
           <div className="grid grid-cols-2 gap-3" aria-busy="true">
             {[0, 1, 2, 3].map((key) => (
               <Skeleton key={key} className="h-28 rounded-card" />
@@ -117,32 +130,38 @@ export const EarningsScreen: React.FC = () => {
           </div>
         ) : error && !data ? (
           <ErrorState message={error.message} onRetry={reload} />
-        ) : data ? (
+        ) : optionsError && !options ? (
+          <ErrorState message={optionsError.message} onRetry={reloadOptions} />
+        ) : data && options ? (
           <>
             <section aria-label="Synthèse" className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <StatTile
-                  icon={<Wallet className="w-5 h-5" />}
-                  label="Versé sur votre compte"
-                  value={formatFcfa(data.totals.paidOutFcfa)}
-                  hint={
-                    data.totals.payoutPendingFcfa > 0
-                      ? `+ ${formatFcfa(data.totals.payoutPendingFcfa)} en cours de versement`
-                      : 'Net, commission déduite'
-                  }
-                />
-                <StatTile
-                  icon={<ShieldCheck className="w-5 h-5" />}
-                  label="En séquestre"
-                  value={formatFcfa(data.totals.inEscrowFcfa)}
-                  hint="Net à recevoir à la fin des travaux"
-                />
-                <StatTile
-                  icon={<Landmark className="w-5 h-5" />}
-                  label="Commissions prélevées"
-                  value={formatFcfa(data.totals.commissionCollectedFcfa)}
-                  hint="Déduites de vos versements"
-                />
+                {online && (
+                  <>
+                    <StatTile
+                      icon={<Wallet className="w-5 h-5" />}
+                      label="Versé sur votre compte"
+                      value={formatFcfa(data.totals.paidOutFcfa)}
+                      hint={
+                        data.totals.payoutPendingFcfa > 0
+                          ? `+ ${formatFcfa(data.totals.payoutPendingFcfa)} en cours de versement`
+                          : 'Net, commission déduite'
+                      }
+                    />
+                    <StatTile
+                      icon={<ShieldCheck className="w-5 h-5" />}
+                      label="En séquestre"
+                      value={formatFcfa(data.totals.inEscrowFcfa)}
+                      hint="Net à recevoir à la fin des travaux"
+                    />
+                    <StatTile
+                      icon={<Landmark className="w-5 h-5" />}
+                      label="Commissions prélevées"
+                      value={formatFcfa(data.totals.commissionCollectedFcfa)}
+                      hint="Déduites de vos versements"
+                    />
+                  </>
+                )}
                 <StatTile
                   icon={<Banknote className="w-5 h-5" />}
                   label="Espèces encaissées"
@@ -153,14 +172,22 @@ export const EarningsScreen: React.FC = () => {
                       : 'Aucune commission due'
                   }
                 />
+                {!online && (
+                  <StatTile
+                    icon={<Landmark className="w-5 h-5" />}
+                    label="Commission due"
+                    value={formatFcfa(data.totals.commissionDueFcfa)}
+                    hint="Sur les travaux réglés en espèces"
+                  />
+                )}
               </div>
               {data.totals.commissionDueFcfa > 0 && (
                 <Card tone="tint" padding="sm" className="flex items-start gap-2 text-sm">
                   <Clock aria-hidden className="w-4 h-4 shrink-0 mt-0.5 text-primary-emerald" />
                   <span>
                     Sur les travaux réglés en espèces ou hors de l&apos;application, la commission
-                    de Téranga ({formatFcfa(data.totals.commissionDueFcfa)}) reste due. Les
-                    paiements en ligne la déduisent automatiquement.
+                    de Téranga ({formatFcfa(data.totals.commissionDueFcfa)}) reste due.
+                    {online && ' Les paiements en ligne la déduisent automatiquement.'}
                   </span>
                 </Card>
               )}
@@ -201,10 +228,14 @@ export const EarningsScreen: React.FC = () => {
           </>
         ) : null}
 
-        <section aria-labelledby="versements" className="space-y-3">
-          <SectionHeader id="versements" title="Mes versements" />
-          <PayoutSettingsCard />
-        </section>
+        {/* Versements : seulement si le paiement en ligne existe (en espèces,
+            l'artisan est payé de la main à la main, rien n'est versé). */}
+        {online && (
+          <section aria-labelledby="versements" className="space-y-3">
+            <SectionHeader id="versements" title="Mes versements" />
+            <PayoutSettingsCard />
+          </section>
+        )}
       </main>
     </>
   );

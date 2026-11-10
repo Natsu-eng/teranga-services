@@ -1,5 +1,12 @@
 import type { StatusTone } from '../../components/ui/StatusPill';
-import type { PaymentChannel, PaymentSummary, PayoutChannel, UserRole } from '../../types';
+import type {
+  PaymentChannel,
+  PaymentOptions,
+  PaymentSummary,
+  PayoutChannel,
+  UserRole,
+} from '../../types';
+import { isOnlinePaymentActive } from './hooks/usePaymentOptions';
 
 /** Libellés des moyens de paiement et de versement. */
 export const CHANNEL_LABELS: Record<PaymentChannel | PayoutChannel, string> = {
@@ -75,4 +82,25 @@ export function canStartPayment(payment: PaymentSummary): boolean {
     // Espèces déclarées : le client peut encore préférer le paiement sécurisé.
     payment.status === 'reussi'
   );
+}
+
+/**
+ * Ce que le client doit savoir, selon la configuration RÉELLE : jamais de
+ * séquestre promis sans paiement en ligne actif, jamais « bientôt » sans
+ * moyen effectivement prévu, jamais « espèces » si elles sont refusées.
+ */
+export function paymentMethodsText(options: PaymentOptions): string {
+  if (isOnlinePaymentActive(options)) {
+    return (
+      "Payez un devis accepté depuis le suivi de vos travaux. En ligne, Téranga conserve votre argent et ne le verse à l'artisan qu'après votre confirmation de fin des travaux." +
+      (options.cashEnabled ? ' Vous pouvez aussi régler en espèces.' : '')
+    );
+  }
+  if (options.cashEnabled) {
+    return (
+      "Vous réglez l'artisan en espèces, en main propre, une fois les travaux faits." +
+      (options.upcomingChannels.length > 0 ? ' Le paiement en ligne sécurisé arrive bientôt.' : '')
+    );
+  }
+  return "Aucun moyen de paiement n'est proposé pour le moment.";
 }

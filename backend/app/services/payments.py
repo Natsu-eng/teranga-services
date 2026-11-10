@@ -168,8 +168,11 @@ def ensure_commission_fee(
 
 
 def get_options(settings: Settings, provider: PaymentProvider | None) -> PaymentOptionsOut:
+    configured = list(settings.payment_online_channels)
+    online = provider is not None
     return PaymentOptionsOut(
-        online_channels=list(settings.payment_online_channels) if provider is not None else [],
+        online_channels=configured if online else [],
+        upcoming_channels=[] if online else configured,
         cash_enabled=settings.payment_cash_enabled,
         currency=settings.payment_currency,
     )

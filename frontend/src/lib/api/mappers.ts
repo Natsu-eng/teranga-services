@@ -63,19 +63,6 @@ export const URGENCY_LABELS: Record<BackendTriageResult['urgency'], string> = {
   immediat: 'immédiate',
 };
 
-// A plain space, not `toLocaleString('fr-FR')`'s narrow no-break space
-// (U+202F) — matches the literal thousands-separator style already used for
-// this string elsewhere in the codebase (mock.ts's fallback defaults).
-export function formatFcfaThousands(n: number): string {
-  return Math.round(n)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
-
-export function formatPriceRangeFcfa(minFcfa: number, maxFcfa: number): string {
-  return `${formatFcfaThousands(minFcfa)} – ${formatFcfaThousands(maxFcfa)} FCFA`;
-}
-
 export function formatDistanceM(distanceM: number): string {
   if (distanceM < 1000) return `${Math.round(distanceM)} m`;
   return `${(distanceM / 1000).toFixed(1)} km`;
@@ -113,8 +100,6 @@ export function mapServiceRequest(request: BackendServiceRequest): ServiceReques
     location: { lat: request.location.lat, lng: request.location.lng },
     locationLabel: request.location_label ?? null,
     urgency: request.urgency,
-    aiEstimateMinFcfa: request.ai_estimate_min_fcfa,
-    aiEstimateMaxFcfa: request.ai_estimate_max_fcfa,
     status: request.status,
     expiresAt: request.expires_at ?? null,
     createdAt: request.created_at,
@@ -286,9 +271,6 @@ export function mapArtisan(
     // No `near` supplied (no geolocation wired into search yet) -> null on
     // the backend -> blank rather than an invented distance.
     distance: item.distance_m != null ? formatDistanceM(item.distance_m) : '',
-    // No reverse-geocoding available from a geography point -> a neutral,
-    // still-true-today constant rather than a fabricated address.
-    location: 'Dakar, Sénégal',
     // Prix indicatif réel : le tarif horaire le plus bas parmi les métiers
     // déclarés (`hourly_rate_fcfa`, exposé publiquement par ArtisanTradeOut).
     // Sans métier déclaré, une mention neutre plutôt qu'un montant inventé.
@@ -298,12 +280,6 @@ export function mapArtisan(
     tradeCodes: item.trades.map((t) => t.trade.code),
     bio: item.bio ?? '',
     stats: {
-      // review_count is the closest public proxy for "chantiers réalisés" the
-      // backend exposes today.
-      chantiers: String(item.review_count),
-      // response_rate is always null in this backend lot (no responded_at
-      // tracking yet, BUILD_PLAN.md Lot 9) -> honest "not available" copy.
-      responseTime: 'Non communiqué',
       experience: item.years_experience != null ? `${item.years_experience} ans` : 'Non communiqué',
     },
     realisations: [],

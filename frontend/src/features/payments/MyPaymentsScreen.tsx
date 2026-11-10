@@ -12,6 +12,7 @@ import { api } from '../../lib/api';
 import { formatFcfa } from '../../lib/format';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { ClientPayment, PaymentStatus } from '../../types';
+import { isOnlinePaymentActive, usePaymentOptions } from './hooks/usePaymentOptions';
 import { CHANNEL_LABELS, formatPaymentDate } from './paymentText';
 
 const STATUS: Record<PaymentStatus, { label: string; tone: StatusTone }> = {
@@ -38,6 +39,9 @@ function lastStep(payment: ClientPayment): string {
  */
 export const MyPaymentsScreen: React.FC = () => {
   const { data, isLoading, error, run, reload } = useAsyncResource<ClientPayment[]>();
+  // Le texte d'introduction suit la configuration réelle : la conservation
+  // par Téranga (séquestre) n'est évoquée que si le paiement en ligne existe.
+  const { data: options } = usePaymentOptions();
 
   useEffect(() => {
     run(() => api.listMyPayments());
@@ -47,10 +51,13 @@ export const MyPaymentsScreen: React.FC = () => {
     <>
       <AppBar title="Mes paiements" backTo="/profil" />
       <main className="w-full max-w-3xl mx-auto px-4 md:px-8 pt-4 pb-10 space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Vos paiements en ligne sont conservés par Téranga jusqu&apos;à votre confirmation de fin
-          des travaux, puis versés à l&apos;artisan. Aucun frais ne s&apos;ajoute au prix du devis.
-        </p>
+        {options && (
+          <p className="text-sm text-muted-foreground">
+            {isOnlinePaymentActive(options)
+              ? "Vos paiements en ligne sont conservés par Téranga jusqu'à votre confirmation de fin des travaux, puis versés à l'artisan. Aucun frais ne s'ajoute au prix du devis."
+              : "Vous réglez l'artisan en espèces, une fois les travaux faits : vos règlements déclarés apparaissent ici. Aucun frais ne s'ajoute au prix du devis."}
+          </p>
+        )}
         {isLoading && !data ? (
           <div className="space-y-3" aria-busy="true">
             {[0, 1, 2].map((key) => (

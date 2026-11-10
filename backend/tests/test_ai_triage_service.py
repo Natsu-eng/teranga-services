@@ -109,6 +109,23 @@ async def test_falls_back_to_heuristic_when_provider_raises(
     assert result.trade_code == "electricite"
 
 
+async def test_a_provider_without_trade_is_relayed_without_a_default_trade(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le fournisseur ne reconnaît aucun métier : la réponse le dit telle
+    quelle -- pas de repli heuristique qui imposerait un métier."""
+    no_trade = TriageResult(trade_code=None, urgency=Urgency.NORMAL)
+    monkeypatch.setattr(
+        ai_triage, "get_ai_triage_provider", lambda settings: _FakeProvider(result=no_trade)
+    )
+
+    result = await ai_triage.analyze_problem(
+        db_session, "Une demande hors des métiers proposés.", settings=_mistral_settings()
+    )
+
+    assert result == no_trade
+
+
 async def test_output_contract_is_stable_across_providers(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -127,6 +144,8 @@ async def test_output_contract_is_stable_across_providers(
     )
 
     assert set(from_provider.model_dump()) == set(from_heuristic.model_dump())
+    assert from_provider.suggested_quote is not None
+    assert from_heuristic.suggested_quote is not None
     assert set(from_provider.suggested_quote.model_dump()) == set(
         from_heuristic.suggested_quote.model_dump()
     )

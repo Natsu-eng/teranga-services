@@ -76,6 +76,21 @@ async def test_analyze_response_contract_has_exactly_the_expected_keys() -> None
     assert set(body["suggested_quote"]) == {"labor_fcfa", "materials_fcfa", "total_fcfa"}
 
 
+async def test_analyze_says_when_no_trade_is_recognised() -> None:
+    """Aucun métier reconnu : même contrat de clés, valeurs nulles -- le front
+    demande alors au client de choisir le métier."""
+    async with await _client() as client:
+        response = await client.post(
+            "/api/v1/ai/analyze", json={"description": "J'ai besoin d'un jardinier."}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["trade_code"] is None
+    assert body["price_min_fcfa"] is None and body["price_max_fcfa"] is None
+    assert body["suggested_quote"] is None
+
+
 async def test_analyze_does_not_require_authentication() -> None:
     async with await _client() as client:
         response = await client.post(

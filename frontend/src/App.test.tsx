@@ -153,7 +153,7 @@ describe('routing', () => {
 
     renderAt('/profil');
 
-    await waitFor(() => expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Moyens de paiement')).toBeInTheDocument());
   });
 
   it('renders the real artisan dashboard (not the old "coming soon" placeholder) at /pro once authenticated', async () => {

@@ -162,15 +162,8 @@ function createId(prefix: string): string {
 const FIXTURE_ANALYSIS: AIAnalysisResult = {
   trade: 'Plomberie',
   tradeCode: 'plomberie',
-  priceEstimate: '8 000 – 15 000 FCFA',
-  priceMinFcfa: 8_000,
-  priceMaxFcfa: 15_000,
-  recommendedCount: 3,
-  explanation:
-    "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
   urgency: 'normale',
   urgencyCode: 'normal',
-  suggestedDevis: { title: 'Plomberie', labor: 8_000, materials: 4_000, total: 12_000 },
 };
 
 export const mockApiClient: ApiClient = {
@@ -213,7 +206,7 @@ export const mockApiClient: ApiClient = {
     if (!description.trim()) {
       throw new ApiError('validation', 'La description est requise.');
     }
-    return { ...FIXTURE_ANALYSIS, suggestedDevis: { ...FIXTURE_ANALYSIS.suggestedDevis } };
+    return { ...FIXTURE_ANALYSIS };
   },
 
   async getArtisanStats(artisanId: string) {
@@ -244,8 +237,6 @@ export const mockApiClient: ApiClient = {
       location: input.location,
       locationLabel: input.locationLabel,
       urgency: input.urgency,
-      aiEstimateMinFcfa: input.aiEstimateMinFcfa ?? null,
-      aiEstimateMaxFcfa: input.aiEstimateMaxFcfa ?? null,
       status: 'ouverte',
       expiresAt: null,
       createdAt: new Date().toISOString(),
@@ -448,6 +439,7 @@ export const mockApiClient: ApiClient = {
     await simulateNetworkLatency();
     return {
       onlineChannels: ['wave', 'orange_money', 'carte'],
+      upcomingChannels: [],
       cashEnabled: true,
       currency: 'XOF',
     };

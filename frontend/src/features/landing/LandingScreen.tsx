@@ -1,5 +1,12 @@
 import React from 'react';
-import { ArrowRight, Lock, MessageSquareText, ReceiptText, Sparkles, Star } from 'lucide-react';
+import {
+  ArrowRight,
+  Lock,
+  MessageSquareQuote,
+  MessageSquareText,
+  ReceiptText,
+  UserCheck,
+} from 'lucide-react';
 import { Link } from 'react-router';
 import { ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -14,7 +21,7 @@ import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
  */
 const TRUST_POINTS = [
   {
-    icon: <Star aria-hidden className="w-5 h-5" fill="currentColor" strokeWidth={0} />,
+    icon: <MessageSquareQuote aria-hidden className="w-5 h-5" />,
     title: 'Avis authentiques',
     text: 'Seul un client dont l’intervention est terminée peut laisser un avis.',
   },
@@ -29,10 +36,10 @@ const STEPS = [
   {
     icon: <MessageSquareText aria-hidden className="w-5 h-5" />,
     title: 'Décrivez votre besoin',
-    text: 'Notre assistant identifie le métier et estime un budget.',
+    text: 'Quelques phrases suffisent : nous identifions le métier concerné.',
   },
   {
-    icon: <Sparkles aria-hidden className="w-5 h-5" />,
+    icon: <UserCheck aria-hidden className="w-5 h-5" />,
     title: 'Choisissez un artisan',
     text: 'Comparez les profils vérifiés, leurs avis et leur distance.',
   },

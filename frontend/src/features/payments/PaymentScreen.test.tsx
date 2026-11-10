@@ -41,6 +41,7 @@ describe('PaymentScreen', () => {
     mockedApi.getInterventionById.mockReset().mockResolvedValue(payableInterventionFixture());
     mockedApi.getPaymentOptions.mockReset().mockResolvedValue({
       onlineChannels: ['wave', 'orange_money', 'carte'],
+      upcomingChannels: [],
       cashEnabled: true,
       currency: 'XOF',
     });
@@ -184,6 +185,7 @@ describe('PaymentScreen', () => {
   it("n'affiche que les moyens réellement proposés par le serveur", async () => {
     mockedApi.getPaymentOptions.mockResolvedValue({
       onlineChannels: [],
+      upcomingChannels: ['wave', 'orange_money', 'carte'],
       cashEnabled: true,
       currency: 'XOF',
     });
@@ -196,6 +198,7 @@ describe('PaymentScreen', () => {
   it('lancement espèces seulement : aucune promesse de séquestre, le cash fonctionne', async () => {
     mockedApi.getPaymentOptions.mockResolvedValue({
       onlineChannels: [],
+      upcomingChannels: ['wave', 'orange_money', 'carte'],
       cashEnabled: true,
       currency: 'XOF',
     });

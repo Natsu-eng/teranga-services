@@ -48,6 +48,10 @@ async def analyze_problem(
         )
         return await HeuristicTriageProvider().analyze(description)
 
+    if result.trade_code is None:
+        # Le fournisseur ne reconnaît aucun métier : réponse honnête, le
+        # client choisira lui-même (pas de repli sur un métier par défaut).
+        return result
     trade = await trades_repository.get_active_trade_by_code(session, result.trade_code)
     if trade is None:
         logger.warning(

@@ -25,13 +25,12 @@ const artisanFixture: Artisan = {
   rating: 4.7,
   reviewCount: 10,
   distance: '1 km',
-  location: 'Dakar, Sénégal',
   priceBase: '10.000 CFA',
   priceNumber: 10000,
   tags: ['Plomberie'],
   tradeCodes: ['plomberie'],
   bio: 'Bio de test',
-  stats: { chantiers: '10+', responseTime: '< 1h', experience: '2 ans' },
+  stats: { experience: '2 ans' },
   realisations: [],
   reviews: [],
   available: true,
@@ -74,6 +73,40 @@ describe('ClientHomeScreen', () => {
     expect(screen.getByText('Impossible de charger les artisans.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Réessayer' }));
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('titre « Artisans vérifiés » seulement si tous les artisans affichés le sont', () => {
+    mockedUseArtisans.mockReturnValue({
+      data: [artisanFixture],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Artisans vérifiés' })).toBeInTheDocument();
+    expect(screen.queryByText('Artisans recommandés')).not.toBeInTheDocument();
+  });
+
+  it('sinon, un titre neutre (jamais « près de vous » : la liste n’est pas filtrée par distance)', () => {
+    mockedUseArtisans.mockReturnValue({
+      data: [artisanFixture, { ...artisanFixture, id: 'a2', verified: false }],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Artisans sur Téranga' })).toBeInTheDocument();
+    expect(screen.queryByText(/près de vous/)).not.toBeInTheDocument();
   });
 
   it('renders the fetched artisans on success', () => {

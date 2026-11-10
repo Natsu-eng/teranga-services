@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, MapPin, Send, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowRight, ClipboardList, MapPin, PenLine, Send, TriangleAlert } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppBar } from '../../components/ui/AppBar';
 import { Avatar } from '../../components/ui/Avatar';
@@ -7,6 +7,7 @@ import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { TextAreaField } from '../../components/ui/Field';
+import { fieldClasses } from '../../components/ui/styles';
 import { SectionHeader } from '../../components/ui/SectionHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
@@ -19,6 +20,7 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { ArtisanCard, ArtisanCardSkeleton } from '../artisans/components/ArtisanCard';
 import { useArtisan } from '../artisans/hooks/useArtisan';
 import { useArtisans } from '../artisans/hooks/useArtisans';
+import { useTrades } from '../artisans/hooks/useTrades';
 import { PlaceSection } from '../location/PlaceSection';
 import { useArtisanCoverage } from '../location/useArtisanCoverage';
 import { usePlace } from '../location/usePlace';
@@ -48,12 +50,12 @@ function searchUrlFor(tradeCode: string, position: Coordinates): string {
 }
 
 /**
- * Demande assistée par l'IA (/demande).
+ * Demande de mise en relation (/demande).
  *
  * 1. Le client décrit son problème ; l'analyse (métier, estimation,
  *    urgence) se met à jour après chaque pause de frappe.
- * 2. Le résultat ressort sur une carte vert profond, suivi de trois
- *    artisans du métier détecté.
+ * 2. Le récapitulatif (métier proposé, modifiable, et urgence) ressort sur
+ *    une carte vert profond, suivi de trois artisans du métier retenu.
  * 3. Le client voit et choisit le LIEU de l'intervention (quartier, ou sa
  *    position GPS s'il l'accepte explicitement) : c'est ce lieu confirmé
  *    qui est enregistré, jamais une position lue en silence.
@@ -85,6 +87,10 @@ export const DescribeProblemScreen: React.FC = () => {
   const { place, setPlace } = usePlace();
 
   const [description, setDescription] = useState('');
+  // Métier CHOISI par le client dans la liste réelle (GET /trades) : prime
+  // toujours sur la proposition tirée de la description.
+  const [chosenTradeCode, setChosenTradeCode] = useState<string | null>(null);
+  const { data: trades } = useTrades();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Demande déjà créée mais non adressée à l'artisan visé (refus serveur) :
@@ -103,8 +109,25 @@ export const DescribeProblemScreen: React.FC = () => {
     return () => clearTimeout(timer);
   }, [trimmed, analyze]);
 
-  // Trois artisans du métier détecté (aucun appel avant la première analyse).
-  const detectedTrade = aiResult?.tradeCode ?? null;
+  // Métier retenu : celui choisi par le client, sinon celui proposé d'après
+  // la description ; `null` tant qu'aucun n'est reconnu ni choisi (l'envoi
+  // est alors impossible : jamais un métier imposé par défaut).
+  const selectedTradeCode = chosenTradeCode ?? aiResult?.tradeCode ?? null;
+  const selectedTradeLabel =
+    trades?.find((trade) => trade.code === selectedTradeCode)?.labelFr ??
+    (selectedTradeCode === aiResult?.tradeCode ? aiResult?.trade : null) ??
+    selectedTradeCode;
+
+  // Options du sélecteur : la liste réelle ; avant son chargement, au moins
+  // le métier proposé (jamais une valeur sélectionnée sans option visible).
+  const tradeOptions =
+    trades ??
+    (selectedTradeCode !== null && selectedTradeLabel !== null
+      ? [{ code: selectedTradeCode, labelFr: selectedTradeLabel }]
+      : []);
+
+  // Trois artisans du métier retenu (aucun appel avant la première analyse).
+  const detectedTrade = selectedTradeCode;
   const suggestedFilters = useMemo<ArtisanFilters | undefined>(
     () => (detectedTrade ? { trade: detectedTrade, pageSize: SUGGESTED_COUNT } : undefined),
     [detectedTrade],
@@ -116,29 +139,29 @@ export const DescribeProblemScreen: React.FC = () => {
     reload: reloadSuggested,
   } = useArtisans(suggestedFilters, { enabled: detectedTrade !== null });
 
-  // Relais depuis une fiche : seulement si l'artisan exerce le métier détecté
+  // Relais depuis une fiche : seulement si l'artisan exerce le métier retenu
   // ET couvre le lieu choisi — vérifié par le serveur AVANT l'envoi.
   const targetTradeMatches =
     targetArtisan != null &&
-    aiResult != null &&
-    targetArtisan.tradeCodes.includes(aiResult.tradeCode);
+    selectedTradeCode !== null &&
+    targetArtisan.tradeCodes.includes(selectedTradeCode);
   const coverage = useArtisanCoverage(
     targetTradeMatches && targetArtisan ? targetArtisan.id : null,
-    targetTradeMatches && aiResult ? aiResult.tradeCode : null,
+    targetTradeMatches ? selectedTradeCode : null,
     place,
   );
   const targetOutOfZone = targetTradeMatches && coverage.check?.eligible === false;
   const sendsToTarget = targetTradeMatches && !targetOutOfZone;
   const targetMismatch =
     targetArtisan != null &&
-    aiResult != null &&
-    !targetArtisan.tradeCodes.includes(aiResult.tradeCode);
+    selectedTradeCode !== null &&
+    !targetArtisan.tradeCodes.includes(selectedTradeCode);
 
   // Seul un client crée une demande (POST /requests, réservé côté serveur).
   const isWrongRole = auth.isAuthenticated && auth.role !== 'client';
 
   const handleSubmit = async () => {
-    if (!aiResult) return;
+    if (!aiResult || selectedTradeCode === null) return;
 
     // La création d'une demande exige d'être connecté : renvoie vers la
     // connexion et revient sur ce parcours ensuite (OtpScreen lit `from`).
@@ -153,15 +176,13 @@ export const DescribeProblemScreen: React.FC = () => {
       // Le lieu CONFIRMÉ par le client (affiché au-dessus du bouton).
       const position: Coordinates = { lat: place.lat, lng: place.lng };
       const request = await api.createServiceRequest({
-        tradeCode: aiResult.tradeCode,
+        tradeCode: selectedTradeCode,
         description: trimmed,
         // L'envoi de photo n'existe pas encore côté serveur (BUILD_PLAN.md §6 Lot 11).
         photoUrl: null,
         location: position,
         locationLabel: place.label,
         urgency: aiResult.urgencyCode,
-        aiEstimateMinFcfa: aiResult.priceMinFcfa,
-        aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
       });
 
       if (sendsToTarget && targetArtisan) {
@@ -186,7 +207,7 @@ export const DescribeProblemScreen: React.FC = () => {
       // Liste réellement filtrée côté serveur sur le métier détecté par
       // l'IA et la position -- jamais un artisan choisi au hasard
       // (AUDIT_PHASE2.md §6).
-      navigate(searchUrlFor(aiResult.tradeCode, position));
+      navigate(searchUrlFor(selectedTradeCode, position));
     } catch (err) {
       setSubmitError(
         err instanceof ApiError ? err.message : 'Une erreur est survenue. Merci de réessayer.',
@@ -227,7 +248,7 @@ export const DescribeProblemScreen: React.FC = () => {
           maxLength={MAX_LENGTH}
           rows={5}
           placeholder="Ex. : le robinet de la cuisine fuit sous l'évier depuis ce matin."
-          hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, meilleure est l'estimation.`}
+          hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, plus vite on trouve le bon artisan.`}
         />
 
         <PlaceSection place={place} onChange={setPlace} />
@@ -256,22 +277,55 @@ export const DescribeProblemScreen: React.FC = () => {
               <Card tone="dark" padding="lg" className="space-y-5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="inline-flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.12em] text-accent">
-                    <Sparkles aria-hidden className="w-4 h-4" />
-                    Analyse IA
+                    <ClipboardList aria-hidden className="w-4 h-4" />
+                    Votre demande
                   </p>
                   {isAnalyzing && (
                     <span className="text-xs text-primary-emerald-foreground">Mise à jour…</span>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-primary-emerald-foreground">Métier détecté</p>
-                  <p className="font-display text-display-md font-semibold">{aiResult.trade}</p>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="demande-metier"
+                    className="text-sm text-primary-emerald-foreground"
+                  >
+                    {chosenTradeCode !== null
+                      ? 'Métier choisi'
+                      : aiResult.tradeCode !== null
+                        ? 'Métier proposé'
+                        : 'Métier'}
+                  </label>
+                  {/* Liste réelle des métiers : le client corrige ou complète la proposition. */}
+                  <select
+                    id="demande-metier"
+                    value={selectedTradeCode ?? ''}
+                    onChange={(event) => setChosenTradeCode(event.target.value || null)}
+                    aria-describedby="demande-metier-aide"
+                    className={fieldClasses({ className: 'h-12 font-semibold' })}
+                  >
+                    {selectedTradeCode === null && (
+                      <option value="" disabled>
+                        Choisissez le métier
+                      </option>
+                    )}
+                    {tradeOptions.map((trade) => (
+                      <option key={trade.code} value={trade.code}>
+                        {trade.labelFr}
+                      </option>
+                    ))}
+                  </select>
+                  <p
+                    id="demande-metier-aide"
+                    className="text-xs text-primary-emerald-foreground/90"
+                  >
+                    {chosenTradeCode !== null
+                      ? 'Vous pouvez le changer à tout moment.'
+                      : aiResult.tradeCode !== null
+                        ? "Proposé d'après votre description : vous pouvez le changer."
+                        : "Nous n'avons pas reconnu le métier dans votre description : choisissez-le."}
+                  </p>
                 </div>
-                <dl className="grid grid-cols-2 gap-4 border-t border-white/15 pt-4">
-                  <div className="space-y-1">
-                    <dt className="text-sm text-primary-emerald-foreground">Estimation</dt>
-                    <dd className="font-semibold">{aiResult.priceEstimate}</dd>
-                  </div>
+                <dl className="border-t border-white/15 pt-4">
                   <div className="space-y-1">
                     <dt className="text-sm text-primary-emerald-foreground">Urgence</dt>
                     <dd>
@@ -281,10 +335,8 @@ export const DescribeProblemScreen: React.FC = () => {
                     </dd>
                   </div>
                 </dl>
-                <p className="text-sm text-primary-emerald-foreground">{aiResult.explanation}</p>
                 <p className="text-xs text-primary-emerald-foreground/90">
-                  Estimation indicative basée sur des cas similaires à Dakar : le prix final est
-                  fixé par le devis de l&apos;artisan.
+                  Le prix est fixé par le devis de l&apos;artisan.
                 </p>
               </Card>
 
@@ -305,8 +357,8 @@ export const DescribeProblemScreen: React.FC = () => {
                 <Card tone="tint" className="flex items-start gap-3 text-sm text-foreground">
                   <TriangleAlert aria-hidden className="w-5 h-5 text-accent-foreground shrink-0" />
                   <span>
-                    {aiResult.trade} ne fait pas partie des métiers de {targetArtisan.name}. Votre
-                    demande vous mènera aux artisans de ce métier.
+                    {selectedTradeLabel} ne fait pas partie des métiers de {targetArtisan.name}.
+                    Votre demande vous mènera aux artisans de ce métier.
                   </span>
                 </Card>
               )}
@@ -337,11 +389,11 @@ export const DescribeProblemScreen: React.FC = () => {
             </>
           ) : (
             <Card tone="tint" className="flex items-start gap-3">
-              <Sparkles aria-hidden className="w-5 h-5 text-primary-emerald shrink-0 mt-0.5" />
+              <PenLine aria-hidden className="w-5 h-5 text-primary-emerald shrink-0 mt-0.5" />
               <p className="text-sm text-foreground">
                 {isDescriptionReady
                   ? 'Analyse de votre description…'
-                  : "Décrivez votre problème en quelques phrases : notre assistant identifie le métier, estime le budget et l'urgence."}
+                  : "Décrivez votre problème en quelques phrases : nous identifions le métier et l'urgence."}
               </p>
             </Card>
           )}
@@ -385,7 +437,13 @@ export const DescribeProblemScreen: React.FC = () => {
               isLoading={isSubmitting}
               // Zone de l'artisan visé en cours de vérification : on attend la
               // réponse plutôt que d'envoyer à l'aveugle.
-              disabled={!aiResult || !isDescriptionReady || isWrongRole || coverage.isChecking}
+              disabled={
+                !aiResult ||
+                selectedTradeCode === null ||
+                !isDescriptionReady ||
+                isWrongRole ||
+                coverage.isChecking
+              }
               trailingIcon={
                 sendsToTarget ? (
                   <Send aria-hidden className="w-5 h-5" />

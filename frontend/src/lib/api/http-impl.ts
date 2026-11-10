@@ -85,7 +85,6 @@ import type {
 } from './backend-types';
 import {
   URGENCY_LABELS,
-  formatPriceRangeFcfa,
   mapAdminVerificationListItem,
   mapAdminVerificationReview,
   mapArtisan,
@@ -324,29 +323,22 @@ export const httpApiClient: ApiClient = {
       apiRequest<BackendTrade[]>('/trades').then((list) => list.map(mapTrade)),
     ]);
 
-    // trade_code is guaranteed to reference an active trade by the backend
-    // (app.services.ai_triage) -- falling back to the raw code here only
-    // guards against a race with a trade deactivated between the two calls.
+    // trade_code, quand il est présent, désigne un métier actif (garanti par
+    // app.services.ai_triage) ; le repli sur le code brut ne couvre qu'une
+    // désactivation entre les deux appels. `null` : aucun métier reconnu,
+    // le client choisira lui-même (jamais un métier par défaut).
     const tradeLabel =
-      trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code;
+      result.trade_code === null
+        ? null
+        : (trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code);
 
     return {
       trade: tradeLabel,
       tradeCode: result.trade_code,
-      priceEstimate: formatPriceRangeFcfa(result.price_min_fcfa, result.price_max_fcfa),
-      priceMinFcfa: result.price_min_fcfa,
-      priceMaxFcfa: result.price_max_fcfa,
-      recommendedCount: 3,
-      explanation:
-        "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+      // Ni montant (table fixe par métier côté serveur, sans fondement réel),
+      // ni phrase d'explication inventée : seulement le métier et l'urgence.
       urgency: URGENCY_LABELS[result.urgency],
       urgencyCode: result.urgency,
-      suggestedDevis: {
-        title: tradeLabel,
-        labor: result.suggested_quote.labor_fcfa,
-        materials: result.suggested_quote.materials_fcfa,
-        total: result.suggested_quote.total_fcfa,
-      },
     };
   },
 
@@ -360,8 +352,6 @@ export const httpApiClient: ApiClient = {
         location: input.location,
         location_label: input.locationLabel,
         urgency: input.urgency,
-        ai_estimate_min_fcfa: input.aiEstimateMinFcfa ?? null,
-        ai_estimate_max_fcfa: input.aiEstimateMaxFcfa ?? null,
       },
     });
     return mapServiceRequest(request);
@@ -588,11 +578,13 @@ export const httpApiClient: ApiClient = {
   async getPaymentOptions(): Promise<PaymentOptions> {
     const options = await apiRequest<{
       online_channels: PaymentChannel[];
+      upcoming_channels: PaymentChannel[];
       cash_enabled: boolean;
       currency: string;
     }>('/payments/options');
     return {
       onlineChannels: options.online_channels,
+      upcomingChannels: options.upcoming_channels,
       cashEnabled: options.cash_enabled,
       currency: options.currency,
     };

@@ -17,6 +17,38 @@ def _quote(labor: int = 8_000, materials: int = 4_000, total: int | None = None)
     }
 
 
+def test_accepts_no_trade_without_any_amount() -> None:
+    result = TriageResult(trade_code=None, urgency=Urgency.NORMAL)
+    assert result.price_min_fcfa is None and result.suggested_quote is None
+
+
+@pytest.mark.parametrize(
+    "amounts",
+    [
+        {"price_min_fcfa": 8_000},
+        {"price_max_fcfa": 15_000},
+        {"suggested_quote": _quote()},
+    ],
+)
+def test_rejects_an_amount_without_a_trade(amounts: dict[str, object]) -> None:
+    with pytest.raises(ValidationError, match="Aucun montant sans métier"):
+        TriageResult.model_validate({"trade_code": None, "urgency": "normal", **amounts})
+
+
+@pytest.mark.parametrize("missing", ["price_min_fcfa", "price_max_fcfa", "suggested_quote"])
+def test_rejects_a_trade_without_its_amounts(missing: str) -> None:
+    payload: dict[str, object] = {
+        "trade_code": "plomberie",
+        "price_min_fcfa": 8_000,
+        "price_max_fcfa": 15_000,
+        "urgency": "normal",
+        "suggested_quote": _quote(),
+    }
+    del payload[missing]
+    with pytest.raises(ValidationError, match="requis avec un métier"):
+        TriageResult.model_validate(payload)
+
+
 def test_accepts_a_consistent_result() -> None:
     result = TriageResult(
         trade_code="plomberie",
@@ -25,6 +57,7 @@ def test_accepts_a_consistent_result() -> None:
         urgency=Urgency.NORMAL,
         suggested_quote=SuggestedQuoteOut(**_quote()),
     )
+    assert result.suggested_quote is not None
     assert result.suggested_quote.total_fcfa == 12_000
 
 

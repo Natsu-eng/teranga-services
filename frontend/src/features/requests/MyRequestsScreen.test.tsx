@@ -26,8 +26,6 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     location: { lat: 14.69, lng: -17.44 },
     locationLabel: null,
     urgency: 'normal',
-    aiEstimateMinFcfa: 10_000,
-    aiEstimateMaxFcfa: 20_000,
     status: 'ouverte',
     expiresAt: null,
     createdAt: '2026-10-01T10:00:00Z',
@@ -75,7 +73,8 @@ describe('MyRequestsScreen', () => {
     renderScreen();
 
     expect(screen.getByText("En attente d'un artisan")).toBeInTheDocument();
-    expect(screen.getByText(/10 000 FCFA – 20 000 FCFA/)).toBeInTheDocument();
+    // Aucune estimation de prix affichée (chiffre sans fondement réel).
+    expect(screen.queryByText(/FCFA/)).toBeNull();
     expect(screen.getByRole('link', { name: 'Choisir un artisan' })).toHaveAttribute(
       'href',
       '/recherche?trade=plomberie&lat=14.69&lng=-17.44',

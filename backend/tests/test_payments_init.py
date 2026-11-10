@@ -286,6 +286,37 @@ async def test_a_means_that_is_not_offered_is_refused(db_session: AsyncSession) 
     assert response.json()["error"]["code"] == "MOYEN_DE_PAIEMENT_INDISPONIBLE"
 
 
+async def test_the_artisan_reads_the_same_payment_configuration(
+    db_session: AsyncSession,
+) -> None:
+    """Écran des gains : l'artisan lit la configuration (mode espèces ou
+    non), exactement la même réponse que le client -- aucune donnée
+    personnelle. Un anonyme et un admin n'y ont pas accès."""
+    engagement = await make_payable_engagement(db_session)
+    admin = await make_user(db_session, role=Role.ADMIN)
+    update_settings(payment_provider="disabled")
+
+    async with client() as http:
+        as_client = await http.get("/api/v1/payments/options", headers=auth(engagement.client))
+        as_artisan = await http.get(
+            "/api/v1/payments/options", headers=auth(engagement.artisan_user)
+        )
+        anonymous = await http.get("/api/v1/payments/options")
+        as_admin = await http.get("/api/v1/payments/options", headers=auth(admin))
+
+    assert as_artisan.status_code == 200
+    assert as_artisan.json() == as_client.json()
+    assert as_artisan.json() == {
+        "online_channels": [],
+        # Prévus par PAYMENT_ONLINE_CHANNELS, montrés « Bientôt » côté front.
+        "upcoming_channels": ["wave", "orange_money", "carte"],
+        "cash_enabled": True,
+        "currency": "XOF",
+    }
+    assert anonymous.status_code == 401
+    assert as_admin.status_code == 403
+
+
 async def test_with_online_payment_disabled_only_cash_remains(db_session: AsyncSession) -> None:
     engagement = await make_payable_engagement(db_session)
     update_settings(payment_provider="disabled")
@@ -295,7 +326,13 @@ async def test_with_online_payment_disabled_only_cash_remains(db_session: AsyncS
         online = await init_payment(http, engagement, "wave")
         cash = await init_payment(http, engagement, "cash")
 
-    assert options.json() == {"online_channels": [], "cash_enabled": True, "currency": "XOF"}
+    assert options.json() == {
+        "online_channels": [],
+        # Prévus par PAYMENT_ONLINE_CHANNELS, montrés « Bientôt » côté front.
+        "upcoming_channels": ["wave", "orange_money", "carte"],
+        "cash_enabled": True,
+        "currency": "XOF",
+    }
     # Paiement en ligne refusé avec un message qui dit quoi faire.
     assert online.status_code == 422
     assert online.json()["error"]["code"] == "PAIEMENT_EN_LIGNE_INDISPONIBLE"
@@ -325,6 +362,8 @@ async def test_options_list_the_configured_means(db_session: AsyncSession) -> No
 
     assert options.json() == {
         "online_channels": ["wave", "orange_money", "carte"],
+        # Paiement en ligne actif : plus rien « à venir ».
+        "upcoming_channels": [],
         "cash_enabled": True,
         "currency": "XOF",
     }

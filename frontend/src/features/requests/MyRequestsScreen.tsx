@@ -8,7 +8,6 @@ import { ErrorState } from '../../components/ui/ErrorState';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { ApiError, api } from '../../lib/api';
-import { formatFcfa } from '../../lib/format';
 import { isInServiceRegion } from '../../lib/places';
 import type { ServiceRequest, ServiceRequestStatus } from '../../types';
 import { useMyRequests } from './hooks/useMyRequests';
@@ -109,14 +108,6 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, onCancelled }) => {
         </p>
       )}
       <p className="text-sm text-muted-foreground line-clamp-3">{request.description}</p>
-      {request.aiEstimateMinFcfa != null && request.aiEstimateMaxFcfa != null && (
-        <p className="text-sm text-foreground">
-          Estimation :{' '}
-          <span className="font-semibold">
-            {formatFcfa(request.aiEstimateMinFcfa)} – {formatFcfa(request.aiEstimateMaxFcfa)}
-          </span>
-        </p>
-      )}
 
       {isOpen &&
         (isConfirming ? (
@@ -219,7 +210,7 @@ export const MyRequestsScreen: React.FC = () => {
                     ? "Vous n'avez pas encore de demande."
                     : "Vous n'avez aucune demande en cours."
                 }
-                description="Décrivez votre problème à notre assistant IA pour trouver un artisan."
+                description="Décrivez votre problème pour trouver un artisan."
               >
                 <ButtonLink to="/demande" variant="primary" size="sm">
                   Décrire mon problème

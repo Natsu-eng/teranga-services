@@ -40,8 +40,6 @@ const interventionFixture: Intervention = {
     location: { lat: 14.6937, lng: -17.4441 },
     locationLabel: null,
     urgency: 'normal',
-    aiEstimateMinFcfa: null,
-    aiEstimateMaxFcfa: null,
     status: 'en_relation',
     expiresAt: null,
     createdAt: '2026-01-01T00:00:00Z',

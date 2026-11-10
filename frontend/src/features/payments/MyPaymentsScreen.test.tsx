@@ -6,7 +6,10 @@ import { api } from '../../lib/api';
 
 vi.mock('../../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/api')>();
-  return { ...actual, api: { ...actual.api, listMyPayments: vi.fn() } };
+  return {
+    ...actual,
+    api: { ...actual.api, listMyPayments: vi.fn(), getPaymentOptions: vi.fn() },
+  };
 });
 
 const mockedApi = vi.mocked(api, true);
@@ -20,7 +23,32 @@ function renderScreen() {
 }
 
 describe('MyPaymentsScreen', () => {
-  beforeEach(() => mockedApi.listMyPayments.mockReset());
+  beforeEach(() => {
+    mockedApi.listMyPayments.mockReset();
+    // Par défaut : paiement en ligne actif.
+    mockedApi.getPaymentOptions
+      .mockReset()
+      .mockResolvedValue({
+        onlineChannels: ['wave', 'orange_money', 'carte'],
+        upcomingChannels: [],
+        cashEnabled: true,
+        currency: 'XOF',
+      });
+  });
+
+  it('en mode espèces, ne promet pas de conservation par Téranga', async () => {
+    mockedApi.getPaymentOptions.mockResolvedValue({
+      onlineChannels: [],
+      upcomingChannels: ['wave', 'orange_money', 'carte'],
+      cashEnabled: true,
+      currency: 'XOF',
+    });
+    mockedApi.listMyPayments.mockResolvedValue([]);
+    renderScreen();
+
+    expect(await screen.findByText(/Vous réglez l'artisan en espèces/)).toBeInTheDocument();
+    expect(screen.queryByText(/conservés par Téranga/)).not.toBeInTheDocument();
+  });
   afterEach(cleanup);
 
   it('liste les paiements avec leur état et la date qui compte', async () => {
@@ -59,6 +87,7 @@ describe('MyPaymentsScreen', () => {
     expect(screen.getByText('Wave · Payé le 10 octobre 2026')).toBeInTheDocument();
     expect(screen.getByText('Remboursé')).toBeInTheDocument();
     expect(screen.getByText('Orange Money · Remboursé le 11 octobre 2026')).toBeInTheDocument();
+    expect(await screen.findByText(/conservés par Téranga/)).toBeInTheDocument();
     expect(screen.getByText(/Aucun frais ne s'ajoute au prix du devis/)).toBeInTheDocument();
   });
 

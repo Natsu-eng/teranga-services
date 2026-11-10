@@ -34,7 +34,7 @@ from app.services.ai_triage_providers import (
         ("Le climatiseur ne fait plus du froid du tout.", "climatisation"),
         ("La serrure de la porte en bois est cassée.", "menuiserie"),
         ("Une fissure dans le mur en béton du salon.", "maconnerie"),
-        ("Mon problème n'a aucun mot-clé reconnu.", "plomberie"),
+        ("Mon WC est bouché depuis hier.", "plomberie"),
     ],
 )
 async def test_heuristic_detects_trade_code_from_french_keywords(
@@ -42,6 +42,28 @@ async def test_heuristic_detects_trade_code_from_french_keywords(
 ) -> None:
     result = await HeuristicTriageProvider().analyze(description)
     assert result.trade_code == expected_trade_code
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Mon problème n'a aucun mot-clé reconnu.",
+        "J'ai besoin d'un jardinier pour la haie.",
+        # Mots qui CONTIENNENT un ancien mot-clé trop court (« eau », « bouch »).
+        "Mon bureau est tout nouveau.",
+        "Le boucher du quartier est fermé.",
+    ],
+)
+async def test_heuristic_never_invents_a_trade_nor_amounts(description: str) -> None:
+    """Aucun mot-clé reconnu : plus de « plomberie » par défaut présentée
+    comme détectée, et aucun montant (rien ne serait fondé)."""
+    result = await HeuristicTriageProvider().analyze(description)
+    assert result.trade_code is None
+    assert (result.price_min_fcfa, result.price_max_fcfa, result.suggested_quote) == (
+        None,
+        None,
+        None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -61,6 +83,8 @@ async def test_heuristic_returns_a_schema_valid_result_for_every_known_trade(
 
     assert isinstance(result, TriageResult)
     assert result.trade_code == trade_code
+    assert result.price_min_fcfa is not None and result.price_max_fcfa is not None
+    assert result.suggested_quote is not None
     assert result.price_min_fcfa <= result.price_max_fcfa
     assert result.suggested_quote.total_fcfa == (
         result.suggested_quote.labor_fcfa + result.suggested_quote.materials_fcfa
@@ -143,6 +167,7 @@ async def test_mistral_returns_a_validated_triage_result_on_success(
     result = await MistralTriageProvider(_settings()).analyze("Le robinet fuit.")
 
     assert result.trade_code == "plomberie"
+    assert result.suggested_quote is not None
     assert result.suggested_quote.total_fcfa == 12_000
 
 
