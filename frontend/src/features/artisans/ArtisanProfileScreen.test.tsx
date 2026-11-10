@@ -65,8 +65,6 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
     location: { lat: 14.69, lng: -17.44 },
     locationLabel: null,
     urgency: 'normal',
-    aiEstimateMinFcfa: null,
-    aiEstimateMaxFcfa: null,
     status: 'ouverte',
     expiresAt: null,
     createdAt: '2026-10-01T10:00:00Z',

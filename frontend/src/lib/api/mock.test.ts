@@ -71,9 +71,6 @@ describe('mockApiClient', () => {
       try {
         const result = await mockApiClient.analyzeProblem("Une fuite sous l'évier");
         expect(result.tradeCode).toBe('plomberie');
-        expect(result.suggestedDevis.total).toBe(
-          result.suggestedDevis.labor + result.suggestedDevis.materials,
-        );
         expect(fetchSpy).not.toHaveBeenCalled();
       } finally {
         vi.unstubAllGlobals();

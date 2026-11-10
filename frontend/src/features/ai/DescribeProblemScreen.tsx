@@ -160,8 +160,6 @@ export const DescribeProblemScreen: React.FC = () => {
         location: position,
         locationLabel: place.label,
         urgency: aiResult.urgencyCode,
-        aiEstimateMinFcfa: aiResult.priceMinFcfa,
-        aiEstimateMaxFcfa: aiResult.priceMaxFcfa,
       });
 
       if (sendsToTarget && targetArtisan) {
@@ -267,11 +265,7 @@ export const DescribeProblemScreen: React.FC = () => {
                   <p className="text-sm text-primary-emerald-foreground">Métier détecté</p>
                   <p className="font-display text-display-md font-semibold">{aiResult.trade}</p>
                 </div>
-                <dl className="grid grid-cols-2 gap-4 border-t border-white/15 pt-4">
-                  <div className="space-y-1">
-                    <dt className="text-sm text-primary-emerald-foreground">Estimation</dt>
-                    <dd className="font-semibold">{aiResult.priceEstimate}</dd>
-                  </div>
+                <dl className="border-t border-white/15 pt-4">
                   <div className="space-y-1">
                     <dt className="text-sm text-primary-emerald-foreground">Urgence</dt>
                     <dd>
@@ -281,10 +275,8 @@ export const DescribeProblemScreen: React.FC = () => {
                     </dd>
                   </div>
                 </dl>
-                <p className="text-sm text-primary-emerald-foreground">{aiResult.explanation}</p>
                 <p className="text-xs text-primary-emerald-foreground/90">
-                  Estimation indicative basée sur des cas similaires à Dakar : le prix final est
-                  fixé par le devis de l&apos;artisan.
+                  Le prix est fixé par le devis de l&apos;artisan.
                 </p>
               </Card>
 

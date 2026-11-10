@@ -732,18 +732,13 @@ describe('httpApiClient', () => {
 
       const result = await httpApiClient.analyzeProblem!("Le robinet fuit sous l'évier.");
 
-      expect(result.trade).toBe('Plomberie');
-      expect(result.tradeCode).toBe('plomberie');
-      expect(result.priceEstimate).toBe('8 000 – 15 000 FCFA');
-      expect(result.priceMinFcfa).toBe(8000);
-      expect(result.priceMaxFcfa).toBe(15000);
-      expect(result.urgency).toBe('normale');
-      expect(result.urgencyCode).toBe('normal');
-      expect(result.suggestedDevis).toEqual({
-        title: 'Plomberie',
-        labor: 8000,
-        materials: 4000,
-        total: 12000,
+      // Seulement le métier et l'urgence : aucun montant (table fixe côté
+      // serveur, sans fondement réel), aucune phrase d'explication inventée.
+      expect(result).toEqual({
+        trade: 'Plomberie',
+        tradeCode: 'plomberie',
+        urgency: 'normale',
+        urgencyCode: 'normal',
       });
 
       const [analyzeUrl, analyzeOptions] = fetchMock.mock.calls.find((call: unknown[]) =>
@@ -799,7 +794,8 @@ describe('httpApiClient', () => {
               jsonResponse(429, {
                 error: {
                   code: 'TROP_DE_DEMANDES',
-                  message: "Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.",
+                  message:
+                    'Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.',
                 },
               }),
             );
@@ -812,7 +808,7 @@ describe('httpApiClient', () => {
       await expect(promise).rejects.toBeInstanceOf(ApiError);
       await expect(promise).rejects.toMatchObject({
         code: 'validation',
-        message: "Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.",
+        message: 'Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.',
       });
     });
   });
@@ -844,8 +840,6 @@ describe('httpApiClient', () => {
         location: { lat: 14.7256, lng: -17.4914 },
         locationLabel: 'Ouakam, Dakar',
         urgency: 'urgent',
-        aiEstimateMinFcfa: 12000,
-        aiEstimateMaxFcfa: 25000,
       });
 
       expect(result).toEqual({
@@ -857,8 +851,6 @@ describe('httpApiClient', () => {
         location: { lat: 14.7256, lng: -17.4914 },
         locationLabel: 'Ouakam, Dakar',
         urgency: 'urgent',
-        aiEstimateMinFcfa: 12000,
-        aiEstimateMaxFcfa: 25000,
         status: 'ouverte',
         // Absent de la réponse (serveur antérieur) : null, jamais undefined.
         expiresAt: null,
@@ -875,9 +867,9 @@ describe('httpApiClient', () => {
         location: { lat: 14.7256, lng: -17.4914 },
         location_label: 'Ouakam, Dakar',
         urgency: 'urgent',
-        ai_estimate_min_fcfa: 12000,
-        ai_estimate_max_fcfa: 25000,
       });
+      // Plus aucune estimation envoyée : les champs sont absents du corps.
+      expect(JSON.parse(options.body as string)).not.toHaveProperty('ai_estimate_min_fcfa');
     });
 
     it('propagates a backend validation error (e.g. unknown trade) as an ApiError', async () => {

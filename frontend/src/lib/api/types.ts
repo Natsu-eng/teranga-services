@@ -70,8 +70,6 @@ export interface CreateServiceRequestInput {
   /** Lieu que le client a vu et confirmé avant d'envoyer. */
   locationLabel: string;
   urgency: 'normal' | 'urgent' | 'immediat';
-  aiEstimateMinFcfa?: number | null;
-  aiEstimateMaxFcfa?: number | null;
 }
 
 /** `POST /interventions` : propose une demande ouverte du client à un artisan. */

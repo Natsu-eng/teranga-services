@@ -71,14 +71,8 @@ const artisanFixture: Artisan = {
 const aiResultFixture: AIAnalysisResult = {
   trade: 'Électricité',
   tradeCode: 'electricite',
-  priceEstimate: '12 000 – 25 000 FCFA',
-  priceMinFcfa: 12_000,
-  priceMaxFcfa: 25_000,
-  recommendedCount: 3,
-  explanation: "L'IA a analysé votre description.",
   urgency: 'haute',
   urgencyCode: 'urgent',
-  suggestedDevis: { title: 'Électricité', labor: 15_000, materials: 5_000, total: 20_000 },
 };
 
 const serviceRequestFixture: ServiceRequest = {
@@ -90,8 +84,6 @@ const serviceRequestFixture: ServiceRequest = {
   location: { lat: 1, lng: 2 },
   locationLabel: null,
   urgency: 'urgent',
-  aiEstimateMinFcfa: 12_000,
-  aiEstimateMaxFcfa: 25_000,
   status: 'ouverte',
   expiresAt: null,
   createdAt: '2026-01-01T00:00:00Z',
@@ -186,13 +178,15 @@ describe('DescribeProblemScreen', () => {
         description: DESCRIPTION,
         photoUrl: null,
         urgency: 'urgent',
-        aiEstimateMinFcfa: 12_000,
-        aiEstimateMaxFcfa: 25_000,
         // Le lieu affiché et confirmé (quartier par défaut), pas le GPS.
         location: PLATEAU,
         locationLabel: 'Dakar Plateau',
       }),
     );
+    // Plus aucune estimation de prix transmise (chiffre sans fondement réel).
+    const sent = mockedCreateServiceRequest.mock.calls[0][0];
+    expect(sent).not.toHaveProperty('aiEstimateMinFcfa');
+    expect(sent).not.toHaveProperty('aiEstimateMaxFcfa');
     expect(mockedGetCurrentPosition).not.toHaveBeenCalled();
 
     const results = await screen.findByText(/Search results for/);

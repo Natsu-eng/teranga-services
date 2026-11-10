@@ -85,7 +85,6 @@ import type {
 } from './backend-types';
 import {
   URGENCY_LABELS,
-  formatPriceRangeFcfa,
   mapAdminVerificationListItem,
   mapAdminVerificationReview,
   mapArtisan,
@@ -333,20 +332,10 @@ export const httpApiClient: ApiClient = {
     return {
       trade: tradeLabel,
       tradeCode: result.trade_code,
-      priceEstimate: formatPriceRangeFcfa(result.price_min_fcfa, result.price_max_fcfa),
-      priceMinFcfa: result.price_min_fcfa,
-      priceMaxFcfa: result.price_max_fcfa,
-      recommendedCount: 3,
-      explanation:
-        "L'IA a analysé votre description pour identifier les meilleurs experts disponibles immédiatement à Dakar.",
+      // Ni montant (table fixe par métier côté serveur, sans fondement réel),
+      // ni phrase d'explication inventée : seulement le métier et l'urgence.
       urgency: URGENCY_LABELS[result.urgency],
       urgencyCode: result.urgency,
-      suggestedDevis: {
-        title: tradeLabel,
-        labor: result.suggested_quote.labor_fcfa,
-        materials: result.suggested_quote.materials_fcfa,
-        total: result.suggested_quote.total_fcfa,
-      },
     };
   },
 
@@ -360,8 +349,6 @@ export const httpApiClient: ApiClient = {
         location: input.location,
         location_label: input.locationLabel,
         urgency: input.urgency,
-        ai_estimate_min_fcfa: input.aiEstimateMinFcfa ?? null,
-        ai_estimate_max_fcfa: input.aiEstimateMaxFcfa ?? null,
       },
     });
     return mapServiceRequest(request);

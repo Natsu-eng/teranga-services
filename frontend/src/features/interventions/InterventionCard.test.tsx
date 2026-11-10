@@ -36,8 +36,6 @@ const serviceRequestFixture: ServiceRequest = {
   location: { lat: 14.6937, lng: -17.4441 },
   locationLabel: null,
   urgency: 'urgent',
-  aiEstimateMinFcfa: 12_000,
-  aiEstimateMaxFcfa: 25_000,
   status: 'en_relation',
   expiresAt: null,
   createdAt: '2026-01-01T00:00:00Z',

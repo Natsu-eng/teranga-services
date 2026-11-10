@@ -8,7 +8,6 @@ import { Skeleton } from '../../../components/ui/Skeleton';
 import { StatusPill } from '../../../components/ui/StatusPill';
 import { ApiError, api } from '../../../lib/api';
 import { cn } from '../../../lib/cn';
-import { formatFcfa } from '../../../lib/format';
 import { useAsyncResource } from '../../../lib/useAsyncResource';
 import type { Artisan, RequestEligibility, ServiceRequest } from '../../../types';
 import { useMyRequests } from '../../requests/hooks/useMyRequests';
@@ -224,12 +223,6 @@ const QuoteRequestContent: React.FC<{ artisan: Artisan }> = ({ artisan }) => {
                 <span className="block text-sm text-muted-foreground line-clamp-2">
                   {request.description}
                 </span>
-                {request.aiEstimateMinFcfa != null && request.aiEstimateMaxFcfa != null && (
-                  <span className="block text-xs text-muted-foreground">
-                    Estimation : {formatFcfa(request.aiEstimateMinFcfa)} –{' '}
-                    {formatFcfa(request.aiEstimateMaxFcfa)}
-                  </span>
-                )}
               </span>
             </label>
           );
