@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useSearchParams } from 'react-router';
 import { DescribeProblemScreen } from './DescribeProblemScreen';
 import { useArtisans } from '../artisans/hooks/useArtisans';
 import { useArtisan } from '../artisans/hooks/useArtisan';
+import { useTrades } from '../artisans/hooks/useTrades';
 import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 import { useAuth } from '../auth/hooks/useAuth';
 import { GeolocationError, getCurrentPosition } from '../../lib/geo';
@@ -15,6 +16,7 @@ import type { AIAnalysisResult, Artisan, Intervention, ServiceRequest } from '..
 
 vi.mock('../artisans/hooks/useArtisans');
 vi.mock('../artisans/hooks/useArtisan');
+vi.mock('../artisans/hooks/useTrades');
 vi.mock('./hooks/useAnalyzeProblem');
 vi.mock('../auth/hooks/useAuth');
 vi.mock('../../lib/geo', async (importOriginal) => {
@@ -36,6 +38,14 @@ vi.mock('../../lib/api', async (importOriginal) => {
 
 const mockedUseArtisans = vi.mocked(useArtisans);
 const mockedUseArtisan = vi.mocked(useArtisan);
+const mockedUseTrades = vi.mocked(useTrades);
+
+// Liste réelle des métiers (forme de GET /trades).
+const TRADES = [
+  { id: 't1', code: 'plomberie', labelFr: 'Plomberie' },
+  { id: 't2', code: 'electricite', labelFr: 'Électricité' },
+  { id: 't3', code: 'menuiserie', labelFr: 'Menuiserie' },
+];
 const mockedCreateIntervention = vi.mocked(api.createIntervention);
 const mockedUseAnalyzeProblem = vi.mocked(useAnalyzeProblem);
 const mockedUseAuth = vi.mocked(useAuth);
@@ -135,6 +145,12 @@ function describeProblem(text = DESCRIPTION) {
 
 describe('DescribeProblemScreen', () => {
   beforeEach(() => {
+    mockedUseTrades.mockReturnValue({
+      data: TRADES,
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
     mockedUseArtisans.mockReturnValue({
       data: [artisanFixture],
       isLoading: false,
@@ -193,6 +209,60 @@ describe('DescribeProblemScreen', () => {
     expect(results.textContent).toContain('trade=electricite');
     expect(results.textContent).toContain(`lat=${PLATEAU.lat}`);
     expect(results.textContent).toContain(`lng=${PLATEAU.lng}`);
+  });
+
+  describe('métier proposé, jamais imposé', () => {
+    it('présente le métier comme une proposition, modifiable dans la vraie liste', () => {
+      mockedUseAuth.mockReturnValue(authValue({ isAuthenticated: true, role: 'client' }));
+      renderScreen();
+      describeProblem();
+
+      const select = screen.getByLabelText('Métier proposé') as HTMLSelectElement;
+      expect(select.value).toBe('electricite');
+      expect(
+        within(select)
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Plomberie', 'Électricité', 'Menuiserie']);
+      expect(screen.getByText(/Proposé d'après votre description/)).toBeInTheDocument();
+      expect(screen.queryByText('Métier détecté')).toBeNull();
+    });
+
+    it("sans métier reconnu : le dit, et n'autorise l'envoi qu'après un choix du client", async () => {
+      mockedUseAuth.mockReturnValue(authValue({ isAuthenticated: true, role: 'client' }));
+      mockedUseAnalyzeProblem.mockReturnValue({
+        data: { trade: null, tradeCode: null, urgency: 'normale', urgencyCode: 'normal' },
+        isLoading: false,
+        error: null,
+        analyze: vi.fn(),
+      });
+      renderScreen();
+      describeProblem();
+
+      expect(screen.getByText(/Nous n'avons pas reconnu le métier/)).toBeInTheDocument();
+      const submit = screen.getByRole('button', { name: /Voir les artisans/ });
+      expect(submit).toBeDisabled();
+
+      fireEvent.change(screen.getByLabelText('Métier'), { target: { value: 'menuiserie' } });
+      expect(submit).toBeEnabled();
+      fireEvent.click(submit);
+
+      await waitFor(() => expect(mockedCreateServiceRequest).toHaveBeenCalledTimes(1));
+      expect(mockedCreateServiceRequest.mock.calls[0][0].tradeCode).toBe('menuiserie');
+    });
+
+    it('le choix du client prime sur la proposition', async () => {
+      mockedUseAuth.mockReturnValue(authValue({ isAuthenticated: true, role: 'client' }));
+      renderScreen();
+      describeProblem();
+
+      fireEvent.change(screen.getByLabelText('Métier proposé'), { target: { value: 'plomberie' } });
+      expect(screen.getByLabelText('Métier choisi')).toHaveValue('plomberie');
+      fireEvent.click(screen.getByRole('button', { name: /Voir les artisans/ }));
+
+      await waitFor(() => expect(mockedCreateServiceRequest).toHaveBeenCalledTimes(1));
+      expect(mockedCreateServiceRequest.mock.calls[0][0].tradeCode).toBe('plomberie');
+    });
   });
 
   it('redirects to /connexion instead of creating a request when signed out', async () => {

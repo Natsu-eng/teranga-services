@@ -2,11 +2,13 @@
  * Demandes des clients : triage IA, demande, éligibilité d'un artisan.
  */
 export interface AIAnalysisResult {
-  trade: string;
+  // `null` (avec `tradeCode`) : aucun métier reconnu dans la description --
+  // le client le choisit lui-même, jamais un métier imposé par défaut.
+  trade: string | null;
   // Backend trade code (e.g. "plomberie") backing `trade` (its French label) —
   // the value a service_request/artisan search actually filters on, kept
   // alongside the display label instead of forcing callers to reverse-map it.
-  tradeCode: string;
+  tradeCode: string | null;
   urgency: string;
   // Backend urgency enum backing `urgency` (its French display label).
   urgencyCode: 'normal' | 'urgent' | 'immediat';

@@ -323,11 +323,14 @@ export const httpApiClient: ApiClient = {
       apiRequest<BackendTrade[]>('/trades').then((list) => list.map(mapTrade)),
     ]);
 
-    // trade_code is guaranteed to reference an active trade by the backend
-    // (app.services.ai_triage) -- falling back to the raw code here only
-    // guards against a race with a trade deactivated between the two calls.
+    // trade_code, quand il est présent, désigne un métier actif (garanti par
+    // app.services.ai_triage) ; le repli sur le code brut ne couvre qu'une
+    // désactivation entre les deux appels. `null` : aucun métier reconnu,
+    // le client choisira lui-même (jamais un métier par défaut).
     const tradeLabel =
-      trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code;
+      result.trade_code === null
+        ? null
+        : (trades.find((t) => t.code === result.trade_code)?.labelFr ?? result.trade_code);
 
     return {
       trade: tradeLabel,

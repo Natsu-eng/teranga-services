@@ -144,11 +144,12 @@ export interface BackendSuggestedQuote {
 }
 
 export interface BackendTriageResult {
-  trade_code: string;
-  price_min_fcfa: number;
-  price_max_fcfa: number;
+  // null : aucun métier reconnu (et alors aucun montant).
+  trade_code: string | null;
+  price_min_fcfa: number | null;
+  price_max_fcfa: number | null;
   urgency: 'normal' | 'urgent' | 'immediat';
-  suggested_quote: BackendSuggestedQuote;
+  suggested_quote: BackendSuggestedQuote | null;
 }
 
 export interface BackendLocation {
