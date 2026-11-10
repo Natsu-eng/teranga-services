@@ -17,7 +17,7 @@ interface ArtisanCardProps {
 
 /**
  * Carte artisan, identique sur l'accueil, la recherche et les résultats
- * de l'assistant IA. L'artisan est le héros : photo, nom en Fraunces,
+ * de la demande de mise en relation. L'artisan est le héros : photo, nom en Fraunces,
  * badge Vérifié, note or, distance et prix indicatif lisibles d'un coup
  * d'œil. Toute la carte est un seul lien vers la fiche (une seule
  * tabulation, zone tactile maximale). Aucun numéro de téléphone, jamais.

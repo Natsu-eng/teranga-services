@@ -4,11 +4,11 @@ import {
   ClipboardList,
   CreditCard,
   ExternalLink,
+  FilePlus2,
   LayoutDashboard,
   LogOut,
   MapPin,
   Receipt,
-  Sparkles,
   UserRoundCog,
   Wallet,
   Wrench,
@@ -117,9 +117,9 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
         <ul>
           <MenuLink
             to="/demande"
-            icon={Sparkles}
+            icon={FilePlus2}
             label="Nouvelle demande"
-            description="Décrivez un besoin, l'assistant trouve le bon métier."
+            description="Décrivez un besoin, on vous oriente vers le bon artisan."
           />
           <MenuLink
             to="/mes-demandes"

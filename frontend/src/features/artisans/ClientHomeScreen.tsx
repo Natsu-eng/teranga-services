@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Search, Sparkles, Users } from 'lucide-react';
+import { ArrowRight, MessageSquareText, Search, Users } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -77,12 +77,12 @@ export const ClientHomeScreen: React.FC = () => {
         </nav>
       )}
 
-      {/* Zone IA : surface vert très clair, signature des fonctions d'assistance. */}
+      {/* Mise en relation : surface vert très clair, présentée par son bénéfice. */}
       <Card
         tone="tint"
         padding="lg"
         as="section"
-        aria-labelledby="assistant-ia"
+        aria-labelledby="mise-en-relation"
         className="space-y-4"
       >
         <div className="flex items-center gap-2">
@@ -90,13 +90,16 @@ export const ClientHomeScreen: React.FC = () => {
             aria-hidden
             className="inline-flex w-9 h-9 items-center justify-center rounded-full bg-surface text-primary-emerald shadow-card"
           >
-            <Sparkles className="w-5 h-5" />
+            <MessageSquareText className="w-5 h-5" />
           </span>
           <p className="text-caption font-semibold uppercase tracking-[0.12em] text-primary-emerald">
-            Assistant IA
+            Mise en relation
           </p>
         </div>
-        <h2 id="assistant-ia" className="font-display text-display-sm font-semibold text-primary">
+        <h2
+          id="mise-en-relation"
+          className="font-display text-display-sm font-semibold text-primary"
+        >
           Décrivez votre problème, on vous trouve le bon artisan
         </h2>
         <ButtonLink
@@ -104,7 +107,7 @@ export const ClientHomeScreen: React.FC = () => {
           variant="brand"
           trailingIcon={<ArrowRight aria-hidden className="w-4 h-4" />}
         >
-          Essayer maintenant
+          Décrire mon besoin
         </ButtonLink>
       </Card>
 
@@ -134,7 +137,7 @@ export const ClientHomeScreen: React.FC = () => {
           <EmptyState
             icon={<Users />}
             title="Aucun artisan disponible pour le moment."
-            description="Décrivez votre besoin à notre assistant pour créer une demande."
+            description="Décrivez votre besoin : nous vous orientons vers les bons artisans."
           >
             <ButtonLink to="/demande" variant="outline" size="sm">
               Décrire mon problème

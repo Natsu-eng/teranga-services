@@ -63,6 +63,27 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
+          // Pas d'icône « gadget » qui ferait croire à une app faite par IA :
+          // chaque fonction est présentée par son bénéfice, avec une icône
+          // sémantique (personne, document, loupe...). L'étoile `Star` reste
+          // permise : elle porte la note d'un artisan.
+          paths: [
+            {
+              name: 'lucide-react',
+              importNames: [
+                'Sparkle',
+                'Sparkles',
+                'Wand',
+                'WandSparkles',
+                'Bot',
+                'BotMessageSquare',
+                'Brain',
+                'BrainCircuit',
+              ],
+              message:
+                'Icône décorative « IA » interdite : utiliser une icône sémantique (UserCheck, ClipboardList, PenLine, FilePlus2...).',
+            },
+          ],
           patterns: [
             {
               // Tout chemin (relatif ou non) qui se termine par /mock ou /mockData.

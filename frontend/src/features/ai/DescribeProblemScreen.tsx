@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, MapPin, Send, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowRight, ClipboardList, MapPin, PenLine, Send, TriangleAlert } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { AppBar } from '../../components/ui/AppBar';
 import { Avatar } from '../../components/ui/Avatar';
@@ -50,12 +50,12 @@ function searchUrlFor(tradeCode: string, position: Coordinates): string {
 }
 
 /**
- * Demande assistée par l'IA (/demande).
+ * Demande de mise en relation (/demande).
  *
  * 1. Le client décrit son problème ; l'analyse (métier, estimation,
  *    urgence) se met à jour après chaque pause de frappe.
- * 2. Le résultat ressort sur une carte vert profond, suivi de trois
- *    artisans du métier détecté.
+ * 2. Le récapitulatif (métier proposé, modifiable, et urgence) ressort sur
+ *    une carte vert profond, suivi de trois artisans du métier retenu.
  * 3. Le client voit et choisit le LIEU de l'intervention (quartier, ou sa
  *    position GPS s'il l'accepte explicitement) : c'est ce lieu confirmé
  *    qui est enregistré, jamais une position lue en silence.
@@ -248,7 +248,7 @@ export const DescribeProblemScreen: React.FC = () => {
           maxLength={MAX_LENGTH}
           rows={5}
           placeholder="Ex. : le robinet de la cuisine fuit sous l'évier depuis ce matin."
-          hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, meilleure est l'estimation.`}
+          hint={`${description.length} / ${MAX_LENGTH} — plus vous êtes précis, plus vite on trouve le bon artisan.`}
         />
 
         <PlaceSection place={place} onChange={setPlace} />
@@ -277,8 +277,8 @@ export const DescribeProblemScreen: React.FC = () => {
               <Card tone="dark" padding="lg" className="space-y-5">
                 <div className="flex items-center justify-between gap-2">
                   <p className="inline-flex items-center gap-2 text-caption font-semibold uppercase tracking-[0.12em] text-accent">
-                    <Sparkles aria-hidden className="w-4 h-4" />
-                    Analyse IA
+                    <ClipboardList aria-hidden className="w-4 h-4" />
+                    Votre demande
                   </p>
                   {isAnalyzing && (
                     <span className="text-xs text-primary-emerald-foreground">Mise à jour…</span>
@@ -389,11 +389,11 @@ export const DescribeProblemScreen: React.FC = () => {
             </>
           ) : (
             <Card tone="tint" className="flex items-start gap-3">
-              <Sparkles aria-hidden className="w-5 h-5 text-primary-emerald shrink-0 mt-0.5" />
+              <PenLine aria-hidden className="w-5 h-5 text-primary-emerald shrink-0 mt-0.5" />
               <p className="text-sm text-foreground">
                 {isDescriptionReady
                   ? 'Analyse de votre description…'
-                  : "Décrivez votre problème en quelques phrases : notre assistant identifie le métier, estime le budget et l'urgence."}
+                  : "Décrivez votre problème en quelques phrases : nous identifions le métier et l'urgence."}
               </p>
             </Card>
           )}

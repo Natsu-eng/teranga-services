@@ -210,7 +210,7 @@ export const MyRequestsScreen: React.FC = () => {
                     ? "Vous n'avez pas encore de demande."
                     : "Vous n'avez aucune demande en cours."
                 }
-                description="Décrivez votre problème à notre assistant IA pour trouver un artisan."
+                description="Décrivez votre problème pour trouver un artisan."
               >
                 <ButtonLink to="/demande" variant="primary" size="sm">
                   Décrire mon problème

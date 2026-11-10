@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Award,
+  BriefcaseBusiness,
   Camera,
   Clock,
   MapPin,
@@ -242,7 +242,7 @@ export const ArtisanProfileScreen: React.FC = () => {
                 value={artisan.reviewCount}
               />
               <StatTile
-                icon={<Award className="w-5 h-5" />}
+                icon={<BriefcaseBusiness className="w-5 h-5" />}
                 label="Expérience"
                 value={artisan.stats.experience}
               />
