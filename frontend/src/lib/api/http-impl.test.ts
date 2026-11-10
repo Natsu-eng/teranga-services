@@ -799,7 +799,7 @@ describe('httpApiClient', () => {
               jsonResponse(429, {
                 error: {
                   code: 'TROP_DE_DEMANDES',
-                  message: "Trop de demandes d'analyse IA, merci de réessayer plus tard.",
+                  message: "Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.",
                 },
               }),
             );
@@ -812,7 +812,7 @@ describe('httpApiClient', () => {
       await expect(promise).rejects.toBeInstanceOf(ApiError);
       await expect(promise).rejects.toMatchObject({
         code: 'validation',
-        message: "Trop de demandes d'analyse IA, merci de réessayer plus tard.",
+        message: "Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.",
       });
     });
   });

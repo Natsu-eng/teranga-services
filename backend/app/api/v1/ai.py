@@ -34,7 +34,7 @@ class TropDeDemandesIaError(AppError):
     def __init__(self) -> None:
         super().__init__(
             code="TROP_DE_DEMANDES",
-            message="Trop de demandes d'analyse IA, merci de réessayer plus tard.",
+            message="Trop de demandes en peu de temps, merci de réessayer dans quelques minutes.",
             status_code=429,
         )
 
