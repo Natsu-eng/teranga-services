@@ -5,16 +5,28 @@ import { UserProfileScreen } from './UserProfileScreen';
 import { useAuth } from '../auth/hooks/useAuth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
+import { usePaymentOptions } from '../payments/hooks/usePaymentOptions';
 import { ApiError } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
 
 vi.mock('../auth/hooks/useAuth');
 vi.mock('./hooks/useCurrentUser');
 vi.mock('../artisans/hooks/useMyArtisanProfile');
+vi.mock('../payments/hooks/usePaymentOptions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../payments/hooks/usePaymentOptions')>();
+  return { ...actual, usePaymentOptions: vi.fn() };
+});
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseCurrentUser = vi.mocked(useCurrentUser);
 const mockedUseMyArtisanProfile = vi.mocked(useMyArtisanProfile);
+const mockedUsePaymentOptions = vi.mocked(usePaymentOptions);
+
+function paymentOptions(
+  data: Parameters<typeof mockedUsePaymentOptions.mockReturnValue>[0]['data'],
+) {
+  mockedUsePaymentOptions.mockReturnValue({ data, isLoading: false, error: null, reload: vi.fn() });
+}
 
 function authValue(overrides: Partial<AuthContextValue>): AuthContextValue {
   return {
@@ -43,6 +55,13 @@ describe('UserProfileScreen', () => {
   const updateFullName = vi.fn();
 
   beforeEach(() => {
+    // Par défaut : mode espèces (configuration de la beta).
+    paymentOptions({
+      onlineChannels: [],
+      upcomingChannels: ['wave', 'orange_money', 'carte'],
+      cashEnabled: true,
+      currency: 'XOF',
+    });
     updateFullName.mockReset();
     mockedUseAuth.mockReturnValue(authValue({ role: 'client', updateFullName }));
     mockedUseCurrentUser.mockReturnValue({
@@ -138,12 +157,35 @@ describe('UserProfileScreen', () => {
       expect(screen.queryByRole('link', { name: /Mes gains/ })).not.toBeInTheDocument();
     });
 
-    it('présente les moyens de paiement sans faux choix, et mène à ses paiements', () => {
+    it('en mode espèces : espèces actives, moyens en ligne « Bientôt », aucun séquestre promis', () => {
+      paymentOptions({
+        onlineChannels: [],
+        upcomingChannels: ['wave', 'orange_money', 'carte'],
+        cashEnabled: true,
+        currency: 'XOF',
+      });
       renderScreen();
 
-      expect(screen.getByText('Moyens de paiement au Sénégal')).toBeInTheDocument();
+      expect(screen.getByText('Moyens de paiement')).toBeInTheDocument();
+      expect(screen.getByText('Espèces')).toBeInTheDocument();
+      expect(screen.getAllByText('Bientôt')).toHaveLength(3);
+      expect(screen.getByText(/Vous réglez l'artisan en espèces/)).toBeInTheDocument();
+      expect(screen.queryByText(/Téranga conserve votre argent/)).not.toBeInTheDocument();
+    });
+
+    it('présente les moyens de paiement sans faux choix, et mène à ses paiements', () => {
+      paymentOptions({
+        onlineChannels: ['wave', 'orange_money', 'carte'],
+        upcomingChannels: [],
+        cashEnabled: true,
+        currency: 'XOF',
+      });
+      renderScreen();
+
+      expect(screen.getByText('Moyens de paiement')).toBeInTheDocument();
       // Le moyen se choisit au moment de payer un devis, jamais à l'avance.
       expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+      expect(screen.queryByText('Bientôt')).not.toBeInTheDocument();
       expect(screen.getByText(/Téranga conserve votre argent/)).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Mes paiements/ })).toHaveAttribute(
         'href',
@@ -192,10 +234,7 @@ describe('UserProfileScreen', () => {
       renderScreen();
 
       expect(screen.getByRole('link', { name: /Tableau de bord/ })).toHaveAttribute('href', '/pro');
-      expect(screen.getByRole('link', { name: /Mes gains et versements/ })).toHaveAttribute(
-        'href',
-        '/pro/gains',
-      );
+      expect(screen.getByRole('link', { name: /Mes gains/ })).toHaveAttribute('href', '/pro/gains');
       expect(screen.getByRole('link', { name: /Modifier mon profil Pro/ })).toHaveAttribute(
         'href',
         '/pro/onboarding',

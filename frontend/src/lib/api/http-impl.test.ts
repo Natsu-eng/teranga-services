@@ -1433,6 +1433,7 @@ describe('httpApiClient', () => {
         vi.fn().mockResolvedValue(
           jsonResponse(200, {
             online_channels: ['wave', 'carte'],
+            upcoming_channels: [],
             cash_enabled: false,
             currency: 'XOF',
           }),
@@ -1441,6 +1442,7 @@ describe('httpApiClient', () => {
 
       expect(await httpApiClient.getPaymentOptions!()).toEqual({
         onlineChannels: ['wave', 'carte'],
+        upcomingChannels: [],
         cashEnabled: false,
         currency: 'XOF',
       });

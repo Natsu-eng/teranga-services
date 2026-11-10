@@ -236,7 +236,7 @@ export const ArtisanDashboardScreen: React.FC = () => {
                 className="mt-3"
                 leadingIcon={<Wallet aria-hidden className="w-5 h-5" />}
               >
-                Mes gains et versements
+                Mes gains
               </ButtonLink>
             </section>
 

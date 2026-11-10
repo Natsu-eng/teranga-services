@@ -439,6 +439,7 @@ export const mockApiClient: ApiClient = {
     await simulateNetworkLatency();
     return {
       onlineChannels: ['wave', 'orange_money', 'carte'],
+      upcomingChannels: [],
       cashEnabled: true,
       currency: 'XOF',
     };

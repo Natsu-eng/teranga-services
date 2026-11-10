@@ -578,11 +578,13 @@ export const httpApiClient: ApiClient = {
   async getPaymentOptions(): Promise<PaymentOptions> {
     const options = await apiRequest<{
       online_channels: PaymentChannel[];
+      upcoming_channels: PaymentChannel[];
       cash_enabled: boolean;
       currency: string;
     }>('/payments/options');
     return {
       onlineChannels: options.online_channels,
+      upcomingChannels: options.upcoming_channels,
       cashEnabled: options.cash_enabled,
       currency: options.currency,
     };

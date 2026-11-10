@@ -2,7 +2,6 @@ import React from 'react';
 import {
   ChevronRight,
   ClipboardList,
-  CreditCard,
   ExternalLink,
   FilePlus2,
   LayoutDashboard,
@@ -22,12 +21,12 @@ import { SectionHeader } from '../../components/ui/SectionHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill } from '../../components/ui/StatusPill';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
-import { cn } from '../../lib/cn';
 import { useAuth } from '../auth/hooks/useAuth';
 import { usePlace } from '../location/usePlace';
 import { toDisplayRole } from '../auth/role';
 import { VerificationStatusBanner } from '../artisans/VerificationStatusBanner';
 import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
+import { PaymentMethodsSummary } from '../payments/components/PaymentMethodsSummary';
 import { IdentityCard } from './components/IdentityCard';
 import { InstallAppHint } from './components/InstallAppHint';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -83,12 +82,6 @@ const LogoutCard: React.FC = () => {
 
 /* ------------------------------------------------------------------ Client */
 
-/** Moyens de paiement locaux, présentés pour information (aucun paiement en ligne encore). */
-const PAYMENT_METHODS = [
-  { label: 'Wave', mark: 'W', className: 'bg-brand-wave text-foreground' },
-  { label: 'Orange Money', mark: 'OM', className: 'bg-brand-orange-money text-foreground' },
-] as const;
-
 /**
  * Profil d'un CLIENT : tout est orienté vers ses besoins de services
  * (demandes, interventions, nouvelle demande).
@@ -137,53 +130,20 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
             to="/mes-paiements"
             icon={Receipt}
             label="Mes paiements"
-            description="Ce que vous avez payé, en séquestre ou remboursé."
+            description="Vos règlements et leur état."
           />
         </ul>
       </Card>
     </section>
 
     {/*
-      Section informative : le moyen se choisit au moment de payer un devis
-      (écran de paiement), jamais enregistré à l'avance.
+      Moyens RÉELLEMENT proposés (GET /payments/options) : espèces, en ligne
+      actif, ou « Bientôt ». Le moyen se choisit au moment de payer un devis,
+      jamais enregistré à l'avance.
     */}
     <section aria-labelledby="paiement" className="space-y-3">
-      <SectionHeader id="paiement" title="Moyens de paiement au Sénégal" />
-      <Card className="space-y-3">
-        <ul className="flex flex-wrap gap-2">
-          {PAYMENT_METHODS.map((method) => (
-            <li
-              key={method.label}
-              className="inline-flex items-center gap-2 rounded-full bg-surface-muted pl-1 pr-3 py-1 text-sm text-foreground"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  'inline-flex w-7 h-7 items-center justify-center rounded-full text-xs font-bold',
-                  method.className,
-                )}
-              >
-                {method.mark}
-              </span>
-              {method.label}
-            </li>
-          ))}
-          <li className="inline-flex items-center gap-2 rounded-full bg-surface-muted pl-1 pr-3 py-1 text-sm text-foreground">
-            <span
-              aria-hidden
-              className="inline-flex w-7 h-7 items-center justify-center rounded-full bg-emerald-tint text-primary-emerald"
-            >
-              <CreditCard className="w-4 h-4" />
-            </span>
-            Carte bancaire
-          </li>
-        </ul>
-        <p className="text-sm text-muted-foreground">
-          Payez un devis accepté depuis le suivi de vos travaux, ou réglez l&apos;artisan en
-          espèces. En ligne, Téranga conserve votre argent et ne le verse à l&apos;artisan
-          qu&apos;après votre confirmation de fin des travaux.
-        </p>
-      </Card>
+      <SectionHeader id="paiement" title="Moyens de paiement" />
+      <PaymentMethodsSummary />
     </section>
 
     <InstallAppHint />
@@ -240,8 +200,8 @@ const ArtisanProfile: React.FC<{
             <MenuLink
               to="/pro/gains"
               icon={Wallet}
-              label="Mes gains et versements"
-              description="Ce que vous touchez, commissions prélevées, moyen de versement."
+              label="Mes gains"
+              description="Ce que vous avez encaissé et la commission Téranga."
             />
             <MenuLink
               to="/pro/onboarding"

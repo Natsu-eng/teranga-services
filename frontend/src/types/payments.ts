@@ -58,6 +58,8 @@ export interface PaymentSummary {
 /** Moyens de paiement réellement proposés par le serveur. */
 export interface PaymentOptions {
   onlineChannels: PaymentChannel[];
+  /** Moyens en ligne prévus mais pas encore actifs (montrés « Bientôt »). */
+  upcomingChannels: PaymentChannel[];
   cashEnabled: boolean;
   currency: string;
 }
