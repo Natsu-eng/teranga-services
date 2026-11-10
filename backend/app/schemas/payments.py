@@ -29,6 +29,10 @@ class PaymentOptionsOut(BaseModel):
     jamais d'autres)."""
 
     online_channels: list[PaymentChannel]
+    # Moyens en ligne PRÉVUS mais pas encore actifs (PAYMENT_ONLINE_CHANNELS
+    # avec PAYMENT_PROVIDER=disabled) : le front les montre « Bientôt »,
+    # jamais comme utilisables. Vide dès que le paiement en ligne est actif.
+    upcoming_channels: list[PaymentChannel]
     cash_enabled: bool
     currency: str
 
