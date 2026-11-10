@@ -74,7 +74,10 @@ class TropDeTentativesDePaiementError(AppError):
 async def get_payment_options(
     settings: SettingsDep,
     provider: ProviderDep,
-    _user: Annotated[User, Depends(require_role(Role.CLIENT))],
+    # Client (moyens proposés au paiement) ET artisan (écran des gains : en
+    # mode espèces, pas de versement ni de séquestre à montrer). Réponse de
+    # configuration seule, identique pour tous : aucune donnée personnelle.
+    _user: Annotated[User, Depends(require_role(Role.CLIENT, Role.ARTISAN))],
 ) -> PaymentOptionsOut:
     return payments_service.get_options(settings, provider)
 
