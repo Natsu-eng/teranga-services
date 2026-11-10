@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   BriefcaseBusiness,
-  Camera,
   Clock,
   MapPin,
   MessageCircle,
@@ -211,11 +210,15 @@ export const ArtisanProfileScreen: React.FC = () => {
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                 <Rating value={artisan.rating} count={artisan.reviewCount} size="md" />
-                <span className="inline-flex items-center gap-1 text-muted-foreground">
-                  <MapPin aria-hidden className="w-4 h-4" />
-                  {artisan.location}
-                  {artisan.distance && ` · ${artisan.distance}`}
-                </span>
+                {/* Distance seulement quand elle est connue : aucune localisation
+                    inventée (le serveur n'expose pas d'adresse d'artisan). */}
+                {artisan.distance && (
+                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                    <MapPin aria-hidden className="w-4 h-4" />
+                    <span className="sr-only">Distance :</span>
+                    {artisan.distance}
+                  </span>
+                )}
                 <StatusPill tone={artisan.available ? 'success' : 'neutral'}>
                   {artisan.available ? 'Disponible' : 'Indisponible'}
                 </StatusPill>
@@ -261,35 +264,6 @@ export const ArtisanProfileScreen: React.FC = () => {
                   {artisan.bio || "Cet artisan n'a pas encore rédigé de présentation."}
                 </p>
               </Card>
-            </section>
-
-            <section aria-labelledby="realisations" className="space-y-3">
-              <SectionHeader id="realisations" title="Réalisations" />
-              {artisan.realisations.length === 0 ? (
-                <Card tone="tint" className="flex items-center gap-3 text-sm text-foreground">
-                  <Camera aria-hidden className="w-5 h-5 text-primary-emerald shrink-0" />
-                  Aucune réalisation publiée pour le moment.
-                </Card>
-              ) : (
-                <ul className="-mx-4 px-4 flex gap-3 overflow-x-auto hide-scrollbar pb-2">
-                  {artisan.realisations.map((realisation) => (
-                    <li
-                      key={realisation.id}
-                      className="relative shrink-0 w-64 h-44 rounded-card overflow-hidden shadow-card"
-                    >
-                      <SafeImage
-                        src={realisation.imageUrl}
-                        fallback="/images/placeholder-cover.svg"
-                        alt={realisation.altText}
-                        className="w-full h-full object-cover"
-                      />
-                      <p className="absolute inset-x-0 bottom-0 bg-linear-to-t from-foreground/70 to-transparent p-3 text-sm font-semibold text-white">
-                        {realisation.title}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </section>
 
             <section aria-labelledby="avis" className="space-y-3">

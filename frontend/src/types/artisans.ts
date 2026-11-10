@@ -54,7 +54,6 @@ export interface Artisan {
   rating: number;
   reviewCount: number;
   distance: string;
-  location: string;
   priceBase: string; // e.g. "15.000 CFA"
   priceNumber: number;
   tags: string[];
@@ -67,8 +66,6 @@ export interface Artisan {
   tradeCodes: string[];
   bio: string;
   stats: {
-    chantiers: string; // e.g. "150+"
-    responseTime: string; // e.g. "< 1h"
     experience: string; // e.g. "8 ans"
   };
   realisations: Realisation[];

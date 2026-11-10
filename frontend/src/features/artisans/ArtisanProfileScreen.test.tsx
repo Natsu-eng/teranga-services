@@ -43,13 +43,12 @@ const artisanFixture: Artisan = {
   rating: 4.7,
   reviewCount: 10,
   distance: '1 km',
-  location: 'Dakar, Sénégal',
   priceBase: '10.000 CFA',
   priceNumber: 10000,
   tags: ['Plomberie'],
   tradeCodes: ['plomberie'],
   bio: 'Bio de test pour la fiche artisan.',
-  stats: { chantiers: '10+', responseTime: '< 1h', experience: '2 ans' },
+  stats: { experience: '2 ans' },
   realisations: [],
   reviews: [],
   available: true,
@@ -191,6 +190,24 @@ describe('ArtisanProfileScreen', () => {
 
     expect(screen.getByText(artisanFixture.name)).toBeInTheDocument();
     expect(screen.getByText(artisanFixture.bio)).toBeInTheDocument();
+  });
+
+  it('n’invente aucune donnée : ni ville fixe, ni section « Réalisations » vide', () => {
+    withArtisan();
+    renderAtArtisan('a1');
+
+    // Distance réelle quand elle est connue...
+    expect(screen.getByText('1 km')).toBeInTheDocument();
+    // ... jamais une localisation codée en dur, ni une fonctionnalité absente.
+    expect(screen.queryByText(/Dakar, Sénégal/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Réalisations' })).not.toBeInTheDocument();
+  });
+
+  it('sans distance connue, n’affiche aucune localisation', () => {
+    withArtisan({ ...artisanFixture, distance: '' });
+    renderAtArtisan('a1');
+
+    expect(screen.queryByText('Distance :')).not.toBeInTheDocument();
   });
 
   it('affiche le badge Vérifié en grand pour un artisan vérifié', () => {

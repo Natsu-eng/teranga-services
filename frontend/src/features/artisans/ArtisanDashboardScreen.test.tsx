@@ -165,7 +165,8 @@ describe('ArtisanDashboardScreen', () => {
     // Note au format français, nombre d'avis en précision.
     expect(screen.getByText('4,8')).toBeInTheDocument();
     expect(screen.getByText('12 avis')).toBeInTheDocument();
-    expect(screen.getByText('Non communiqué')).toBeInTheDocument();
+    // Aucun indicateur sans source : pas de tuile « Taux de réponse » (jamais mesuré).
+    expect(screen.queryByText('Taux de réponse')).not.toBeInTheDocument();
   });
 
   it('shows a clean empty state when the artisan has no intervention at all', async () => {
@@ -203,13 +204,12 @@ describe('ArtisanDashboardScreen', () => {
       rating: 4.8,
       reviewCount: 12,
       distance: '',
-      location: 'Dakar, Sénégal',
       priceBase: 'Tarif sur devis',
       priceNumber: 0,
       tags: ['Plomberie'],
       tradeCodes: ['plomberie'],
       bio: '',
-      stats: { chantiers: '12', responseTime: 'Non communiqué', experience: 'Non communiqué' },
+      stats: { experience: 'Non communiqué' },
       realisations: [],
       reviews: [],
       available: false,

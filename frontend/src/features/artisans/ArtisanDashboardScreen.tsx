@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ban, Briefcase, ClipboardCheck, Clock, Star, Wallet } from 'lucide-react';
+import { Ban, Briefcase, ClipboardCheck, Star, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { RoleRestricted } from '../../components/auth/RoleRestricted';
 import { Button, ButtonLink } from '../../components/ui/Button';
@@ -196,7 +196,10 @@ export const ArtisanDashboardScreen: React.FC = () => {
                 <ErrorState message={statsError.message} onRetry={reloadStats} />
               ) : stats ? (
                 <div className="grid grid-cols-2 gap-3">
+                  {/* Plus de tuile « Taux de réponse » : aucun suivi des réponses
+                      n'existe côté serveur (toujours « Non communiqué »). */}
                   <StatTile
+                    className="col-span-2"
                     icon={<Wallet className="w-5 h-5" />}
                     label="Chiffre d'affaires"
                     value={
@@ -216,16 +219,6 @@ export const ArtisanDashboardScreen: React.FC = () => {
                       stats.ratingAvg != null ? formatRating(stats.ratingAvg) : 'Pas encore noté'
                     }
                     hint={stats.reviewCount > 0 ? `${stats.reviewCount} avis` : undefined}
-                  />
-                  <StatTile
-                    icon={<Clock className="w-5 h-5" />}
-                    label="Taux de réponse"
-                    // Valeur courte (la tuile est étroite à 360 px), explication en
-                    // précision : jamais un mot coupé en deux.
-                    value={
-                      stats.responseRate != null ? `${Math.round(stats.responseRate * 100)} %` : '—'
-                    }
-                    hint={stats.responseRate != null ? undefined : 'Non communiqué'}
                   />
                 </div>
               ) : null}
