@@ -45,13 +45,43 @@ _URGENCY_URGENT_KEYWORDS = ("urgent", "urgence")
 # Ordre de priorité : la première règle dont un mot-clé matche l'emporte.
 # Porté depuis l'ancien frontend/server.ts, étendu à la maçonnerie (métier
 # seedé côté backend, scripts/seed.py, mais absent de l'ancienne heuristique).
+# La plomberie a désormais ses propres mots-clés : elle n'est plus le métier
+# renvoyé par défaut quand rien n'est reconnu (`trade_code=None` alors).
 _TRADE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("electricite", ("electr", "électr", "prise", "courant", "disjoncteur")),
     ("climatisation", ("clim", "froid", "chaleur")),
     ("menuiserie", ("porte", "bois", "serrure", "menuisier")),
     ("maconnerie", ("mur", "fissure", "béton", "beton", "carrelage", "ciment")),
+    (
+        "plomberie",
+        (
+            "plomb",
+            "fuite",
+            "fuit",
+            "robinet",
+            "évier",
+            "evier",
+            "tuyau",
+            "canalisation",
+            # Formes complètes : « eau » seul reconnaîtrait aussi « bureau »,
+            # « nouveau »... et « bouch » reconnaîtrait « boucher ».
+            "d'eau",
+            "l'eau",
+            "chauffe-eau",
+            "wc",
+            "toilette",
+            "chasse d'eau",
+            "douche",
+            "lavabo",
+            "bouché",
+            "bouchon",
+            "débouch",
+            "deboucher",
+            "égout",
+            "egout",
+        ),
+    ),
 )
-_DEFAULT_TRADE_CODE = "plomberie"
 
 # code -> (price_min_fcfa, price_max_fcfa, labor_fcfa, materials_fcfa),
 # repris des montants de l'ancienne heuristique Express (plus maçonnerie).
@@ -71,6 +101,10 @@ class HeuristicTriageProvider:
         lowered = description.lower()
         trade_code = self._detect_trade(lowered)
         urgency = self._detect_urgency(lowered)
+        if trade_code is None:
+            # Aucun mot-clé reconnu : on le DIT (le client choisira le métier),
+            # sans montant -- jamais un métier ni un prix inventés.
+            return TriageResult(trade_code=None, urgency=urgency)
         price_min, price_max, labor, materials = _QUOTE_BY_TRADE[trade_code]
         return TriageResult(
             trade_code=trade_code,
@@ -83,11 +117,11 @@ class HeuristicTriageProvider:
         )
 
     @staticmethod
-    def _detect_trade(lowered: str) -> str:
+    def _detect_trade(lowered: str) -> str | None:
         for code, keywords in _TRADE_RULES:
             if any(keyword in lowered for keyword in keywords):
                 return code
-        return _DEFAULT_TRADE_CODE
+        return None
 
     @staticmethod
     def _detect_urgency(lowered: str) -> Urgency:
@@ -121,7 +155,9 @@ texte autour ni bloc markdown :
 
 Contraintes :
 - "trade_code" doit être EXACTEMENT l'un de : plomberie, electricite, \
-climatisation, menuiserie, maconnerie.
+climatisation, menuiserie, maconnerie. Si AUCUN ne correspond, réponds \
+"trade_code": null avec "price_min_fcfa", "price_max_fcfa" et \
+"suggested_quote" à null (ne jamais forcer un métier).
 - "price_min_fcfa" et "price_max_fcfa" sont des entiers positifs, en FCFA, \
 avec price_max_fcfa >= price_min_fcfa, réalistes pour Dakar.
 - "urgency" doit être EXACTEMENT l'un de : normal, urgent, immediat.

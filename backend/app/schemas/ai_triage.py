@@ -32,14 +32,28 @@ class SuggestedQuoteOut(BaseModel):
 
 
 class TriageResult(BaseModel):
-    trade_code: str
-    price_min_fcfa: int = Field(ge=0)
-    price_max_fcfa: int = Field(ge=0)
+    # `None` : AUCUN métier reconnu dans la description. Jamais un métier par
+    # défaut présenté comme détecté : le client choisit lui-même le métier
+    # dans la liste réelle (`GET /trades`).
+    trade_code: str | None
+    # Montants indicatifs : présents si et seulement si un métier est reconnu.
+    price_min_fcfa: int | None = Field(default=None, ge=0)
+    price_max_fcfa: int | None = Field(default=None, ge=0)
     urgency: Urgency
-    suggested_quote: SuggestedQuoteOut
+    suggested_quote: SuggestedQuoteOut | None = None
 
     @model_validator(mode="after")
-    def _check_price_range_is_ordered(self) -> "TriageResult":
+    def _check_amounts_match_the_trade(self) -> "TriageResult":
+        amounts = (self.price_min_fcfa, self.price_max_fcfa, self.suggested_quote)
+        if self.trade_code is None:
+            # Sans métier, aucun montant : rien ne serait fondé.
+            if any(amount is not None for amount in amounts):
+                raise ValueError("Aucun montant sans métier reconnu.")
+            return self
+        if self.price_min_fcfa is None or self.price_max_fcfa is None:
+            raise ValueError("price_min_fcfa et price_max_fcfa sont requis avec un métier.")
+        if self.suggested_quote is None:
+            raise ValueError("suggested_quote est requis avec un métier.")
         if self.price_max_fcfa < self.price_min_fcfa:
             raise ValueError("price_max_fcfa doit être supérieur ou égal à price_min_fcfa.")
         return self
