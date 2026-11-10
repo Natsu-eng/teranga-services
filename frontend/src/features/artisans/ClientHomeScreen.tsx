@@ -33,6 +33,12 @@ export const ClientHomeScreen: React.FC = () => {
   const { data: artisans, isLoading, error, reload } = useArtisans(RECOMMENDED_FILTERS);
   const { data: trades } = useTrades();
   const [query, setQuery] = useState('');
+  // Titre fidèle à la liste RÉELLEMENT reçue : « vérifiés » seulement si tous
+  // le sont (le serveur ne publie que des artisans vérifiés, vérifié ici
+  // quand même). Repli neutre : la liste n'est pas filtrée par proximité,
+  // « près de vous » serait faux.
+  const allVerified = (artisans ?? []).every((artisan) => artisan.verified);
+  const listTitle = allVerified ? 'Artisans vérifiés' : 'Artisans sur Téranga';
 
   const handleSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -114,7 +120,7 @@ export const ClientHomeScreen: React.FC = () => {
       <section aria-labelledby="recommandes" className="space-y-4">
         <SectionHeader
           id="recommandes"
-          title="Artisans recommandés"
+          title={listTitle}
           action={
             <Link
               to="/recherche"

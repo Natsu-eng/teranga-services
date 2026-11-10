@@ -75,6 +75,40 @@ describe('ClientHomeScreen', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('titre « Artisans vérifiés » seulement si tous les artisans affichés le sont', () => {
+    mockedUseArtisans.mockReturnValue({
+      data: [artisanFixture],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Artisans vérifiés' })).toBeInTheDocument();
+    expect(screen.queryByText('Artisans recommandés')).not.toBeInTheDocument();
+  });
+
+  it('sinon, un titre neutre (jamais « près de vous » : la liste n’est pas filtrée par distance)', () => {
+    mockedUseArtisans.mockReturnValue({
+      data: [artisanFixture, { ...artisanFixture, id: 'a2', verified: false }],
+      isLoading: false,
+      error: null,
+      reload: vi.fn(),
+    });
+    render(
+      <MemoryRouter>
+        <ClientHomeScreen />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Artisans sur Téranga' })).toBeInTheDocument();
+    expect(screen.queryByText(/près de vous/)).not.toBeInTheDocument();
+  });
+
   it('renders the fetched artisans on success', () => {
     mockedUseArtisans.mockReturnValue({
       data: [artisanFixture],
