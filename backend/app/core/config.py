@@ -217,9 +217,21 @@ class Settings(BaseSettings):
     otp_channel: Literal["sms", "whatsapp", "whatsapp_then_sms"] = "sms"
 
     # --- E-mails aux administrateurs (DEPLOYMENT.md, « E-mails ») ----------
-    # Fournisseur : "console" (défaut dev/test : rien n'est envoyé, l'e-mail
-    # est seulement journalisé) ou "smtp" (envoi réel, réglages SMTP_*).
-    email_provider: Literal["console", "smtp"] = "console"
+    # Fournisseur :
+    # - "console" (défaut dev/test : rien n'est envoyé, l'e-mail est
+    #   seulement journalisé) ;
+    # - "brevo" (envoi réel par l'API HTTP de Brevo, port 443 : la voie à
+    #   utiliser sur Render, qui bloque le SMTP sortant) ;
+    # - "smtp" (envoi réel, réglages SMTP_* : inutilisable sur Render).
+    email_provider: Literal["console", "smtp", "brevo"] = "console"
+    # Brevo : clé d'API (Brevo > SMTP & API > Clés API). SECRET : envoyée
+    # dans un en-tête, jamais journalisée ni affichée dans une erreur.
+    brevo_api_key: str | None = None
+    # Base de l'API Brevo (documentation officielle) ; réglable sans code.
+    brevo_api_base_url: str = "https://api.brevo.com/v3"
+    # Délai maximal d'un appel à Brevo : l'envoi est en arrière-plan, jamais
+    # sur le chemin de la réponse à l'artisan.
+    brevo_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     # Serveur SMTP. Port 587 + STARTTLS (défaut), ou 465 + SSL implicite.
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -237,7 +249,14 @@ class Settings(BaseSettings):
     # vérification...), séparés par des virgules. Vide = aucune notification.
     admin_notification_emails: Annotated[list[str], NoDecode] = []
 
-    @field_validator("smtp_host", "smtp_user", "smtp_password", "email_from", mode="before")
+    @field_validator(
+        "smtp_host",
+        "smtp_user",
+        "smtp_password",
+        "email_from",
+        "brevo_api_key",
+        mode="before",
+    )
     @classmethod
     def clean_email_value(cls, v: object) -> object:
         # Valeurs collées dans un tableau de bord : même nettoyage que S3_*.
@@ -245,6 +264,13 @@ class Settings(BaseSettings):
             v = clean_setting_value(v)
             return v or None
         return v
+
+    @field_validator("brevo_api_base_url", mode="before")
+    @classmethod
+    def clean_brevo_api_base_url(cls, v: object) -> object:
+        # Nettoyée sans devenir None (valeur par défaut documentée) : une
+        # valeur vide est signalée comme invalide avec EMAIL_PROVIDER=brevo.
+        return clean_setting_value(v) if isinstance(v, str) else v
 
     @field_validator("admin_notification_emails", mode="before")
     @classmethod
@@ -255,9 +281,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_email_settings(self) -> "Settings":
-        """Adresses vérifiées quel que soit le fournisseur ; avec "smtp",
-        réglages complets exigés. Tous les problèmes listés d'un coup, jamais
-        le mot de passe."""
+        """Adresses vérifiées quel que soit le fournisseur ; avec "smtp" ou
+        "brevo", réglages complets exigés. Tous les problèmes listés d'un coup,
+        jamais un mot de passe ni une clé d'API."""
         problems: list[str] = []
         for address in self.admin_notification_emails:
             if not _EMAIL_RE.fullmatch(address):
@@ -286,6 +312,32 @@ class Settings(BaseSettings):
                 )
             if self.smtp_host and has_hidden_characters(self.smtp_host):
                 problems.append(f"SMTP_HOST invalide ({self.smtp_host!r}).")
+        if self.email_provider == "brevo":
+            missing = [
+                name
+                for name, value in (
+                    ("BREVO_API_KEY", self.brevo_api_key),
+                    ("EMAIL_FROM", self.email_from),
+                )
+                if not value
+            ]
+            if missing:
+                problems.append(f"E-mail Brevo incomplet, à renseigner : {', '.join(missing)}.")
+            if not self.admin_notification_emails:
+                problems.append(
+                    "ADMIN_NOTIFICATION_EMAILS est vide : avec EMAIL_PROVIDER=brevo, au moins un "
+                    "destinataire est attendu."
+                )
+            if self.brevo_api_key and has_hidden_characters(self.brevo_api_key):
+                problems.append(
+                    "BREVO_API_KEY contient un espace ou un caractère invisible (valeur non "
+                    "affichée) : la ressaisir."
+                )
+            if not is_valid_https_base_url(self.brevo_api_base_url):
+                problems.append(
+                    f"BREVO_API_BASE_URL invalide ({self.brevo_api_base_url!r}) : URL https:// "
+                    "attendue."
+                )
         if problems:
             raise ValueError("E-mail mal configuré :\n- " + "\n- ".join(problems))
         return self
@@ -1131,6 +1183,8 @@ class Settings(BaseSettings):
             )
         if self.termii_api_key and looks_like_placeholder(self.termii_api_key):
             problems.append("TERMII_API_KEY est une valeur d'exemple.")
+        if self.brevo_api_key and looks_like_placeholder(self.brevo_api_key):
+            problems.append("BREVO_API_KEY est une valeur d'exemple.")
 
         for name, backend in (
             ("STORAGE_BACKEND", self.storage_backend),

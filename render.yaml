@@ -64,6 +64,9 @@ services:
       # E-mails aux admins (DEPLOYMENT.md §14) : console par défaut si absent.
       - key: EMAIL_PROVIDER
         sync: false
+      # Render bloque le SMTP sortant : EMAIL_PROVIDER=brevo (API HTTP).
+      - key: BREVO_API_KEY
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_USER
