@@ -849,46 +849,64 @@ Téranga », le nom affiché de l'artisan (omis s'il ressemble à un numéro de
 téléphone) et le lien `FRONTEND_PUBLIC_BASE_URL/admin/verifications`. Aucune
 pièce jointe, aucun document, aucun numéro.
 
-### 14.2 Variables
+### 14.2 Fournisseur : Brevo sur Render (le SMTP y est bloqué)
+
+**Render (offre gratuite) bloque les connexions SMTP sortantes** (ports 25,
+465, 587) : avec `EMAIL_PROVIDER=smtp`, l'envoi échoue sur
+`OSError: [Errno 101] Network is unreachable` (journal : `Notification
+admin ... NON envoyée : OSError.`), sans effet sur l'artisan (best-effort).
+Sur Render, utiliser **Brevo** : son API transactionnelle passe en HTTPS
+(port 443, jamais bloqué). Le fournisseur `smtp` reste disponible hors
+Render (serveur, poste de développement).
 
 | Variable | Rôle | Valeur |
 |---|---|---|
-| `EMAIL_PROVIDER` | `console` (défaut : rien n'est envoyé, seulement journalisé) ou `smtp` | `smtp` pour envoyer |
-| `SMTP_HOST` | Serveur SMTP | ex. `smtp.gmail.com` |
-| `SMTP_PORT` / `SMTP_SECURITY` | Port et chiffrement | `587` + `starttls` (défaut) ; ou `465` + `ssl` |
-| `SMTP_USER` | Identifiant SMTP | l'adresse du compte d'envoi |
-| `SMTP_PASSWORD` | Mot de passe SMTP (**secret**) | Gmail : un **mot de passe d'application**, jamais celui du compte |
-| `SMTP_TIMEOUT_SECONDS` | Délai maximal d'un envoi | `10` (défaut) |
-| `EMAIL_FROM` | Expéditeur | Gmail : l'adresse du compte SMTP lui-même |
+| `EMAIL_PROVIDER` | `console` (défaut : rien n'est envoyé, seulement journalisé), `brevo` ou `smtp` | **`brevo` sur Render** |
+| `BREVO_API_KEY` | Clé d'API Brevo (**secret**) | *Brevo > SMTP & API > Clés API* |
+| `BREVO_API_BASE_URL` | Base de l'API | `https://api.brevo.com/v3` (défaut, documentation Brevo) |
+| `BREVO_TIMEOUT_SECONDS` | Délai maximal d'un appel | `10` (défaut) |
+| `EMAIL_FROM` | Expéditeur | une adresse **validée** dans le compte Brevo |
 | `ADMIN_NOTIFICATION_EMAILS` | Destinataires, séparés par des virgules | adresses des admins |
+| `SMTP_*` | Serveur SMTP (`EMAIL_PROVIDER=smtp` seulement) | hôte, port (`587` + `starttls` ou `465` + `ssl`), identifiant, mot de passe (**secret**), délai |
 
-- Avec `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`,
-  `EMAIL_FROM` et au moins un destinataire sont **exigés au démarrage**
-  (liste complète des manques, jamais le mot de passe). Les adresses sont
-  vérifiées quel que soit le fournisseur ; les valeurs collées sont
-  nettoyées (retour à la ligne, espaces en bordure).
-- Le certificat du serveur SMTP est toujours vérifié (TLS par défaut).
-- Journaux : destinataires comptés, sujet ; jamais le mot de passe, jamais
-  le message d'une erreur SMTP (seulement son type).
+- `EMAIL_PROVIDER=brevo` exige au démarrage `BREVO_API_KEY`, `EMAIL_FROM` et
+  au moins un destinataire ; `EMAIL_PROVIDER=smtp` exige `SMTP_HOST`,
+  `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` et un destinataire. Liste
+  complète des manques, jamais une clé ni un mot de passe ; en production,
+  une clé Brevo d'exemple est refusée.
+- Valeurs collées nettoyées (retour à la ligne, espaces en bordure) ;
+  adresses vérifiées quel que soit le fournisseur.
+- Brevo : clé envoyée dans l'en-tête `api-key` (jamais dans une URL), corps
+  texte + version HTML échappée, succès = HTTP 201/202.
+- Journaux : nombre de destinataires et sujet ; en cas de refus, le statut
+  et le code d'erreur du fournisseur (ex. `Brevo HTTP 401 (unauthorized)`),
+  jamais la clé, le mot de passe ni le message libre du fournisseur.
 
-### 14.3 Mise en route (Gmail)
+### 14.3 Mise en route (Brevo)
 
-1. Compte Google d'envoi : activer la **validation en deux étapes**, puis
-   créer un **mot de passe d'application** (*Compte Google > Sécurité >
-   Mots de passe des applications*). Un mot de passe d'application ne se
-   partage jamais (ni ticket, ni messagerie, ni dépôt) ; s'il a circulé,
-   le **révoquer** et en créer un nouveau.
-2. Render (*Environment*) : `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`,
-   `SMTP_USER` et `EMAIL_FROM` = l'adresse du compte d'envoi,
-   `SMTP_PASSWORD` = le mot de passe d'application,
-   `ADMIN_NOTIFICATION_EMAILS` = les adresses des admins. (Variables
-   `sync: false` de `render.yaml` : à saisir à la main sur un Blueprint
-   déjà créé.)
-3. Test : un compte artisan de test envoie sa CNI (aucun e-mail : dossier
+1. Créer un compte Brevo (offre gratuite : quelques centaines d'e-mails par
+   jour, largement assez pour des notifications d'administration).
+2. *Expéditeurs, domaines et IP dédiées > Expéditeurs* : ajouter et
+   **valider** l'adresse d'envoi (lien de confirmation reçu par e-mail).
+   Une adresse gratuite (`@gmail.com`...) fonctionne pour des e-mails
+   internes, mais un domaine à soi (avec authentification SPF/DKIM dans
+   Brevo) évite que les messages finissent en indésirables.
+3. *SMTP & API > Clés API* : créer une clé. Elle ne se partage jamais (ni
+   ticket, ni messagerie, ni dépôt) ; si elle a circulé, la supprimer et en
+   créer une autre.
+4. Render (*Environment*) : `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY` = la clé,
+   `EMAIL_FROM` = l'adresse validée, `ADMIN_NOTIFICATION_EMAILS` = les admins.
+   Les variables `SMTP_*` peuvent être supprimées (inutilisées avec brevo).
+   (Variables `sync: false` de `render.yaml` : à saisir à la main sur un
+   Blueprint déjà créé.)
+5. Test : un compte artisan de test envoie sa CNI (aucun e-mail : dossier
    partiel), puis son selfie (un e-mail). Journal Render attendu :
    `Notification admin envoyée (dossier de vérification soumis) à N
-   destinataire(s).`
-4. Gmail limite le volume d'envoi quotidien d'un compte : largement assez
-   pour des notifications d'administration, pas pour des e-mails aux
-   utilisateurs (un fournisseur dédié serait alors à brancher, même
-   contrat `EmailProvider`).
+   destinataire(s).` En cas de refus : `NON envoyée : Brevo HTTP 401
+   (unauthorized).` (clé), `... 400 (invalid_parameter).` (souvent un
+   expéditeur non validé).
+
+Hors Render, avec `EMAIL_PROVIDER=smtp` et Gmail : validation en deux
+étapes, puis un **mot de passe d'application** (jamais celui du compte) dans
+`SMTP_PASSWORD`, `SMTP_HOST=smtp.gmail.com`, `SMTP_USER` et `EMAIL_FROM` =
+l'adresse du compte.
