@@ -820,3 +820,75 @@ code précédent reste valable.
 | `HTTP 404` (définitif) | mauvaise base | vérifier `TERMII_BASE_URL` |
 | `HTTP 429` / `5xx` (transitoire), `ConnectError`, `ReadTimeout` | panne côté Termii ou réseau | nouvel essai automatique ; si persistant, statut Termii |
 | `budget total de 8.0 s dépassé` | Termii trop lent | vérifier le statut Termii |
+
+## 14. E-mails aux administrateurs
+
+Quand un artisan **complète** son dossier de vérification, les admins
+reçoivent un e-mail (« push ») au lieu de devoir surveiller
+`/admin/verifications`.
+
+### 14.1 Quand l'e-mail part
+
+- **Une fois par passage du dossier à « complet, en attente de revue »** :
+  chaque document requis (`VERIFICATION_REQUIRED_DOC_TYPES`, CNI et selfie
+  par défaut) a sa dernière version en attente ou déjà approuvée, sans
+  manquant ni refus (`app.services.verification.is_awaiting_review`).
+- Jamais pour un dossier **partiel** (un seul document envoyé), jamais un
+  e-mail **par document**, jamais une **relance** pour un dossier déjà en
+  attente. Un renvoi après un refus est un nouveau passage : un nouvel
+  e-mail.
+- Deux envois simultanés du même artisan sont sérialisés (verrou de ligne
+  sur son profil) : l'e-mail part une fois et une seule.
+- Envoyé **après** la validation de l'envoi (jamais pour un envoi annulé),
+  en arrière-plan. **Best-effort** : un échec d'e-mail est journalisé
+  (`Notification admin ... NON envoyée : <type d'erreur>`), l'envoi des
+  documents de l'artisan reste réussi.
+
+Contenu : « Un artisan a soumis ses documents de vérification sur
+Téranga », le nom affiché de l'artisan (omis s'il ressemble à un numéro de
+téléphone) et le lien `FRONTEND_PUBLIC_BASE_URL/admin/verifications`. Aucune
+pièce jointe, aucun document, aucun numéro.
+
+### 14.2 Variables
+
+| Variable | Rôle | Valeur |
+|---|---|---|
+| `EMAIL_PROVIDER` | `console` (défaut : rien n'est envoyé, seulement journalisé) ou `smtp` | `smtp` pour envoyer |
+| `SMTP_HOST` | Serveur SMTP | ex. `smtp.gmail.com` |
+| `SMTP_PORT` / `SMTP_SECURITY` | Port et chiffrement | `587` + `starttls` (défaut) ; ou `465` + `ssl` |
+| `SMTP_USER` | Identifiant SMTP | l'adresse du compte d'envoi |
+| `SMTP_PASSWORD` | Mot de passe SMTP (**secret**) | Gmail : un **mot de passe d'application**, jamais celui du compte |
+| `SMTP_TIMEOUT_SECONDS` | Délai maximal d'un envoi | `10` (défaut) |
+| `EMAIL_FROM` | Expéditeur | Gmail : l'adresse du compte SMTP lui-même |
+| `ADMIN_NOTIFICATION_EMAILS` | Destinataires, séparés par des virgules | adresses des admins |
+
+- Avec `EMAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`,
+  `EMAIL_FROM` et au moins un destinataire sont **exigés au démarrage**
+  (liste complète des manques, jamais le mot de passe). Les adresses sont
+  vérifiées quel que soit le fournisseur ; les valeurs collées sont
+  nettoyées (retour à la ligne, espaces en bordure).
+- Le certificat du serveur SMTP est toujours vérifié (TLS par défaut).
+- Journaux : destinataires comptés, sujet ; jamais le mot de passe, jamais
+  le message d'une erreur SMTP (seulement son type).
+
+### 14.3 Mise en route (Gmail)
+
+1. Compte Google d'envoi : activer la **validation en deux étapes**, puis
+   créer un **mot de passe d'application** (*Compte Google > Sécurité >
+   Mots de passe des applications*). Un mot de passe d'application ne se
+   partage jamais (ni ticket, ni messagerie, ni dépôt) ; s'il a circulé,
+   le **révoquer** et en créer un nouveau.
+2. Render (*Environment*) : `EMAIL_PROVIDER=smtp`, `SMTP_HOST=smtp.gmail.com`,
+   `SMTP_USER` et `EMAIL_FROM` = l'adresse du compte d'envoi,
+   `SMTP_PASSWORD` = le mot de passe d'application,
+   `ADMIN_NOTIFICATION_EMAILS` = les adresses des admins. (Variables
+   `sync: false` de `render.yaml` : à saisir à la main sur un Blueprint
+   déjà créé.)
+3. Test : un compte artisan de test envoie sa CNI (aucun e-mail : dossier
+   partiel), puis son selfie (un e-mail). Journal Render attendu :
+   `Notification admin envoyée (dossier de vérification soumis) à N
+   destinataire(s).`
+4. Gmail limite le volume d'envoi quotidien d'un compte : largement assez
+   pour des notifications d'administration, pas pour des e-mails aux
+   utilisateurs (un fournisseur dédié serait alors à brancher, même
+   contrat `EmailProvider`).

@@ -12,7 +12,7 @@ import io
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,7 @@ from app.services import covers as covers_service
 from app.services import documents as documents_service
 from app.services import engagement as engagement_service
 from app.services import reviews as reviews_service
+from app.services.admin_notifications import notify_verification_submitted
 from app.services.file_validation import MIME_BY_TYPE
 from app.services.profile_media import discard_obsolete_media, media_constraints
 from app.services.rate_limit import (
@@ -239,6 +240,7 @@ async def upload_my_document(
     rate_limiter: Annotated[RateLimiter, Depends(get_document_upload_rate_limiter)],
     doc_type: Annotated[VerificationDocType, Form()],
     file: Annotated[UploadFile, File()],
+    background_tasks: BackgroundTasks,
 ) -> VerificationDocumentOut:
     allowed = await rate_limiter.check(
         f"user:{artisan.id}",
@@ -262,7 +264,13 @@ async def upload_my_document(
         storage=get_storage_backend(settings),
     )
     await session.commit()
-    return result
+    # Dossier COMPLÉTÉ par cet envoi : les admins sont prévenus par e-mail,
+    # APRÈS la validation (jamais pour un envoi annulé) et en arrière-plan
+    # (la réponse de l'artisan n'attend pas le serveur SMTP). Best-effort :
+    # un échec d'e-mail est journalisé, l'envoi reste réussi.
+    if result.dossier_submitted:
+        background_tasks.add_task(notify_verification_submitted, result.artisan_name, settings)
+    return result.document
 
 
 @router.get("/me/documents", response_model=MyVerificationOut)
