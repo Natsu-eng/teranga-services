@@ -6,23 +6,30 @@ Le fournisseur actif est choisi par configuration (`EMAIL_PROVIDER`) :
 - `console` (défaut, dev/test) : rien n'est envoyé, l'e-mail est seulement
   journalisé (destinataires et sujet ; le corps seulement en development/
   test) ;
+- `brevo` : envoi réel par l'API HTTP transactionnelle de Brevo
+  (`POST {BREVO_API_BASE_URL}/smtp/email`, en-tête `api-key`), sur le port
+  443 -- la voie à utiliser sur Render, qui bloque le SMTP sortant ;
 - `smtp` : envoi réel par un serveur SMTP (`SMTP_*`, ex. Gmail : port 587 +
   STARTTLS et mot de passe d'application). `smtplib` (bibliothèque standard,
   aucune dépendance ajoutée) est synchrone : l'envoi part dans un thread, la
   boucle asynchrone n'est jamais bloquée, et le délai est borné
-  (`SMTP_TIMEOUT_SECONDS`).
+  (`SMTP_TIMEOUT_SECONDS`). INUTILISABLE sur Render (ports SMTP bloqués :
+  « OSError: Network is unreachable »).
 
 Jamais de secret dans les journaux : ni le mot de passe SMTP, ni le corps
 d'un message hors poste de développement.
 """
 
 import asyncio
+import html
 import logging
 import smtplib
 import ssl
 from dataclasses import dataclass
 from email.message import EmailMessage
 from typing import Protocol
+
+import httpx
 
 from app.core.config import Settings, get_settings
 
@@ -36,6 +43,16 @@ class OutgoingEmail:
     to: tuple[str, ...]
     subject: str
     body: str
+
+
+class EmailSendError(Exception):
+    """Refus du fournisseur (réponse HTTP en erreur). `safe_detail` (statut,
+    code d'erreur du fournisseur) peut être journalisé : jamais la clé, ni
+    le message libre du fournisseur (qui peut citer des adresses)."""
+
+    def __init__(self, safe_detail: str) -> None:
+        super().__init__(safe_detail)
+        self.safe_detail = safe_detail
 
 
 class EmailProvider(Protocol):
@@ -121,8 +138,81 @@ class SmtpEmailProvider:
         await asyncio.to_thread(self._send_blocking, email)
 
 
+BREVO_SEND_PATH = "/smtp/email"
+
+
+def html_from_text(text: str) -> str:
+    """Version HTML du corps texte (Brevo exige `htmlContent` sans modèle) :
+    texte ÉCHAPPÉ, un paragraphe par bloc, retours à la ligne conservés --
+    aucune balise ne peut venir d'une donnée (nom de l'artisan compris)."""
+    paragraphs = [block for block in text.split("\n\n") if block.strip()]
+    return "".join(
+        "<p>" + html.escape(block).replace("\n", "<br>") + "</p>" for block in paragraphs
+    )
+
+
+class BrevoEmailProvider:
+    """Envoi réel par l'API HTTP transactionnelle de Brevo (port 443).
+
+    Requête (documentation Brevo, « Send a transactional email ») :
+    `POST {BREVO_API_BASE_URL}/smtp/email`, en-tête `api-key`, corps
+    `{sender, to, subject, textContent, htmlContent}` ; succès = 201 (202
+    pour un envoi planifié). L'expéditeur (`EMAIL_FROM`) doit être validé
+    dans le compte Brevo.
+    """
+
+    def __init__(
+        self, settings: Settings, *, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
+        api_key, sender = settings.brevo_api_key, settings.email_from
+        # Défense en profondeur : déjà exigés au démarrage (validate_email_settings).
+        if not (api_key and sender):
+            raise ValueError("Brevo incomplet : voir BREVO_API_KEY et EMAIL_FROM.")
+        self._api_key = api_key
+        self._sender = sender
+        self._base_url = settings.brevo_api_base_url
+        self._timeout = settings.brevo_timeout_seconds
+        # Point d'injection des tests (faux serveur Brevo, aucun réseau).
+        self._transport = transport
+
+    async def send(self, email: OutgoingEmail) -> None:
+        payload = {
+            "sender": {"email": self._sender},
+            "to": [{"email": address} for address in email.to],
+            "subject": email.subject,
+            "textContent": email.body,
+            "htmlContent": html_from_text(email.body),
+        }
+        async with httpx.AsyncClient(
+            base_url=self._base_url, timeout=self._timeout, transport=self._transport
+        ) as client:
+            # La clé voyage dans un EN-TÊTE, jamais dans l'URL (ni donc dans
+            # les journaux de requêtes d'httpx).
+            response = await client.post(
+                BREVO_SEND_PATH,
+                json=payload,
+                headers={"api-key": self._api_key, "accept": "application/json"},
+            )
+        if response.status_code in (201, 202):
+            return
+        raise EmailSendError(f"Brevo HTTP {response.status_code} ({_brevo_error_code(response)})")
+
+
+def _brevo_error_code(response: httpx.Response) -> str:
+    """Code d'erreur Brevo (« unauthorized », « invalid_parameter »...) ;
+    jamais le message libre, qui peut citer des adresses."""
+    try:
+        body = response.json()
+    except ValueError:
+        return "réponse non JSON"
+    code = body.get("code") if isinstance(body, dict) else None
+    return code if isinstance(code, str) else "code inconnu"
+
+
 def get_email_provider(settings: Settings | None = None) -> EmailProvider:
     settings = settings or get_settings()
+    if settings.email_provider == "brevo":
+        return BrevoEmailProvider(settings)
     if settings.email_provider == "smtp":
         return SmtpEmailProvider(settings)
     return ConsoleEmailProvider(settings)

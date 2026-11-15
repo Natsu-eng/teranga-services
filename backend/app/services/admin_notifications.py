@@ -18,7 +18,7 @@ import logging
 import re
 
 from app.core.config import Settings
-from app.services.email import EmailProvider, OutgoingEmail, get_email_provider
+from app.services.email import EmailProvider, EmailSendError, OutgoingEmail, get_email_provider
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +69,11 @@ async def notify_verification_submitted(
         email = build_verification_submitted_email(artisan_name, settings)
         await (provider or get_email_provider(settings)).send(email)
     except Exception as exc:  # best-effort : rien ne doit remonter à l'artisan
-        # Type de l'erreur seulement : le message d'une erreur SMTP peut citer
-        # des détails du serveur, jamais utiles à un tiers dans les journaux.
-        logger.error(
-            "Notification admin (dossier de vérification) NON envoyée : %s.", type(exc).__name__
-        )
+        # Détail SÛR seulement : statut et code du fournisseur (refus Brevo),
+        # sinon le type de l'erreur (réseau, SMTP...) -- jamais son message,
+        # qui peut citer des adresses ou des détails du serveur.
+        detail = exc.safe_detail if isinstance(exc, EmailSendError) else type(exc).__name__
+        logger.error("Notification admin (dossier de vérification) NON envoyée : %s.", detail)
         return
     logger.info(
         "Notification admin envoyée (dossier de vérification soumis) à %d destinataire(s).",
