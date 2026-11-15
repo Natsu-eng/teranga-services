@@ -61,6 +61,19 @@ services:
         sync: false
       - key: TERMII_BASE_URL
         sync: false
+      # E-mails aux admins (DEPLOYMENT.md §14) : console par défaut si absent.
+      - key: EMAIL_PROVIDER
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: ADMIN_NOTIFICATION_EMAILS
+        sync: false
       # À MESURER après le premier déploiement (DEPLOYMENT.md §12.6).
       - key: TRUSTED_PROXY_HOPS
         sync: false
