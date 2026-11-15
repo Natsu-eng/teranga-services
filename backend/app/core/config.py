@@ -70,6 +70,9 @@ _S3_REGION_RE = re.compile(r"[a-z0-9-]+")
 # Identifiant d'expéditeur Termii : 3 à 11 caractères alphanumériques
 # (documentation Termii, Messaging API, champ `from`).
 _TERMII_SENDER_RE = re.compile(r"[A-Za-z0-9]{3,11}")
+# Adresse e-mail (forme simple « local@domaine.tld ») : contrôle de saisie,
+# pas une validation RFC complète -- le serveur SMTP reste juge.
+_EMAIL_RE = re.compile(r"[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+")
 
 
 def clean_setting_value(value: str) -> str:
@@ -212,6 +215,80 @@ class Settings(BaseSettings):
     # Canal de livraison des codes : "sms" (défaut), "whatsapp", ou
     # "whatsapp_then_sms" (WhatsApp d'abord, repli SMS si WhatsApp échoue).
     otp_channel: Literal["sms", "whatsapp", "whatsapp_then_sms"] = "sms"
+
+    # --- E-mails aux administrateurs (DEPLOYMENT.md, « E-mails ») ----------
+    # Fournisseur : "console" (défaut dev/test : rien n'est envoyé, l'e-mail
+    # est seulement journalisé) ou "smtp" (envoi réel, réglages SMTP_*).
+    email_provider: Literal["console", "smtp"] = "console"
+    # Serveur SMTP. Port 587 + STARTTLS (défaut), ou 465 + SSL implicite.
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal["starttls", "ssl"] = "starttls"
+    # Identifiant et mot de passe SMTP. Mot de passe = SECRET : jamais
+    # journalisé ni affiché dans une erreur de configuration.
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    # Délai maximal d'un envoi (connexion + échange) : un serveur lent ne
+    # bloque jamais la requête de l'artisan (l'envoi est fait en arrière-plan).
+    smtp_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    # Expéditeur des e-mails (souvent le compte SMTP lui-même, ex. Gmail).
+    email_from: str | None = None
+    # Destinataires des notifications d'administration (nouvelle demande de
+    # vérification...), séparés par des virgules. Vide = aucune notification.
+    admin_notification_emails: Annotated[list[str], NoDecode] = []
+
+    @field_validator("smtp_host", "smtp_user", "smtp_password", "email_from", mode="before")
+    @classmethod
+    def clean_email_value(cls, v: object) -> object:
+        # Valeurs collées dans un tableau de bord : même nettoyage que S3_*.
+        if isinstance(v, str):
+            v = clean_setting_value(v)
+            return v or None
+        return v
+
+    @field_validator("admin_notification_emails", mode="before")
+    @classmethod
+    def split_admin_notification_emails(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [address for part in v.split(",") if (address := clean_setting_value(part))]
+        return v
+
+    @model_validator(mode="after")
+    def validate_email_settings(self) -> "Settings":
+        """Adresses vérifiées quel que soit le fournisseur ; avec "smtp",
+        réglages complets exigés. Tous les problèmes listés d'un coup, jamais
+        le mot de passe."""
+        problems: list[str] = []
+        for address in self.admin_notification_emails:
+            if not _EMAIL_RE.fullmatch(address):
+                problems.append(
+                    f"ADMIN_NOTIFICATION_EMAILS : {address!r} n'est pas une adresse e-mail."
+                )
+        if self.email_from and not _EMAIL_RE.fullmatch(self.email_from):
+            problems.append(f"EMAIL_FROM : {self.email_from!r} n'est pas une adresse e-mail.")
+        if self.email_provider == "smtp":
+            missing = [
+                name
+                for name, value in (
+                    ("SMTP_HOST", self.smtp_host),
+                    ("SMTP_USER", self.smtp_user),
+                    ("SMTP_PASSWORD", self.smtp_password),
+                    ("EMAIL_FROM", self.email_from),
+                )
+                if not value
+            ]
+            if missing:
+                problems.append(f"E-mail SMTP incomplet, à renseigner : {', '.join(missing)}.")
+            if not self.admin_notification_emails:
+                problems.append(
+                    "ADMIN_NOTIFICATION_EMAILS est vide : avec EMAIL_PROVIDER=smtp, au moins un "
+                    "destinataire est attendu."
+                )
+            if self.smtp_host and has_hidden_characters(self.smtp_host):
+                problems.append(f"SMTP_HOST invalide ({self.smtp_host!r}).")
+        if problems:
+            raise ValueError("E-mail mal configuré :\n- " + "\n- ".join(problems))
+        return self
 
     @field_validator(
         "termii_api_key",

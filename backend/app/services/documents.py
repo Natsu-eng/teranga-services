@@ -15,7 +15,9 @@ Sécurité (non négociable, voir BUILD_PLAN.md) :
 """
 
 import uuid
+from dataclasses import dataclass
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -30,7 +32,7 @@ from app.services.artisan_errors import ArtisanProfilIntrouvableError
 from app.services.artisans import get_artisan_or_404
 from app.services.file_validation import EXTENSION_BY_TYPE, DetectedFileType, detect_file_type
 from app.services.storage import StorageBackend, StorageObjectIntrouvableError
-from app.services.verification import compute_verified_status
+from app.services.verification import compute_verified_status, is_awaiting_review
 
 # Types de fichiers acceptés par type de document. Un selfie ne peut jamais
 # être un PDF (ça n'a pas de sens : c'est une photo) -- les autres documents
@@ -90,6 +92,37 @@ async def _get_own_profile(session: AsyncSession, user: User) -> ArtisanProfile:
     return await get_artisan_or_404(session, artisan_id)
 
 
+async def _get_own_profile_for_update(session: AsyncSession, user: User) -> ArtisanProfile:
+    """Profil de l'artisan VERROUILLÉ (FOR UPDATE), documents relus après.
+
+    Deux envois simultanés du même artisan (CNI et selfie en parallèle) sont
+    ainsi sérialisés : le second relit, après la validation du premier (READ
+    COMMITTED), la liste COMPLÈTE de ses documents -- l'état « dossier
+    complet » est calculé sur des données à jour, la notification des admins
+    part une fois et une seule.
+    """
+    artisan_id = await artisans_repository.get_artisan_profile_id_by_user_id(session, user.id)
+    if artisan_id is None:
+        raise ArtisanProfilIntrouvableError()
+    await session.execute(
+        select(ArtisanProfile.id).where(ArtisanProfile.id == artisan_id).with_for_update()
+    )
+    profile = await get_artisan_or_404(session, artisan_id)
+    await session.refresh(profile, attribute_names=["verifications"])
+    return profile
+
+
+@dataclass(frozen=True)
+class UploadedDocument:
+    document: VerificationDocumentOut
+    # Vrai si CET envoi complète le dossier (passage à « en attente de
+    # revue ») : déclenche UNE notification des admins, jamais une par
+    # document ni une seconde pour un dossier déjà en attente.
+    dossier_submitted: bool
+    # Nom affiché de l'artisan (seule donnée personnelle de la notification).
+    artisan_name: str | None
+
+
 def _to_document_out(verification: Verification) -> VerificationDocumentOut:
     return VerificationDocumentOut.model_validate(verification)
 
@@ -102,7 +135,7 @@ async def upload_document(
     content: bytes,
     settings: Settings,
     storage: StorageBackend,
-) -> VerificationDocumentOut:
+) -> UploadedDocument:
     if not content:
         raise FichierVideError()
     if len(content) > settings.storage_max_upload_bytes:
@@ -113,7 +146,9 @@ async def upload_document(
     if detected is None or detected not in allowed:
         raise FichierTypeInvalideError()
 
-    profile = await _get_own_profile(session, user)
+    profile = await _get_own_profile_for_update(session, user)
+    required = list(settings.verification_required_doc_types)
+    was_awaiting_review = is_awaiting_review(profile.verifications, required)
 
     extension = EXTENSION_BY_TYPE[detected]
     # Identifiant aléatoire, jamais le nom de fichier d'origine (non
@@ -130,11 +165,16 @@ async def upload_document(
     # tenue à jour à l'écriture pour ne jamais diverger inutilement
     # (BUILD_PLAN.md §2.2) -- notamment pour rester la source fiable utilisée
     # comme filtre SQL par la recherche publique (app.repositories.artisans).
-    required = list(settings.verification_required_doc_types)
     profile.verified_status = compute_verified_status(profile.verifications, required)
     await session.flush()
 
-    return _to_document_out(verification)
+    return UploadedDocument(
+        document=_to_document_out(verification),
+        dossier_submitted=(
+            not was_awaiting_review and is_awaiting_review(profile.verifications, required)
+        ),
+        artisan_name=profile.user.full_name,
+    )
 
 
 async def list_my_documents(
