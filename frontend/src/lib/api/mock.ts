@@ -300,6 +300,21 @@ export const mockApiClient: ApiClient = {
     throw new ApiError('network', 'Temps réel indisponible.');
   },
 
+  // Notifications push : jamais simulées (désactivées dans le mock).
+  async getPushConfig() {
+    await simulateNetworkLatency();
+    return { enabled: false, vapidPublicKey: null };
+  },
+
+  async savePushSubscription(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('validation', 'Les notifications ne sont pas disponibles.');
+  },
+
+  async deletePushSubscription() {
+    await simulateNetworkLatency();
+  },
+
   async createIntervention(): Promise<Intervention> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', "Cette demande n'existe pas.");

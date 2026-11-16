@@ -131,6 +131,19 @@ export interface RealtimeTicket {
   expiresIn: number;
 }
 
+/** Notifications push : `enabled` faux, aucune invitation n'est proposée. */
+export interface PushConfig {
+  enabled: boolean;
+  /** Clé publique VAPID (`applicationServerKey`), base64url ; null si désactivées. */
+  vapidPublicKey: string | null;
+}
+
+/** Abonnement d'un appareil, tel que le donne `PushSubscription.toJSON()`. */
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
 export interface AdminVerificationFilters {
   /** Défaut serveur `pending` si omis (la file d'attente à traiter). */
   status?: VerificationDocStatus;
@@ -206,6 +219,12 @@ export interface ApiClient extends AdminBackofficeApi {
   markConversationRead(conversationId: string, lastReadSeq: number): Promise<ConversationDetail>;
   getMessageAttachmentBlob(conversationId: string, messageId: string): Promise<Blob>;
   createRealtimeTicket(): Promise<RealtimeTicket>;
+  // Notifications push (nouveau message, même application fermée).
+  getPushConfig(): Promise<PushConfig>;
+  /** Enregistre (ou rafraîchit) l'abonnement de cet appareil ; idempotent. */
+  savePushSubscription(subscription: PushSubscriptionPayload): Promise<void>;
+  /** Oublie l'abonnement de cet appareil (déconnexion). */
+  deletePushSubscription(endpoint: string): Promise<void>;
   // Paiements (montant TOUJOURS fixé par le serveur, jamais envoyé).
   getPaymentOptions(): Promise<PaymentOptions>;
   initPayment(interventionId: string, channel: PaymentChannel): Promise<PaymentSummary>;

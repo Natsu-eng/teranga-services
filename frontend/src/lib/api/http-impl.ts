@@ -54,6 +54,8 @@ import type {
   CreateInterventionInput,
   CreateQuoteInput,
   MessageCursor,
+  PushConfig,
+  PushSubscriptionPayload,
   RealtimeTicket,
   CreateReviewInput,
   CreateServiceRequestInput,
@@ -573,6 +575,25 @@ export const httpApiClient: ApiClient = {
       method: 'POST',
     });
     return { ticket: result.ticket, expiresIn: result.expires_in };
+  },
+
+  async getPushConfig(): Promise<PushConfig> {
+    const config = await apiRequest<{ enabled: boolean; vapid_public_key: string | null }>(
+      '/push/config',
+    );
+    return { enabled: config.enabled, vapidPublicKey: config.vapid_public_key };
+  },
+
+  async savePushSubscription(subscription: PushSubscriptionPayload): Promise<void> {
+    // Seuls l'adresse et les clés partent : rien d'autre de l'appareil.
+    await apiRequest<null>('/push/subscriptions', {
+      method: 'POST',
+      body: { endpoint: subscription.endpoint, keys: subscription.keys },
+    });
+  },
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await apiRequest<null>('/push/subscriptions', { method: 'DELETE', body: { endpoint } });
   },
 
   async getPaymentOptions(): Promise<PaymentOptions> {

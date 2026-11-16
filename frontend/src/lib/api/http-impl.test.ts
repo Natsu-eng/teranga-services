@@ -1355,6 +1355,53 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('notifications push', () => {
+    it('lit la configuration (clé publique VAPID)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(jsonResponse(200, { enabled: true, vapid_public_key: 'BCle' })),
+      );
+
+      await expect(httpApiClient.getPushConfig()).resolves.toEqual({
+        enabled: true,
+        vapidPublicKey: 'BCle',
+      });
+    });
+
+    it("enregistre l'abonnement : seulement l'adresse et les clés", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.savePushSubscription({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+        keys: { p256dh: 'BCle', auth: 'secret' },
+        expirationTime: null,
+      } as never);
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/push\/subscriptions$/);
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+        keys: { p256dh: 'BCle', auth: 'secret' },
+      });
+    });
+
+    it("oublie l'abonnement de l'appareil", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await httpApiClient.deletePushSubscription('https://fcm.googleapis.com/fcm/send/abc');
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/push\/subscriptions$/);
+      expect(options.method).toBe('DELETE');
+      expect(JSON.parse(options.body as string)).toEqual({
+        endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+      });
+    });
+  });
+
   describe('paiements', () => {
     const backendIntervention = {
       id: 'int-1',
