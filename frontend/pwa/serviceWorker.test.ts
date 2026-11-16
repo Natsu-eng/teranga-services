@@ -70,6 +70,25 @@ function request(
 const keyOf = (req: string | FakeRequest) =>
   typeof req === 'string' ? `${ORIGIN}${req}` : req.url;
 
+interface FakeWindow {
+  url: string;
+  focus: ReturnType<typeof vi.fn>;
+  navigate: ReturnType<typeof vi.fn>;
+}
+
+function fakeWindow(url: string, options: { controlled?: boolean } = {}): FakeWindow {
+  const win: FakeWindow = {
+    url,
+    focus: vi.fn(async () => win),
+    navigate: vi.fn(async (target: string) => {
+      if (options.controlled === false) throw new TypeError('fenêtre non contrôlée');
+      win.url = target;
+      return win;
+    }),
+  };
+  return win;
+}
+
 /** Charge le service worker produit dans un environnement simulé. */
 function loadServiceWorker(initialCaches: Record<string, Record<string, FakeResponse>> = {}) {
   const listeners = new Map<string, (event: unknown) => void>();
@@ -101,12 +120,23 @@ function loadServiceWorker(initialCaches: Record<string, Record<string, FakeResp
     };
   };
 
+  // Fenêtres de l'app ouvertes (notificationclick), modifiables par les tests.
+  const windows: FakeWindow[] = [];
   const self = {
     location: { origin: ORIGIN },
     addEventListener: (type: string, listener: (event: unknown) => void) =>
       listeners.set(type, listener),
     skipWaiting: vi.fn(async () => undefined),
-    clients: { claim: vi.fn(async () => undefined) },
+    registration: {
+      showNotification: vi.fn<(title: string, options: NotificationOptions) => Promise<void>>(
+        async () => undefined,
+      ),
+    },
+    clients: {
+      claim: vi.fn(async () => undefined),
+      matchAll: vi.fn(async () => windows),
+      openWindow: vi.fn(async (url: string) => fakeWindow(url)),
+    },
   };
   const caches = {
     open: async (name: string) => openCache(name),
@@ -150,12 +180,44 @@ function loadServiceWorker(initialCaches: Record<string, Record<string, FakeResp
     return responded;
   }
 
+  /** Événement push (contenu JSON, illisible, ou absent). */
+  function pushEvent(data: unknown | 'illisible' | null): Promise<unknown> {
+    let pending: Promise<unknown> = Promise.resolve();
+    listeners.get('push')!({
+      data:
+        data === null
+          ? null
+          : {
+              json: () => {
+                if (data === 'illisible') throw new SyntaxError('JSON invalide');
+                return data;
+              },
+            },
+      waitUntil: (p: Promise<unknown>) => (pending = p),
+    });
+    return pending;
+  }
+
+  /** Clic sur une notification portant `data`. */
+  function clickEvent(data: unknown): { done: Promise<unknown>; close: ReturnType<typeof vi.fn> } {
+    let pending: Promise<unknown> = Promise.resolve();
+    const close = vi.fn();
+    listeners.get('notificationclick')!({
+      notification: { data, close },
+      waitUntil: (p: Promise<unknown>) => (pending = p),
+    });
+    return { done: pending, close };
+  }
+
   return {
     self,
     store,
     network,
     dispatch,
     fetchEvent,
+    pushEvent,
+    clickEvent,
+    windows,
     cacheName: `teranga-shell-${BUILD.version}`,
   };
 }
@@ -357,5 +419,125 @@ describe('plugin de build du service worker', () => {
 
   it('échoue franchement si index.html est absent du bundle', () => {
     expect(() => runGenerateBundle({})).toThrow(/index\.html introuvable/);
+  });
+});
+
+describe('service worker : notifications push', () => {
+  const CONVERSATION = '5f0c2a8e-3d4b-4c1a-9e7f-0a1b2c3d4e5f';
+  const PAYLOAD = {
+    title: 'Téranga',
+    body: 'Nouveau message sur Téranga',
+    url: `/messages/${CONVERSATION}`,
+    tag: `conversation-${CONVERSATION}`,
+  };
+
+  it('affiche la notification reçue, regroupée par fil', async () => {
+    const sw = loadServiceWorker();
+
+    await sw.pushEvent(PAYLOAD);
+
+    expect(sw.self.registration.showNotification).toHaveBeenCalledWith('Téranga', {
+      body: 'Nouveau message sur Téranga',
+      tag: `conversation-${CONVERSATION}`,
+      renotify: true,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      lang: 'fr',
+      data: { url: `/messages/${CONVERSATION}` },
+    });
+  });
+
+  it.each([
+    ['contenu absent', null],
+    ['contenu illisible', 'illisible'],
+    ['contenu vide', {}],
+  ])('%s : affiche quand même une notification sobre', async (_label, data) => {
+    const sw = loadServiceWorker();
+
+    await sw.pushEvent(data);
+
+    const [title, options] = sw.self.registration.showNotification.mock.calls[0];
+    expect(title).toBe('Téranga');
+    expect(options).toMatchObject({
+      body: 'Nouveau message sur Téranga',
+      data: { url: '/messages' },
+    });
+  });
+
+  it.each([
+    'https://attaquant.example/messages/abc',
+    '//attaquant.example/messages',
+    'javascript:alert(1)',
+    '/profil',
+    '/messages/../admin',
+  ])('un lien hors de la messagerie (%s) est remplacé par /messages', async (url) => {
+    const sw = loadServiceWorker();
+
+    await sw.pushEvent({ ...PAYLOAD, url, tag: '<script>' });
+
+    const [, options] = sw.self.registration.showNotification.mock.calls[0];
+    expect(options).toMatchObject({ data: { url: '/messages' }, tag: 'teranga-message' });
+  });
+
+  it('ne garde que le chemin du fil : paramètres et fragment sont retirés', async () => {
+    const sw = loadServiceWorker();
+
+    await sw.pushEvent({
+      ...PAYLOAD,
+      url: `/messages/${CONVERSATION}?redirect=https://x.example#y`,
+    });
+
+    const [, options] = sw.self.registration.showNotification.mock.calls[0];
+    expect(options).toMatchObject({ data: { url: `/messages/${CONVERSATION}` } });
+  });
+
+  it('au clic, ouvre le fil dans une nouvelle fenêtre si aucune n’est ouverte', async () => {
+    const sw = loadServiceWorker();
+
+    const { done, close } = sw.clickEvent({ url: `/messages/${CONVERSATION}` });
+    await done;
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(sw.self.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/messages/${CONVERSATION}`);
+  });
+
+  it('au clic, remet au premier plan la fenêtre déjà sur ce fil', async () => {
+    const sw = loadServiceWorker();
+    const onThread = fakeWindow(`${ORIGIN}/messages/${CONVERSATION}`);
+    sw.windows.push(fakeWindow(`${ORIGIN}/accueil`), onThread);
+
+    await sw.clickEvent({ url: `/messages/${CONVERSATION}` }).done;
+
+    expect(onThread.focus).toHaveBeenCalledOnce();
+    expect(sw.self.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it('au clic, emmène une fenêtre de l’app déjà ouverte vers le fil', async () => {
+    const sw = loadServiceWorker();
+    const app = fakeWindow(`${ORIGIN}/accueil`);
+    sw.windows.push(app);
+
+    await sw.clickEvent({ url: `/messages/${CONVERSATION}` }).done;
+
+    expect(app.navigate).toHaveBeenCalledWith(`${ORIGIN}/messages/${CONVERSATION}`);
+    expect(app.focus).toHaveBeenCalledOnce();
+    expect(sw.self.clients.openWindow).not.toHaveBeenCalled();
+  });
+
+  it('au clic, ouvre une nouvelle fenêtre si celle de l’app ne peut pas naviguer', async () => {
+    const sw = loadServiceWorker();
+    sw.windows.push(fakeWindow(`${ORIGIN}/accueil`, { controlled: false }));
+
+    await sw.clickEvent({ url: `/messages/${CONVERSATION}` }).done;
+
+    expect(sw.self.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/messages/${CONVERSATION}`);
+  });
+
+  it('au clic, un lien altéré ouvre seulement la liste des messages', async () => {
+    const sw = loadServiceWorker();
+
+    await sw.clickEvent({ url: 'https://attaquant.example/' }).done;
+
+    expect(sw.self.clients.openWindow).toHaveBeenCalledWith(`${ORIGIN}/messages`);
   });
 });
