@@ -165,6 +165,7 @@ PROFILE_MEDIA_UPLOAD_BUCKET = "profile_media_upload"
 MESSAGE_SEND_BUCKET = "message_send"
 MESSAGE_ATTACHMENT_BUCKET = "message_attachment"
 PAYMENT_INIT_BUCKET = "payment_init"
+PUSH_SUBSCRIPTION_BUCKET = "push_subscription"
 
 _memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
 _postgres_limiters: dict[str, PostgresRateLimiter] = {}
@@ -233,3 +234,9 @@ def get_payment_init_rate_limiter(settings: SettingsDep) -> RateLimiter:
     """`POST /api/v1/payments/init` -- clé par utilisateur authentifié :
     chaque appel peut ouvrir un checkout chez le fournisseur."""
     return _limiter_for(PAYMENT_INIT_BUCKET, settings)
+
+
+def get_push_subscription_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST` et `DELETE /api/v1/push/subscriptions` -- un budget partagé,
+    clé par utilisateur authentifié (chaque appel écrit en base)."""
+    return _limiter_for(PUSH_SUBSCRIPTION_BUCKET, settings)
