@@ -51,6 +51,10 @@ export const RealtimeProvider: React.FC<RealtimeProviderProps> = ({
   // précédente affiché à un autre compte.
   const [unread, setUnread] = useState<{ userId: string; count: number } | null>(null);
   const listenersRef = useRef(new Set<RealtimeListener>());
+  // Fil à l'écran : gardé ici pour être redit à chaque nouvelle connexion
+  // (retour sur l'onglet, reconnexion).
+  const viewingRef = useRef<string | null>(null);
+  const connectionRef = useRef<RealtimeConnection | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const subscribe = useCallback((listener: RealtimeListener) => {
@@ -92,13 +96,21 @@ export const RealtimeProvider: React.FC<RealtimeProviderProps> = ({
     const offEvent = connection.onEvent((event) => {
       listenersRef.current.forEach((listener) => listener(event));
     });
+    connection.setViewing(viewingRef.current);
+    connectionRef.current = connection;
     connection.start();
     return () => {
       offStatus();
       offEvent();
+      connectionRef.current = null;
       connection.stop();
     };
   }, [active, createConnection]);
+
+  const setViewingConversation = useCallback((conversationId: string | null) => {
+    viewingRef.current = conversationId;
+    connectionRef.current?.setViewing(conversationId);
+  }, []);
 
   // Non-lus : relus à l'ouverture de session, au retour sur l'onglet et à
   // chaque (re)connexion du temps réel (rattrapage après une coupure).
@@ -137,8 +149,14 @@ export const RealtimeProvider: React.FC<RealtimeProviderProps> = ({
   const unreadCount = enabled && unread && unread.userId === userId ? unread.count : null;
 
   const value = useMemo<RealtimeContextValue>(
-    () => ({ status: effectiveStatus, subscribe, unreadCount, refreshUnread }),
-    [effectiveStatus, subscribe, unreadCount, refreshUnread],
+    () => ({
+      status: effectiveStatus,
+      subscribe,
+      unreadCount,
+      refreshUnread,
+      setViewingConversation,
+    }),
+    [effectiveStatus, subscribe, unreadCount, refreshUnread, setViewingConversation],
   );
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>;

@@ -101,6 +101,7 @@ function fakeRealtime(status: RealtimeStatus) {
     },
     unreadCount: 0,
     refreshUnread: vi.fn(),
+    setViewingConversation: vi.fn(),
   };
   return {
     value,
@@ -144,6 +145,16 @@ describe('ConversationScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Idrissa Fall' })).toBeInTheDocument();
     expect(screen.getByText('Plomberie')).toBeInTheDocument();
     expect(within(messageList()).getByText('Bonjour, je peux passer demain.')).toBeInTheDocument();
+  });
+
+  it('signale le fil à l’écran, puis plus aucun en le quittant', async () => {
+    const realtime = fakeRealtime('open').value;
+    const { unmount } = renderThread(realtime);
+    await screen.findByRole('heading', { name: 'Idrissa Fall' });
+
+    expect(realtime.setViewingConversation).toHaveBeenLastCalledWith('c1');
+    unmount();
+    expect(realtime.setViewingConversation).toHaveBeenLastCalledWith(null);
   });
 
   it('avertit avec transparence quand des coordonnées ont été masquées', async () => {
