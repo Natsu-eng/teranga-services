@@ -24,6 +24,14 @@ vivent sur l'instance qui les a acceptées. La diffusion passe donc par un
   ses propres connexions) et `RedisTicketStore` (un ticket consommé sur une
   instance est refusé partout), branchés au démarrage de l'application
   (`configure_realtime`, app/main.py).
+
+**Présence « fil ouvert »** (`ViewingPresence`) : le client signale par sa
+connexion la conversation qu'il a À L'ÉCRAN (`{"type": "viewing", ...}`).
+Sert uniquement à NE PAS envoyer de notification push pour un message qu'il
+voit déjà arriver (app/services/message_notifications.py). Mémoire locale
+sans Redis ; partagée via Redis sinon (`RedisViewingPresence`). Chaque
+signalement expire de lui-même (rafraîchi par le battement de cœur) : une
+connexion disparue sans fermeture propre ne bloque jamais les notifications.
 """
 
 import asyncio
@@ -32,6 +40,7 @@ import logging
 import time
 import uuid
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
@@ -154,6 +163,62 @@ class LocalRealtimeBus:
         await self._manager.publish(recipient_ids, event)
 
 
+class ViewingPresence(Protocol):
+    """Conversation à l'écran, par connexion temps réel.
+
+    `set_viewing(..., None)` efface le signalement de la connexion ; tout
+    signalement expire après `ttl_seconds` s'il n'est pas renouvelé.
+    Contrat de panne : ne lève jamais (au pire, une notification de trop).
+    """
+
+    async def set_viewing(
+        self,
+        user_id: uuid.UUID,
+        connection_id: str,
+        conversation_id: uuid.UUID | None,
+        *,
+        ttl_seconds: float,
+    ) -> None: ...
+
+    async def is_viewing(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> bool: ...
+
+
+class LocalViewingPresence:
+    """Instance unique : signalements en mémoire, horloge monotone."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        # utilisateur -> connexion -> (conversation à l'écran, échéance)
+        self._viewing: dict[uuid.UUID, dict[str, tuple[uuid.UUID, float]]] = {}
+
+    async def set_viewing(
+        self,
+        user_id: uuid.UUID,
+        connection_id: str,
+        conversation_id: uuid.UUID | None,
+        *,
+        ttl_seconds: float,
+    ) -> None:
+        connections = self._viewing.setdefault(user_id, {})
+        if conversation_id is None:
+            connections.pop(connection_id, None)
+        else:
+            connections[connection_id] = (conversation_id, self._clock() + ttl_seconds)
+        # Entrées échues retirées au passage : aucune croissance illimitée.
+        now = self._clock()
+        for key in [k for k, (_, deadline) in connections.items() if deadline <= now]:
+            del connections[key]
+        if not connections:
+            del self._viewing[user_id]
+
+    async def is_viewing(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> bool:
+        now = self._clock()
+        return any(
+            viewed == conversation_id and deadline > now
+            for viewed, deadline in self._viewing.get(user_id, {}).values()
+        )
+
+
 # Connexions de CE processus (toujours locales, par nature).
 connection_manager = ConnectionManager()
 ws_ticket_registry = WsTicketRegistry()
@@ -162,6 +227,7 @@ ws_ticket_registry = WsTicketRegistry()
 # démarrage si REDIS_URL est renseignée (voir `configure_realtime`).
 _bus: RealtimeBus = LocalRealtimeBus(connection_manager)
 _ticket_store: TicketStore = ws_ticket_registry
+_presence: ViewingPresence = LocalViewingPresence()
 
 
 def realtime_bus() -> RealtimeBus:
@@ -172,9 +238,17 @@ def ticket_store() -> TicketStore:
     return _ticket_store
 
 
-def configure_realtime(bus: RealtimeBus, store: TicketStore) -> None:
-    global _bus, _ticket_store
+def viewing_presence() -> ViewingPresence:
+    return _presence
+
+
+def configure_realtime(
+    bus: RealtimeBus, store: TicketStore, presence: ViewingPresence | None = None
+) -> None:
+    """Branche les implémentations actives (`presence` absente : mémoire locale)."""
+    global _bus, _ticket_store, _presence
     _bus, _ticket_store = bus, store
+    _presence = presence or LocalViewingPresence()
 
 
 def reset_realtime() -> None:
