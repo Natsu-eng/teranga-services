@@ -442,6 +442,8 @@ Ce que fait le service worker, et surtout ce qu'il ne fait pas :
   (documents d'identité compris), ni une réponse `no-store`/`private`/en erreur ;
 - chaque déploiement produit une nouvelle version : elle s'installe seule,
   prend la main tout de suite et supprime les anciens caches.
+- notifications push : affiche celles des nouveaux messages et ouvre le fil
+  au clic (lien limité à `/messages` de l'app) -- voir §15.
 
 En-têtes requis (déjà en place, testés) : `sw.js` et le manifeste en
 `Cache-Control: no-cache`, manifeste en `application/manifest+json`
@@ -910,3 +912,125 @@ Hors Render, avec `EMAIL_PROVIDER=smtp` et Gmail : validation en deux
 étapes, puis un **mot de passe d'application** (jamais celui du compte) dans
 `SMTP_PASSWORD`, `SMTP_HOST=smtp.gmail.com`, `SMTP_USER` et `EMAIL_FROM` =
 l'adresse du compte.
+
+## 15. Notifications push (nouveaux messages)
+
+Quand un message arrive dans une conversation, le **destinataire** reçoit
+une notification sur ses appareils, **même application fermée** (Web Push
+standard : service worker + service de push du navigateur). L'expéditeur,
+lui, n'est jamais notifié.
+
+### 15.1 Quand la notification part
+
+- À chaque message enregistré (texte ou photo), **après** l'enregistrement,
+  en tâche d'arrière-plan : l'envoi du message n'attend jamais le push et ne
+  peut pas échouer à cause de lui (**best-effort** : échec journalisé).
+- **Pas de notification si le destinataire a déjà ce fil à l'écran** : son
+  application le signale par la connexion temps réel (`viewing`), il voit le
+  message arriver. Fil ouvert sur un autre appareil, autre fil ou application
+  en arrière-plan : la notification part. Ce signal expire seul
+  (`WS_HEARTBEAT_TIMEOUT_SECONDS`) : une connexion coupée sans prévenir ne
+  bloque jamais les notifications. Plusieurs instances : il est partagé par
+  Redis (`REDIS_URL`) ; Redis en panne = notification envoyée (dans le doute,
+  on notifie).
+- **Tous les appareils abonnés** du destinataire (au plus
+  `WEB_PUSH_MAX_SUBSCRIPTIONS_PER_USER`, les plus récents). Un abonnement
+  déclaré mort par le service de push (HTTP **404/410** : application
+  désinstallée, permission retirée, appareil déconnecté) est **supprimé** ;
+  un échec passager (5xx, délai) ne supprime rien.
+- Jamais vers un compte supprimé.
+
+**Contenu sobre, sans fuite** : « Téranga — Nouveau message sur Téranga »,
+et le clic ouvre la conversation (`/messages/<id>`). Ni le texte du message,
+ni un nom, ni un numéro. Le contenu est de plus **chiffré de bout en bout**
+jusqu'à l'appareil (RFC 8291) : Google, Mozilla, Apple ou Microsoft ne le
+lisent pas.
+
+### 15.2 Côté utilisateur
+
+- Écran **Messages** : une invitation discrète « Ne manquez aucun message »
+  avec **Activer**. La permission du navigateur n'est demandée **qu'au
+  clic**, jamais au chargement. La croix la masque sur ce navigateur.
+- Permission déjà accordée : l'abonnement est resynchronisé à chaque
+  ouverture de session (aucune question posée).
+- **Déconnexion** : l'appareil est oublié (serveur + navigateur) avant
+  d'effacer la session — un téléphone partagé ne reçoit plus rien du compte
+  qui est parti.
+
+### 15.3 iPhone / iPad : l'application doit être installée
+
+Sur iOS et iPadOS, le Web Push **ne fonctionne que pour une PWA installée
+sur l'écran d'accueil, à partir d'iOS 16.4**. Dans Safari (onglet), il
+n'existe pas : l'invitation explique alors comment installer l'app
+(Partager, puis « Sur l'écran d'accueil », §11), puis il faut **ouvrir Téranga depuis
+l'icône** et activer les notifications depuis l'app installée. iOS
+antérieur à 16.4 : pas de notification possible. Android et ordinateur
+(Chrome, Edge, Firefox, Safari macOS 13+) : fonctionne dans le navigateur
+comme dans l'app installée.
+
+### 15.4 Variables
+
+| Variable | Rôle | Valeur |
+|---|---|---|
+| `WEB_PUSH_ENABLED` | Interrupteur ; `false` (défaut) : aucun abonnement accepté, aucun envoi, aucune invitation | `true` pour activer |
+| `VAPID_PUBLIC_KEY` | Clé publique (remise au navigateur) | sortie du script ci-dessous |
+| `VAPID_PRIVATE_KEY` | Clé privée qui signe chaque envoi (**secret**) | sortie du script ci-dessous |
+| `VAPID_SUBJECT` | Contact transmis aux services de push (Apple l'exige) | `mailto:adresse` ou `https://...` |
+| `WEB_PUSH_TTL_SECONDS` | Conservation par le service de push si l'appareil est hors ligne | `86400` (défaut, 1 jour) |
+| `WEB_PUSH_TIMEOUT_SECONDS` | Délai maximal d'un envoi | `10` (défaut) |
+| `WEB_PUSH_MAX_SUBSCRIPTIONS_PER_USER` | Appareils par compte | `10` (défaut) |
+| `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` | Services de push acceptés (nom exact ou suffixe) | défaut : FCM, Mozilla, Apple, Windows |
+| `RATE_LIMIT_PUSH_SUBSCRIPTION_PER_USER_*` | Budget d'(dés)abonnements par utilisateur | `20` / `600` s (défaut) |
+
+- **Fail-fast** : avec `WEB_PUSH_ENABLED=true`, le démarrage est refusé (dans
+  tous les environnements, production comprise) si une clé ou le contact
+  manque, si une clé est mal formée, ou si les deux clés ne forment **pas la
+  même paire** (sinon tous les envois seraient refusés). La clé privée n'est
+  jamais affichée dans ces messages.
+- **Une paire par environnement** (staging, production). Changer de paire
+  invalide tous les abonnements existants : chaque appareil se réabonne de
+  lui-même à sa prochaine ouverture (permission déjà accordée). Ne la
+  changer qu'en cas de fuite de la clé privée.
+- **Aucune requête vers une adresse arbitraire** : l'adresse d'abonnement
+  fournie par le navigateur doit être en `https://` vers un service de push
+  de `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` (vérifiée à l'abonnement ET à
+  l'envoi), et les redirections ne sont jamais suivies (protection SSRF).
+
+### 15.5 Mise en route
+
+1. Générer la paire, depuis `backend/` :
+   `uv run python scripts/generate_vapid_keys.py` (affiche
+   `VAPID_PUBLIC_KEY=...` et `VAPID_PRIVATE_KEY=...`, n'écrit rien sur le
+   disque). La clé privée ne se partage jamais (ni ticket, ni messagerie, ni
+   dépôt).
+2. Render (*Environment*) : `WEB_PUSH_ENABLED=true`, les deux clés,
+   `VAPID_SUBJECT=mailto:<adresse de contact>`. (Variables `sync: false` de
+   `render.yaml` : à saisir à la main sur un Blueprint déjà créé.) Rien à
+   régler côté Vercel : le front lit la clé publique sur
+   `GET /api/v1/push/config`.
+3. Migration : la table `push_subscription` est créée par
+   `alembic upgrade head`, exécuté au démarrage (`scripts/serve.py`).
+4. Test : deux comptes (client, artisan) sur deux appareils ; l'artisan
+   active les notifications (écran Messages) puis ferme l'app ; le client lui
+   écrit → notification, le clic ouvre le fil. L'artisan garde le fil
+   ouvert à l'écran → aucune notification (le message s'affiche en direct).
+
+En développement, aucun service worker n'est enregistré (§11) : pour
+essayer, `npm run build && npm run preview` (localhost est un contexte
+sécurisé) avec un backend où `WEB_PUSH_ENABLED=true`.
+
+### 15.6 Lire les journaux
+
+- `Push nouveau message : N appareil(s) notifié(s), M abonnement(s)
+  expiré(s) supprimé(s), K échec(s) (HTTP 403 x1).` — le détail ne donne que
+  le statut HTTP ou le type d'erreur, jamais l'adresse d'abonnement (une URL
+  qui vaut capacité d'envoi) ni la réponse libre du service.
+- `Nouveau message : fil déjà à l'écran du destinataire, aucun push.`
+- `Push nouveau message NON envoyé : <type d'erreur>.` — erreur inattendue
+  (base injoignable...), sans effet sur le message.
+- **HTTP 403** répété : abonnements créés avec une autre paire de clés
+  (paire changée, appareils pas encore réabonnés).
+- Limite connue : quand un navigateur renouvelle de lui-même son abonnement
+  (`pushsubscriptionchange`, surtout Firefox), le nouveau n'est enregistré
+  qu'à la prochaine ouverture de l'app ; l'ancien, refusé en 410, est alors
+  supprimé.

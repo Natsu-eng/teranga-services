@@ -77,6 +77,16 @@ services:
         sync: false
       - key: ADMIN_NOTIFICATION_EMAILS
         sync: false
+      # Notifications push des nouveaux messages (DEPLOYMENT.md §15) :
+      # WEB_PUSH_ENABLED=true exige la paire VAPID_* au démarrage.
+      - key: WEB_PUSH_ENABLED
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
       # À MESURER après le premier déploiement (DEPLOYMENT.md §12.6).
       - key: TRUSTED_PROXY_HOPS
         sync: false
