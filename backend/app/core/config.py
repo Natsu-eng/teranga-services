@@ -9,6 +9,9 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
+from app.core.vapid import load_private_key as load_vapid_private_key
+from app.core.vapid import load_public_key as load_vapid_public_key
+from app.core.vapid import public_key_matches as vapid_public_key_matches
 from app.models.enums import PaymentChannel, PayoutChannel, VerificationDocType
 
 # Environnements reconnus : ensemble FERMÉ. Toute autre valeur fait échouer
@@ -1029,6 +1032,135 @@ class Settings(BaseSettings):
     # occupée par un seul compte.
     ws_max_connections_per_user: int = 5
 
+    # --- Notifications push (Web Push, application installable) ----------
+
+    # Interrupteur EXPLICITE : sans lui, aucun abonnement n'est accepté et
+    # aucun envoi n'est tenté. Activé, les trois réglages VAPID_* sont exigés
+    # dès le démarrage (fail-fast, `validate_web_push`).
+    web_push_enabled: bool = False
+    # Paire de clés VAPID (RFC 8292), base64url, produite par
+    # `uv run python scripts/generate_vapid_keys.py` (voir app/core/vapid.py).
+    # La clé publique est remise au navigateur ; la clé privée est un SECRET
+    # (jamais journalisée, jamais affichée dans une erreur). Changer de paire
+    # invalide TOUS les abonnements existants (chaque appareil devra se
+    # réabonner) : à ne faire qu'en cas de fuite.
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    # Contact de l'émetteur, transmis aux services de push (Google, Mozilla,
+    # Apple, Microsoft) : « mailto:adresse » ou URL https://. Apple l'exige.
+    vapid_subject: str | None = None
+    # Durée pendant laquelle le service de push garde une notification pour
+    # un appareil éteint ou hors réseau (0 = livrer tout de suite ou jamais ;
+    # plafond du protocole : 28 jours).
+    web_push_ttl_seconds: int = Field(default=86_400, ge=0, le=2_419_200)
+    # Délai maximal d'un envoi : en arrière-plan, jamais sur le chemin de la
+    # réponse à l'expéditeur du message.
+    web_push_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    # Appareils abonnés par compte : au-delà, le plus ancien est oublié (borne
+    # les envois et la table pour un même utilisateur).
+    web_push_max_subscriptions_per_user: int = Field(default=10, ge=1, le=50)
+    # Hôtes autorisés pour l'adresse d'abonnement (`endpoint`) fournie par le
+    # navigateur, comparés au nom exact ou en suffixe (« .hôte ») : le serveur
+    # n'envoie JAMAIS de requête vers une adresse arbitraire (protection SSRF).
+    # Défaut : services de push de Chrome/Android/Edge Chromium (FCM),
+    # Firefox (Mozilla), Safari/iOS (Apple) et Edge/Windows (WNS).
+    web_push_allowed_endpoint_hosts: Annotated[list[str], NoDecode] = [
+        "fcm.googleapis.com",
+        "push.services.mozilla.com",
+        "push.apple.com",
+        "notify.windows.com",
+    ]
+    # Budget d'(dés)abonnements par utilisateur : borne les écritures d'un
+    # script, sans gêner un usage normal (quelques appareils).
+    rate_limit_push_subscription_per_user_max: int = 20
+    rate_limit_push_subscription_per_user_window_seconds: int = 600
+
+    @field_validator("vapid_public_key", "vapid_private_key", "vapid_subject", mode="before")
+    @classmethod
+    def clean_vapid_value(cls, v: object) -> object:
+        # Valeurs collées dans un tableau de bord : même nettoyage que S3_*.
+        if isinstance(v, str):
+            v = clean_setting_value(v)
+            return v or None
+        return v
+
+    @field_validator("web_push_allowed_endpoint_hosts", mode="before")
+    @classmethod
+    def split_web_push_allowed_endpoint_hosts(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [
+                host.lower().removeprefix(".")
+                for part in v.split(",")
+                if (host := clean_setting_value(part))
+            ]
+        return v
+
+    @model_validator(mode="after")
+    def validate_web_push(self) -> "Settings":
+        """Push activé : clés VAPID valides ET appariées, contact au bon
+        format, hôtes autorisés plausibles. Tous les problèmes listés d'un
+        coup, jamais la clé privée."""
+        if not self.web_push_enabled:
+            return self
+        problems: list[str] = []
+        missing = [
+            name
+            for name, value in (
+                ("VAPID_PUBLIC_KEY", self.vapid_public_key),
+                ("VAPID_PRIVATE_KEY", self.vapid_private_key),
+                ("VAPID_SUBJECT", self.vapid_subject),
+            )
+            if not value
+        ]
+        if missing:
+            problems.append(
+                f"WEB_PUSH_ENABLED=true mais à renseigner : {', '.join(missing)} "
+                "(clés : uv run python scripts/generate_vapid_keys.py)."
+            )
+        public_ok = private_ok = False
+        if self.vapid_public_key:
+            try:
+                load_vapid_public_key(self.vapid_public_key)
+                public_ok = True
+            except ValueError:
+                problems.append(
+                    "VAPID_PUBLIC_KEY invalide : point P-256 non compressé en base64url "
+                    "(65 octets) attendu."
+                )
+        if self.vapid_private_key:
+            try:
+                load_vapid_private_key(self.vapid_private_key)
+                private_ok = True
+            except ValueError:
+                problems.append(
+                    "VAPID_PRIVATE_KEY invalide (valeur non affichée) : clé P-256 brute en "
+                    "base64url (32 octets) attendue."
+                )
+        if (
+            public_ok
+            and private_ok
+            and self.vapid_public_key
+            and self.vapid_private_key
+            and not vapid_public_key_matches(self.vapid_public_key, self.vapid_private_key)
+        ):
+            problems.append(
+                "VAPID_PUBLIC_KEY ne correspond pas à VAPID_PRIVATE_KEY : les deux doivent venir "
+                "de la MÊME paire (sinon tous les envois seraient refusés)."
+            )
+        if self.vapid_subject and not _is_valid_vapid_subject(self.vapid_subject):
+            problems.append(
+                f"VAPID_SUBJECT invalide ({self.vapid_subject!r}) : « mailto:adresse » ou "
+                "URL https:// attendue."
+            )
+        if not self.web_push_allowed_endpoint_hosts:
+            problems.append("WEB_PUSH_ALLOWED_ENDPOINT_HOSTS est vide : aucun envoi possible.")
+        for host in self.web_push_allowed_endpoint_hosts:
+            if not _HOSTNAME_LABELS_RE.match(host) or "." not in host:
+                problems.append(f"WEB_PUSH_ALLOWED_ENDPOINT_HOSTS : {host!r} n'est pas un hôte.")
+        if problems:
+            raise ValueError("Notifications push mal configurées :\n- " + "\n- ".join(problems))
+        return self
+
     # --- Demandes ----------------------------------------------------------
 
     # Durée de vie d'une demande OUVERTE (aucun artisan ne l'a reçue) : au-delà,
@@ -1242,6 +1374,13 @@ def _origin_of(url: str) -> str:
         return ""
     host = rest.split("/", 1)[0]
     return f"{scheme.lower()}://{host.lower()}" if host else ""
+
+
+def _is_valid_vapid_subject(subject: str) -> bool:
+    """Contact VAPID (RFC 8292 §2.1) : « mailto:adresse » ou URL https://."""
+    if subject.startswith("mailto:"):
+        return _EMAIL_RE.fullmatch(subject.removeprefix("mailto:")) is not None
+    return is_valid_https_base_url(subject)
 
 
 def _is_public_https_url(value: str) -> bool:

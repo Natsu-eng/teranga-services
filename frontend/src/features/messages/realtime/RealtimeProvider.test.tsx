@@ -40,6 +40,12 @@ class FakeConnection {
     return () => (this.eventListener = null);
   }
 
+  viewing: (string | null)[] = [];
+
+  setViewing(conversationId: string | null) {
+    this.viewing.push(conversationId);
+  }
+
   start() {
     this.started += 1;
   }
@@ -89,9 +95,14 @@ const client = authValue({
 function Probe() {
   const realtime = useRealtime();
   return (
-    <p>
-      statut={realtime.status} nonlus={String(realtime.unreadCount)}
-    </p>
+    <>
+      <p>
+        statut={realtime.status} nonlus={String(realtime.unreadCount)}
+      </p>
+      <button type="button" onClick={() => realtime.setViewingConversation('c1')}>
+        ouvrir c1
+      </button>
+    </>
   );
 }
 
@@ -247,5 +258,19 @@ describe('RealtimeProvider', () => {
       await vi.advanceTimersByTimeAsync(30_400);
     });
     expect(mockedUnread).toHaveBeenCalled();
+  });
+
+  it('transmet le fil à l’écran à la connexion, et le redit à une nouvelle connexion', () => {
+    mockedUseAuth.mockReturnValue(client);
+    const { connections } = renderProvider();
+
+    act(() => screen.getByRole('button', { name: 'ouvrir c1' }).click());
+    expect(connections[0].viewing.at(-1)).toBe('c1');
+
+    // Onglet masqué puis réaffiché : nouvelle connexion, même fil à l'écran.
+    act(() => setVisibility('hidden'));
+    act(() => setVisibility('visible'));
+    expect(connections).toHaveLength(2);
+    expect(connections[1].viewing).toEqual(['c1']);
   });
 });

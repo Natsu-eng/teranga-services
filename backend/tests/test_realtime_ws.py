@@ -6,7 +6,8 @@ base de dev n'est jamais modifiée durablement.
 """
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator, Generator
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Generator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -29,6 +30,7 @@ from app.main import app
 from app.models.enums import Role
 from app.models.user import User
 from app.services.contact_masking import PHONE_PLACEHOLDER
+from app.services.realtime import viewing_presence
 from tests.factories import make_engagement, make_user
 
 WS_URL = "/api/v1/realtime/ws"
@@ -343,3 +345,79 @@ async def test_answering_pongs_keeps_the_connection_alive(db_session: AsyncSessi
                 event = await asyncio.wait_for(ws.receive_json(), timeout=2)
                 assert event == {"type": "ping"}
                 await ws.send_json({"type": "pong"})
+
+
+# ------------------------------------------------------------------ Présence « fil ouvert »
+
+
+async def _viewing(ws: AsyncWebSocketSession, conversation_id: object) -> None:
+    """Signale le fil à l'écran ; le pong qui suit prouve que le serveur a
+    traité le signalement (messages traités dans l'ordre)."""
+    await ws.send_json({"type": "viewing", "conversation_id": conversation_id})
+    await ws.send_json({"type": "ping"})
+    assert await ws.receive_json() == {"type": "pong"}
+
+
+async def _eventually(predicate: Callable[[], Awaitable[bool]]) -> bool:
+    for _ in range(50):
+        if await predicate():
+            return True
+        await asyncio.sleep(0.02)
+    return False
+
+
+async def test_viewing_is_recorded_then_cleared_by_the_client(db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role=Role.CLIENT)
+    conversation_id, other_id = uuid.uuid4(), uuid.uuid4()
+
+    async with _client() as client:
+        ticket = await _ticket(client, user)
+        async with _connect(client, _protocols(ticket)) as ws:
+            await _viewing(ws, str(conversation_id))
+            assert await viewing_presence().is_viewing(user.id, conversation_id)
+            assert not await viewing_presence().is_viewing(user.id, other_id)
+
+            await _viewing(ws, None)
+            assert not await viewing_presence().is_viewing(user.id, conversation_id)
+
+
+async def test_viewing_ends_with_the_connection(db_session: AsyncSession) -> None:
+    user = await make_user(db_session, role=Role.CLIENT)
+    conversation_id = uuid.uuid4()
+
+    async with _client() as client:
+        ticket = await _ticket(client, user)
+        async with _connect(client, _protocols(ticket)) as ws:
+            await _viewing(ws, str(conversation_id))
+
+    async def cleared() -> bool:
+        return not await viewing_presence().is_viewing(user.id, conversation_id)
+
+    assert await _eventually(cleared)
+
+
+@pytest.mark.parametrize("invalid", ["pas-un-uuid", 42, {"id": "x"}])
+async def test_an_invalid_viewing_value_means_no_conversation(
+    db_session: AsyncSession, invalid: object
+) -> None:
+    user = await make_user(db_session, role=Role.CLIENT)
+    conversation_id = uuid.uuid4()
+
+    async with _client() as client:
+        ticket = await _ticket(client, user)
+        async with _connect(client, _protocols(ticket)) as ws:
+            await _viewing(ws, str(conversation_id))
+            await _viewing(ws, invalid)  # la connexion reste ouverte, rien n'est levé
+            assert not await viewing_presence().is_viewing(user.id, conversation_id)
+
+
+async def test_viewing_is_per_user(db_session: AsyncSession) -> None:
+    viewer = await make_user(db_session, role=Role.CLIENT)
+    other = await make_user(db_session, role=Role.ARTISAN)
+    conversation_id = uuid.uuid4()
+
+    async with _client() as client:
+        ticket = await _ticket(client, viewer)
+        async with _connect(client, _protocols(ticket)) as ws:
+            await _viewing(ws, str(conversation_id))
+            assert not await viewing_presence().is_viewing(other.id, conversation_id)

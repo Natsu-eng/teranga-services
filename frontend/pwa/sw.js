@@ -29,6 +29,12 @@
  * précédentes à l'activation. Comme les pages viennent toujours du réseau
  * d'abord, aucune version ne peut rester « bloquée » sur l'appareil.
  *
+ * Notifications push (DEPLOYMENT.md §15) : `push` affiche la notification
+ * envoyée par le backend (contenu sobre, chiffré de bout en bout jusqu'ici),
+ * `notificationclick` ouvre la conversation concernée. Le lien est CONTRÔLÉ :
+ * seulement un chemin /messages de cette origine, sinon la liste des
+ * messages -- jamais une adresse externe, même si le contenu était altéré.
+ *
  * Mode strict : la directive 'use strict' est posée par le plugin en TOUTE
  * première ligne du fichier produit (ici, après SW_BUILD, elle serait sans effet).
  */
@@ -117,4 +123,96 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirstAsset(event.request));
   }
   // Sinon : aucun respondWith, la requête suit le chemin normal du navigateur.
+});
+
+// --------------------------------------------------------------- Notifications
+
+// Repli si le contenu reçu est absent ou illisible : une notification
+// s'affiche TOUJOURS (les navigateurs l'exigent pour chaque push reçu).
+const DEFAULT_NOTIFICATION = {
+  title: 'Téranga',
+  body: 'Nouveau message sur Téranga',
+  url: '/messages',
+  tag: 'teranga-message',
+};
+const NOTIFICATION_ICON = '/icons/icon-192.png';
+const MAX_TEXT_LENGTH = 120;
+// Seules pages ouvrables depuis une notification : la liste des messages ou un fil.
+const MESSAGES_PATH = /^\/messages(\/[A-Za-z0-9-]{1,64})?$/;
+const SAFE_TAG = /^[A-Za-z0-9-]{1,80}$/;
+
+/** Chemin /messages[/id] de CETTE origine, ou null. */
+function safeAppPath(value) {
+  if (typeof value !== 'string') return null;
+  let url;
+  try {
+    url = new URL(value, self.location.origin);
+  } catch {
+    return null;
+  }
+  if (url.origin !== self.location.origin || !MESSAGES_PATH.test(url.pathname)) return null;
+  return url.pathname;
+}
+
+function shortText(value, fallback) {
+  return typeof value === 'string' && value.trim()
+    ? value.trim().slice(0, MAX_TEXT_LENGTH)
+    : fallback;
+}
+
+/** Contenu affichable d'un événement push, toujours valide. */
+function notificationFromPush(event) {
+  let data = {};
+  try {
+    data = (event.data && event.data.json()) || {};
+  } catch {
+    data = {};
+  }
+  return {
+    title: shortText(data.title, DEFAULT_NOTIFICATION.title),
+    body: shortText(data.body, DEFAULT_NOTIFICATION.body),
+    url: safeAppPath(data.url) || DEFAULT_NOTIFICATION.url,
+    tag:
+      typeof data.tag === 'string' && SAFE_TAG.test(data.tag) ? data.tag : DEFAULT_NOTIFICATION.tag,
+  };
+}
+
+self.addEventListener('push', (event) => {
+  const notification = notificationFromPush(event);
+  event.waitUntil(
+    self.registration.showNotification(notification.title, {
+      body: notification.body,
+      // Un fil = une notification (remplacée, mais signalée à nouveau).
+      tag: notification.tag,
+      renotify: true,
+      icon: NOTIFICATION_ICON,
+      badge: NOTIFICATION_ICON,
+      lang: 'fr',
+      data: { url: notification.url },
+    }),
+  );
+});
+
+/** Met au premier plan une fenêtre de l'app sur `path`, ou en ouvre une. */
+async function openApp(path) {
+  const target = new URL(path, self.location.origin).href;
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const exact = windows.find((client) => client.url === target);
+  if (exact) return exact.focus();
+  const appWindow = windows.find((client) => new URL(client.url).origin === self.location.origin);
+  if (appWindow) {
+    try {
+      const navigated = await appWindow.navigate(target);
+      return (navigated || appWindow).focus();
+    } catch {
+      // Fenêtre non contrôlée par ce service worker : nouvelle fenêtre.
+    }
+  }
+  return self.clients.openWindow(target);
+}
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  event.waitUntil(openApp(safeAppPath(data.url) || DEFAULT_NOTIFICATION.url));
 });

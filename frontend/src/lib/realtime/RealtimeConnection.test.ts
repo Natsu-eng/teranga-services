@@ -274,4 +274,61 @@ describe('resolveRealtimeUrl', () => {
       }),
     ).toBe('wss://api.teranga.sn/api/v1/realtime/ws');
   });
+
+  describe('fil à l’écran (viewing)', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const viewing = (socket: FakeSocket) =>
+      socket.sent.map((raw) => JSON.parse(raw)).filter((m) => m.type === 'viewing');
+
+    it('signale le fil ouvert dès que la connexion est ouverte, puis à chaque changement', async () => {
+      const { connection, sockets } = setup();
+      connection.setViewing('c1');
+      connection.start();
+      await vi.advanceTimersByTimeAsync(0);
+      sockets[0].open();
+
+      connection.setViewing(null);
+
+      expect(viewing(sockets[0])).toEqual([
+        { type: 'viewing', conversation_id: 'c1' },
+        { type: 'viewing', conversation_id: null },
+      ]);
+    });
+
+    it('ne signale rien tant que la connexion n’est pas ouverte, ni deux fois la même valeur', async () => {
+      const { connection, sockets } = setup();
+      connection.start();
+      await vi.advanceTimersByTimeAsync(0);
+      connection.setViewing('c1'); // socket encore en cours d'ouverture
+      expect(viewing(sockets[0])).toEqual([]);
+
+      sockets[0].open();
+      connection.setViewing('c1');
+      expect(viewing(sockets[0])).toEqual([{ type: 'viewing', conversation_id: 'c1' }]);
+    });
+
+    it('le redit après une reconnexion (le serveur repart de zéro)', async () => {
+      const { connection, sockets } = setup();
+      connection.setViewing('c1');
+      connection.start();
+      await vi.advanceTimersByTimeAsync(0);
+      sockets[0].open();
+      sockets[0].drop();
+      await vi.advanceTimersByTimeAsync(CONFIG.reconnectMaxDelayMs);
+      sockets[1].open();
+
+      expect(viewing(sockets[1])).toEqual([{ type: 'viewing', conversation_id: 'c1' }]);
+    });
+
+    it('sans fil ouvert, une nouvelle connexion ne signale rien', async () => {
+      const { connection, sockets } = setup();
+      connection.start();
+      await vi.advanceTimersByTimeAsync(0);
+      sockets[0].open();
+
+      expect(viewing(sockets[0])).toEqual([]);
+    });
+  });
 });

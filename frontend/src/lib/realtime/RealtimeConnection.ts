@@ -97,6 +97,8 @@ export class RealtimeConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Conversation à l'écran, renvoyée au serveur à chaque (re)connexion. */
+  private viewing: string | null = null;
   private readonly statusListeners = new Set<(status: RealtimeStatus) => void>();
   private readonly eventListeners = new Set<(event: RealtimeEvent) => void>();
 
@@ -124,6 +126,23 @@ export class RealtimeConnection {
   onEvent(listener: (event: RealtimeEvent) => void): () => void {
     this.eventListeners.add(listener);
     return () => this.eventListeners.delete(listener);
+  }
+
+  /**
+   * Signale la conversation affichée à l'écran (null : aucune). Le serveur
+   * n'envoie alors pas de notification push pour un message de ce fil,
+   * déjà visible ici. Mémorisée : renvoyée à chaque (re)connexion.
+   */
+  setViewing(conversationId: string | null): void {
+    if (conversationId === this.viewing) return;
+    this.viewing = conversationId;
+    this.sendViewing();
+  }
+
+  private sendViewing(): void {
+    const socket = this.socket;
+    if (!socket || socket.readyState !== SOCKET_OPEN) return;
+    socket.send(JSON.stringify({ type: 'viewing', conversation_id: this.viewing }));
   }
 
   start(): void {
@@ -180,6 +199,8 @@ export class RealtimeConnection {
       this.clearConnectTimer();
       this.attempts = 0;
       this.resetWatchdog();
+      // Nouvelle connexion = aucun état côté serveur : on redit le fil ouvert.
+      if (this.viewing !== null) this.sendViewing();
       this.setStatus('open');
     };
     socket.onmessage = (event: MessageEvent) => {

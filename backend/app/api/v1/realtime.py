@@ -20,6 +20,12 @@ refuse la poignée de main (aucune connexion établie). Il ne renvoie que
 `conversation.read`, `ping`. Le client répond `pong` aux pings (et peut
 envoyer `ping`, le serveur répond `pong`). Le client n'ÉCRIT jamais de
 message par ce canal : l'envoi passe par REST (app/api/v1/conversations.py).
+
+Client -> serveur, en plus : `{"type": "viewing", "conversation_id": "<uuid>"
+| null}` -- la conversation affichée à l'écran (null : aucune). Le serveur
+n'en déduit qu'une chose : inutile d'envoyer une notification push pour un
+message que l'utilisateur voit déjà arriver. Une valeur invalide vaut null ;
+un utilisateur ne peut, au pire, que se priver lui-même de notifications.
 """
 
 import asyncio
@@ -37,7 +43,7 @@ from app.db.session import SessionFactory, get_session_factory
 from app.models.enums import Role
 from app.models.user import User
 from app.schemas.conversations import WsTicketOut
-from app.services.realtime import connection_manager, ticket_store
+from app.services.realtime import connection_manager, ticket_store, viewing_presence
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
 
@@ -113,22 +119,52 @@ async def _authenticate(
     return user
 
 
+def _viewed_conversation(raw: object) -> uuid.UUID | None:
+    """Conversation signalée à l'écran, ou None (absente ou invalide)."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        return None
+
+
 async def _heartbeat(
-    websocket: WebSocket, socket: _SerializedSocket, *, settings: Settings
+    websocket: WebSocket,
+    socket: _SerializedSocket,
+    *,
+    user_id: uuid.UUID,
+    connection_id: str,
+    settings: Settings,
 ) -> None:
     """Garde la connexion vivante et détecte une connexion morte : le serveur
     envoie un ping à intervalle régulier ; sans aucun signe du client
-    (pong ou autre) avant le délai d'expiration, il ferme."""
+    (pong ou autre) avant le délai d'expiration, il ferme.
+
+    Tient aussi à jour la présence « fil ouvert » de la connexion : posée ou
+    effacée par `viewing`, RENOUVELÉE à chaque signe du client (les pongs
+    suffisent) pour la durée d'expiration du battement de cœur."""
     last_seen = time.monotonic()
+    viewing: uuid.UUID | None = None
 
     async def receive_loop() -> None:
-        nonlocal last_seen
+        nonlocal last_seen, viewing
         while True:
             data = await websocket.receive_json()
             last_seen = time.monotonic()
-            if isinstance(data, dict) and data.get("type") == "ping":
+            kind = data.get("type") if isinstance(data, dict) else None
+            if kind == "ping":
                 await socket.send_json({"type": "pong"})
+            elif kind == "viewing" and isinstance(data, dict):
+                viewing = _viewed_conversation(data.get("conversation_id"))
             # Tout autre message est ignoré : ce canal ne sert pas à écrire.
+            if kind == "viewing" or viewing is not None:
+                await viewing_presence().set_viewing(
+                    user_id,
+                    connection_id,
+                    viewing,
+                    ttl_seconds=settings.ws_heartbeat_timeout_seconds,
+                )
 
     async def ping_loop() -> None:
         while True:
@@ -170,7 +206,15 @@ async def realtime_socket(
     await connection_manager.register(
         user.id, socket, max_per_user=settings.ws_max_connections_per_user
     )
+    # Identifiant aléatoire de CETTE connexion (présence « fil ouvert ») :
+    # rien de dérivé de l'utilisateur ni du ticket.
+    connection_id = uuid.uuid4().hex
     try:
-        await _heartbeat(websocket, socket, settings=settings)
+        await _heartbeat(
+            websocket, socket, user_id=user.id, connection_id=connection_id, settings=settings
+        )
     finally:
         await connection_manager.unregister(user.id, socket)
+        await viewing_presence().set_viewing(
+            user.id, connection_id, None, ttl_seconds=settings.ws_heartbeat_timeout_seconds
+        )

@@ -5,7 +5,7 @@ Actives seulement si `REDIS_URL` est renseignée ; sinon, chaque service
 garde son implémentation actuelle (mémoire en dev, PostgreSQL pour le rate
 limiting hors dev) -- le dev tourne exactement comme avant, sans Redis.
 
-Trois usages, chacun derrière l'interface déjà en place :
+Quatre usages, chacun derrière l'interface déjà en place :
 
 - `RedisRateLimiter` (contrat `RateLimiter`) : fenêtre glissante dans un
   ensemble trié, en UN script Lua atomique (aucune course entre instances).
@@ -14,16 +14,20 @@ Trois usages, chacun derrière l'interface déjà en place :
   expiration à celle du ticket.
 - `RedisRealtimeBus` : diffusion d'un événement à TOUTES les instances
   (pub/sub) ; chacune le pousse à ses propres connexions.
+- `RedisViewingPresence` : conversation à l'écran par connexion, lue par
+  l'instance qui décide d'envoyer (ou non) une notification push.
 
 Les clés ne contiennent jamais de donnée personnelle en clair : le rate
 limiting stocke une empreinte (`hash_rate_limit_key`), les tickets leur
-identifiant aléatoire (`jti`).
+identifiant aléatoire (`jti`), la présence une empreinte de l'utilisateur.
 
 Pannes Redis :
 - rate limiting et tickets : échec FERMÉ (l'exception remonte, la requête
   est refusée) -- jamais une limite ou un usage unique levés en silence ;
 - diffusion temps réel : échec OUVERT -- journalisé, l'envoi du message
   (déjà enregistré) n'échoue jamais ; le front relit l'historique par REST.
+- présence : échec OUVERT -- journalisé, et « fil non ouvert » : au pire une
+  notification push de trop, jamais un message manqué.
 """
 
 import asyncio
@@ -33,7 +37,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from redis.asyncio import Redis
 
@@ -184,6 +188,74 @@ class RedisRealtimeBus:
                 delay = min(delay * 2, 30.0)
 
 
+# Bucket d'empreinte de la présence (même fonction que le rate limiting :
+# l'identifiant de l'utilisateur n'apparaît jamais en clair dans une clé).
+_VIEWING_BUCKET = "viewing"
+
+
+class RedisViewingPresence:
+    """Présence « fil ouvert » partagée par toutes les instances (contrat
+    `app.services.realtime.ViewingPresence`).
+
+    Un hachage par utilisateur : champ = identifiant aléatoire de la
+    connexion, valeur = « conversation|échéance en ms ». L'échéance est
+    vérifiée à la lecture (un champ échu est ignoré puis effacé) et le
+    hachage entier expire avec le dernier signalement : rien ne survit à
+    une instance arrêtée brutalement. Horloge murale des instances (écart
+    négligeable devant la durée d'un signalement, une minute environ).
+    """
+
+    def __init__(self, client: "Redis", clock: Callable[[], float] = time.time) -> None:
+        self._client = client
+        self._clock = clock
+
+    def _key(self, user_id: uuid.UUID) -> str:
+        return f"{KEY_PREFIX}:viewing:{hash_rate_limit_key(_VIEWING_BUCKET, str(user_id))}"
+
+    async def set_viewing(
+        self,
+        user_id: uuid.UUID,
+        connection_id: str,
+        conversation_id: uuid.UUID | None,
+        *,
+        ttl_seconds: float,
+    ) -> None:
+        key = self._key(user_id)
+        try:
+            if conversation_id is None:
+                await self._client.hdel(key, connection_id)
+                return
+            ttl_ms = max(1, int(ttl_seconds * 1000))
+            expires_ms = int(self._clock() * 1000) + ttl_ms
+            async with self._client.pipeline(transaction=True) as pipe:
+                pipe.hset(key, connection_id, f"{conversation_id}|{expires_ms}")
+                pipe.pexpire(key, ttl_ms)
+                await pipe.execute()
+        except Exception:
+            logger.exception("Présence « fil ouvert » non enregistrée dans Redis.")
+
+    async def is_viewing(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> bool:
+        key = self._key(user_id)
+        try:
+            # Réponses décodées (`decode_responses=True`, create_redis_client).
+            entries = cast(dict[str, str], await self._client.hgetall(key))
+            now_ms = int(self._clock() * 1000)
+            viewing, expired = False, []
+            for connection_id, value in entries.items():
+                viewed, _, deadline = value.partition("|")
+                if not deadline.isdigit() or int(deadline) <= now_ms:
+                    expired.append(connection_id)
+                elif viewed == str(conversation_id):
+                    viewing = True
+            if expired:
+                await self._client.hdel(key, *expired)
+            return viewing
+        except Exception:
+            # Échec OUVERT : dans le doute, on notifie.
+            logger.exception("Présence « fil ouvert » illisible dans Redis : notification envoyée.")
+            return False
+
+
 async def close_quietly(client: "Redis") -> None:
     with contextlib.suppress(Exception):
         await client.aclose()
@@ -203,9 +275,9 @@ async def realtime_over_redis(redis_url: str | None) -> AsyncIterator[None]:
 
     client = get_redis_client(redis_url)
     bus = RedisRealtimeBus(client, connection_manager.publish)
-    configure_realtime(bus, RedisTicketStore(client))
+    configure_realtime(bus, RedisTicketStore(client), RedisViewingPresence(client))
     listener = asyncio.create_task(bus.run(), name="realtime-redis-subscriber")
-    logger.info("Temps réel et tickets WebSocket partagés via Redis.")
+    logger.info("Temps réel, tickets WebSocket et présence partagés via Redis.")
     try:
         yield
     finally:

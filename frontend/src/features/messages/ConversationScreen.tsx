@@ -13,6 +13,7 @@ import { toDisplayRole } from '../auth/role';
 import { MessageBubble, PendingBubble } from './components/MessageBubble';
 import { MessageComposer } from './components/MessageComposer';
 import { useConversationThread } from './hooks/useConversationThread';
+import { useRealtime } from './realtime/useRealtime';
 
 /**
  * Fil de discussion (/messages/:conversationId). Monté avec
@@ -53,9 +54,17 @@ const ConversationThread: React.FC<{ conversationId: string }> = ({ conversation
   const auth = useAuth();
   const isPro = toDisplayRole(auth.role) === 'artisan';
   const thread = useConversationThread(conversationId);
+  const { setViewingConversation } = useRealtime();
   const endRef = useRef<HTMLDivElement>(null);
   const lastCountRef = useRef(0);
   const { conversation, messages, pending } = thread;
+
+  // Fil à l'écran : le serveur n'envoie pas de notification push pour ses
+  // nouveaux messages (déjà visibles ici) ; signal retiré en quittant le fil.
+  useEffect(() => {
+    setViewingConversation(conversationId);
+    return () => setViewingConversation(null);
+  }, [conversationId, setViewingConversation]);
 
   // Défile vers le bas à l'ouverture et à chaque nouveau message.
   const total = messages.length + pending.length;

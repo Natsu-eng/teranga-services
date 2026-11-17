@@ -13,6 +13,7 @@ import { cn } from '../../lib/cn';
 import { formatShortTimestamp } from '../../lib/datetime';
 import type { ConversationSummary } from '../../types';
 import { useAuth } from '../auth/hooks/useAuth';
+import { PushNotificationsPrompt } from '../notifications/PushNotificationsPrompt';
 import { toDisplayRole } from '../auth/role';
 import { useConversationList } from './hooks/useConversationList';
 
@@ -106,6 +107,8 @@ export const MessagesScreen: React.FC = () => {
           automatiquement, et les photos ne sont visibles que de vous deux.
         </span>
       </Card>
+
+      <PushNotificationsPrompt />
 
       {isLoading && conversations === null ? (
         <ul className="space-y-3" aria-busy="true">

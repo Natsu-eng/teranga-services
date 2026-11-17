@@ -87,6 +87,11 @@ def test_every_variable_is_a_real_setting_and_the_required_ones_are_declared() -
         "TERMII_API_KEY",
         "TERMII_SENDER_ID",
         "TERMII_BASE_URL",
+        # Notifications push des nouveaux messages (DEPLOYMENT.md §15).
+        "WEB_PUSH_ENABLED",
+        "VAPID_PUBLIC_KEY",
+        "VAPID_PRIVATE_KEY",
+        "VAPID_SUBJECT",
     ):
         assert key in env, key
 

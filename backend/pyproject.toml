@@ -19,6 +19,7 @@ dependencies = [
   "pillow>=11",
   "redis>=5.2",
   "boto3>=1.35",
+  "pywebpush>=2.5.0",
 ]
 
 [dependency-groups]
@@ -55,6 +56,13 @@ ignore = ["B008"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
+
+# pywebpush et py_vapid ne publient pas d'annotations de type : leur usage
+# est confiné à app/services/web_push.py (résultat typé PushResult) ;
+# http_ece (dépendance de pywebpush) sert aux tests à déchiffrer un envoi.
+[[tool.mypy.overrides]]
+module = ["pywebpush", "py_vapid", "http_ece"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

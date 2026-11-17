@@ -12,6 +12,11 @@ export interface RealtimeContextValue {
   unreadCount: number | null;
   /** Relit le total des non-lus (après un marquage « lu », par exemple). */
   refreshUnread: () => void;
+  /**
+   * Conversation affichée à l'écran (null : aucune) : pas de notification
+   * push pour ses nouveaux messages, déjà visibles en temps réel.
+   */
+  setViewingConversation: (conversationId: string | null) => void;
 }
 
 /**
@@ -23,6 +28,7 @@ export const DEFAULT_REALTIME: RealtimeContextValue = {
   subscribe: () => () => undefined,
   unreadCount: null,
   refreshUnread: () => undefined,
+  setViewingConversation: () => undefined,
 };
 
 export const RealtimeContext = createContext<RealtimeContextValue>(DEFAULT_REALTIME);

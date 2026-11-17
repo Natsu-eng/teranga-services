@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { authClient, type AuthUser, type SignupRole } from '../../lib/api/auth-client';
+import { api } from '../../lib/api';
 import { authStore, type TokenPair } from '../../lib/api/auth-store';
+import { browserPush, forgetPushOnLogout } from '../../lib/push/webPush';
 import { AuthContext, type AuthContextValue } from './auth-context';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -74,6 +76,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const logout = useCallback(async () => {
+    // AVANT d'effacer la session (l'appel est authentifié) : cet appareil
+    // cesse de recevoir les notifications du compte. Délai borné, ne lève
+    // jamais : la déconnexion n'en dépend pas.
+    await forgetPushOnLogout(api, browserPush());
     const refresh = authStore.getRefreshToken();
     authStore.clear();
     setUser(null);
