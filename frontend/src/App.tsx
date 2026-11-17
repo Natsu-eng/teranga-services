@@ -25,6 +25,7 @@ import { UserProfileScreen } from './features/profile/UserProfileScreen';
 import { MessagesScreen } from './features/messages/MessagesScreen';
 import { ConversationScreen } from './features/messages/ConversationScreen';
 import { RealtimeProvider } from './features/messages/realtime/RealtimeProvider';
+import { PushSubscriptionSync } from './features/notifications/PushSubscriptionSync';
 import { NotFoundScreen } from './features/not-found/NotFoundScreen';
 import { AdminVerificationQueueScreen } from './features/admin/AdminVerificationQueueScreen';
 import { AdminDisputesScreen } from './features/admin/AdminDisputesScreen';
@@ -65,6 +66,8 @@ export function AppRoutes() {
       <PlaceProvider>
         {/* Canal temps réel unique (messagerie), ouvert seulement si utile. */}
         <RealtimeProvider>
+          {/* Notifications push : abonnement de l'appareil tenu à jour (sans rien afficher). */}
+          <PushSubscriptionSync />
           <Routes>
             <Route element={<MinimalLayout />}>
               <Route index element={<LandingScreen />} />

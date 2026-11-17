@@ -3,6 +3,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { AuthProvider } from './AuthProvider';
 import { useAuth } from './hooks/useAuth';
 import { authStore } from '../../lib/api/auth-store';
+import { forgetPushOnLogout } from '../../lib/push/webPush';
+
+vi.mock('../../lib/push/webPush', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/push/webPush')>();
+  return { ...actual, forgetPushOnLogout: vi.fn() };
+});
+const mockedForgetPush = vi.mocked(forgetPushOnLogout);
 
 function jsonResponse(status: number, body: unknown): Response {
   return {
@@ -236,5 +243,39 @@ describe('AuthProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('false'));
     expect(screen.getByTestId('role').textContent).toBe('none');
+  });
+
+  it("fait oublier l'appareil (notifications push) AVANT d'effacer la session", async () => {
+    let accessTokenDuringForget: string | null = 'non appelé';
+    mockedForgetPush.mockReset();
+    mockedForgetPush.mockImplementation(async () => {
+      accessTokenDuringForget = authStore.getAccessToken();
+    });
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith('/auth/verify-otp')) {
+        return Promise.resolve(
+          jsonResponse(200, { access: 'access-1', refresh: 'refresh-1', user: backendUser }),
+        );
+      }
+      if (url.endsWith('/auth/logout')) return Promise.resolve(jsonResponse(204, undefined));
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'));
+    fireEvent.click(screen.getByText('login'));
+    await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('true'));
+
+    fireEvent.click(screen.getByText('logout'));
+
+    await waitFor(() => expect(screen.getByTestId('authenticated').textContent).toBe('false'));
+    // Appel authentifié encore possible au moment de l'oubli de l'appareil.
+    expect(accessTokenDuringForget).toBe('access-1');
+    expect(authStore.getAccessToken()).toBeNull();
   });
 });
