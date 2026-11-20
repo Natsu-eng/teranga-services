@@ -223,6 +223,8 @@ describe('InterventionCard', () => {
           role="client"
           onChanged={onChanged}
         />,
+        // Routeur requis : une intervention terminée offre le lien « Contacter l'aide ».
+        { wrapper: MemoryRouter },
       );
       expect(screen.queryByPlaceholderText(/Votre avis/)).not.toBeInTheDocument();
 
@@ -265,6 +267,7 @@ describe('InterventionCard', () => {
           role="client"
           onChanged={onChanged}
         />,
+        { wrapper: MemoryRouter },
       );
 
       expect(screen.getByText('Bon travail.')).toBeInTheDocument();
@@ -565,7 +568,7 @@ describe('InterventionCard', () => {
       expect(screen.getByText(/ne peut pas les rembourser/)).toBeVisible();
     });
 
-    it('délai dépassé (le serveur refuse) : aucun bouton, aucun encart', () => {
+    it("délai dépassé (le serveur refuse) : plus de signalement, mais l'aide avec l'intervention", () => {
       renderCard(
         interventionFixture({
           status: 'terminee',
@@ -577,10 +580,43 @@ describe('InterventionCard', () => {
         'client',
       );
 
-      expect(screen.queryByRole('region', { name: 'Un souci ?' })).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', { name: 'Signaler un problème' }),
-      ).not.toBeInTheDocument();
+      const box = screen.getByRole('region', { name: 'Un souci ?' });
+      expect(within(box).queryByRole('button', { name: 'Signaler un problème' })).toBeNull();
+      expect(within(box).getByText(/n'est plus possible/)).toBeVisible();
+      expect(within(box).getByRole('link', { name: "Contacter l'aide" })).toHaveAttribute(
+        'href',
+        '/aide?intervention=int-1',
+      );
+    });
+
+    it("intervention annulée : l'aide reste joignable", () => {
+      renderCard(
+        interventionFixture({
+          status: 'annulee',
+          cancellation: { kind: 'refus', by: 'artisan', reason: null, at: '2026-10-11T10:00:00Z' },
+        }),
+        'artisan',
+      );
+
+      expect(screen.getByRole('link', { name: "Contacter l'aide" })).toHaveAttribute(
+        'href',
+        '/aide?intervention=int-1',
+      );
+    });
+
+    it("tant que le signalement est possible, pas de lien d'aide à sa place", () => {
+      renderCard(
+        interventionFixture({
+          status: 'terminee',
+          agreedAmountFcfa: 12_000,
+          canOpenDispute: true,
+          disputeDeadline: '2026-10-13T10:00:00Z',
+        }),
+        'client',
+      );
+
+      expect(screen.queryByRole('link', { name: "Contacter l'aide" })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Signaler un problème' })).toBeVisible();
     });
 
     it("avant les travaux, explique qu'on peut annuler", () => {

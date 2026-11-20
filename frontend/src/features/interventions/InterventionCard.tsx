@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Check, MessageCircle, ReceiptText, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, LifeBuoy, MessageCircle, ReceiptText, XCircle } from 'lucide-react';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextAreaField, TextField } from '../../components/ui/Field';
@@ -87,7 +87,13 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
   const canDispute = intervention.canOpenDispute;
   // Encart « Un souci ? » : seulement quand une action est réellement possible.
   const notStarted = intervention.status === 'proposee' || intervention.status === 'acceptee';
-  const showTroubleBox = canDispute || canCancel;
+  // Signalement plus possible (délai dépassé, intervention close) : l'aide
+  // reste joignable, avec l'intervention pré-remplie.
+  const canContactSupport =
+    !canDispute &&
+    !canCancel &&
+    (intervention.status === 'terminee' || intervention.status === 'annulee');
+  const showTroubleBox = canDispute || canCancel || canContactSupport;
   const disputeReasonTooShort = formReason.trim().length < DISPUTE_REASON_MIN_LENGTH;
 
   return (
@@ -478,9 +484,11 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
                 ? intervention.disputeDeadline
                   ? `Un problème après les travaux ? Vous pouvez le signaler jusqu'au ${formatDateTime(intervention.disputeDeadline)}.`
                   : 'Un problème pendant les travaux ? Signalez-le : un conseiller Téranga examinera la situation.'
-                : notStarted
-                  ? "Les travaux n'ont pas commencé : vous pouvez annuler la mise en relation."
-                  : 'Vous pouvez annuler la mise en relation.'}
+                : canContactSupport
+                  ? "Le signalement n'est plus possible sur cette intervention, mais Téranga peut toujours vous aider."
+                  : notStarted
+                    ? "Les travaux n'ont pas commencé : vous pouvez annuler la mise en relation."
+                    : 'Vous pouvez annuler la mise en relation.'}
             </p>
             <div className="flex flex-wrap gap-2">
               {canDispute && (
@@ -502,6 +510,16 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
                 >
                   Annuler
                 </Button>
+              )}
+              {canContactSupport && (
+                <ButtonLink
+                  to={`/aide?intervention=${intervention.id}`}
+                  variant="outline"
+                  size="sm"
+                  leadingIcon={<LifeBuoy aria-hidden className="w-4 h-4" />}
+                >
+                  Contacter l&apos;aide
+                </ButtonLink>
               )}
             </div>
           </section>
