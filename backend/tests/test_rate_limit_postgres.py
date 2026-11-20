@@ -30,6 +30,7 @@ from app.services.rate_limit import (
     get_otp_rate_limiter,
     hash_rate_limit_key,
 )
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 
 @pytest.fixture
@@ -165,7 +166,7 @@ def _settings(**overrides: object) -> Settings:
     # Paiement en ligne coupé : le sandbox est interdit en prod, et ces
     # tests ne portent que sur le rate limiting.
     base["payment_provider"] = "disabled"
-    return Settings.model_validate({**base, **overrides})
+    return Settings.model_validate({**base, **DEPLOYED_REQUIRED, **overrides})
 
 
 def test_backend_defaults_to_memory_in_dev_and_postgres_elsewhere() -> None:

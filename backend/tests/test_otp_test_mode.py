@@ -25,6 +25,7 @@ from app.models.otp import OtpCode
 from app.services import otp as otp_service
 from app.services.otp_test_mode import is_test_mode_enabled, staging_test_code_for
 from app.services.rate_limit import SlidingWindowRateLimiter, get_otp_rate_limiter
+from tests.deployed_settings import DEPLOYED_REQUIRED
 from tests.factories import unique_phone
 
 # Code de test propre à cette suite (la vraie valeur de staging est
@@ -49,6 +50,7 @@ def _settings(environment: str = "staging", **overrides: object) -> Settings:
         "jwt_secret": "x" * 32,
         "environment": environment,
         "payment_provider": "disabled",
+        **DEPLOYED_REQUIRED,
     }
     return Settings(_env_file=None, **{**base, **overrides})  # type: ignore[arg-type]
 
@@ -180,7 +182,7 @@ async def test_staging_whitelisted_number_gets_the_test_code_without_sms(
     assert sms.sent == []  # aucun SMS payant
     stored = await _stored(db_session, phone)
     assert TEST_CODE not in stored.code_hash  # toujours haché, jamais en clair
-    assert stored.code_hash.startswith("pbkdf2_sha256$")
+    assert stored.code_hash.startswith("hmac_sha256$")
     assert await otp_service.verify_otp(db_session, phone, TEST_CODE, settings=settings) == phone
     # Usage unique : le même code ne resert pas.
     with pytest.raises(otp_service.OtpDejaUtiliseError):
@@ -242,6 +244,7 @@ def staging_app(db_session: AsyncSession) -> Iterator[str]:
             "environment": "staging",
             "otp_test_whitelist": [phone],
             "otp_test_code": TEST_CODE,
+            **DEPLOYED_REQUIRED,
         }
     )
 

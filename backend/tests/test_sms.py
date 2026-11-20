@@ -8,6 +8,7 @@ from app.services.sms import (
     UnconfiguredSmsProvider,
     get_sms_provider,
 )
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 
 def _settings(**overrides: object) -> Settings:
@@ -17,6 +18,7 @@ def _settings(**overrides: object) -> Settings:
         # Paiement en ligne coupé : hors sujet ici (le sandbox exige un
         # secret de webhook hors dev).
         "payment_provider": "disabled",
+        **DEPLOYED_REQUIRED,
     }
     base.update(overrides)
     return Settings(_env_file=None, **base)  # type: ignore[arg-type]

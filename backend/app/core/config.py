@@ -22,6 +22,10 @@ ENVIRONMENTS: tuple[str, ...] = get_args(Environment)
 # Anciennes valeurs de APP_ENV, toujours acceptées (fichiers .env existants).
 _LEGACY_ENVIRONMENTS = {"dev": "development", "prod": "production"}
 
+# Longueur minimale de OTP_HMAC_KEY : 32 caractères (la sortie de
+# scripts/generate_otp_hmac_key.py en fait 43, soit 256 bits).
+OTP_HMAC_KEY_MIN_LENGTH = 32
+
 # Fragments qui trahissent une valeur d'exemple jamais remplacée (copiée de
 # .env.example ou d'une documentation) : refusée pour un secret en production.
 _PLACEHOLDER_MARKERS = (
@@ -505,11 +509,44 @@ class Settings(BaseSettings):
     otp_ttl_seconds: int = 300
     # Tentatives de vérification autorisées avant invalidation du code.
     otp_max_attempts: int = 5
-    # Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. Un code à 6
-    # chiffres n'a que 10^6 combinaisons : un hachage rapide (SHA-256 seul)
-    # rendrait une fuite de la table `otp_code` triviale à bruteforcer hors
-    # ligne. 600 000 est la recommandation OWASP (2023) pour PBKDF2-SHA256.
-    otp_hash_iterations: int = 600_000
+    # Clé SECRÈTE du hachage des codes OTP (HMAC-SHA256, app/services/otp.py).
+    # Un code à 6 chiffres n'a que 10^6 combinaisons : sans clé, une fuite de
+    # la table `otp_code` serait triviale à bruteforcer hors ligne ; avec une
+    # clé gardée HORS de la base, la fuite seule ne suffit plus. Obligatoire
+    # hors poste de développement (`validate_deployed_environment`) ; en
+    # development/test sans clé, une clé aléatoire propre au processus est
+    # utilisée. Générer : `uv run python scripts/generate_otp_hmac_key.py`.
+    # Changer de clé invalide les codes en cours (5 minutes de durée de vie).
+    otp_hmac_key: str | None = None
+
+    @field_validator("otp_hmac_key", mode="before")
+    @classmethod
+    def clean_otp_hmac_key(cls, v: object) -> object:
+        # Valeur collée dans un tableau de bord : même nettoyage que S3_*.
+        if isinstance(v, str):
+            v = clean_setting_value(v)
+            return v or None
+        return v
+
+    @model_validator(mode="after")
+    def validate_otp_hmac_key(self) -> "Settings":
+        """Format de la clé. Validateur de MODÈLE, pas de champ : l'erreur d'un
+        validateur de champ recopie la valeur saisie (`input_value=...`) dans
+        le message -- jamais un secret dans les journaux de démarrage."""
+        key = self.otp_hmac_key
+        if key is None:
+            return self
+        if has_hidden_characters(key):
+            raise ValueError(
+                "OTP_HMAC_KEY contient un espace ou un caractère invisible (valeur non "
+                "affichée) : la ressaisir."
+            )
+        if len(key) < OTP_HMAC_KEY_MIN_LENGTH:
+            raise ValueError(
+                f"OTP_HMAC_KEY trop courte ({len(key)} caractères, {OTP_HMAC_KEY_MIN_LENGTH} "
+                "minimum, valeur non affichée) : uv run python scripts/generate_otp_hmac_key.py."
+            )
+        return self
 
     # --- Mode OTP de TEST (beta, DEPLOYMENT.md) ---------------------------
     # Permis UNIQUEMENT avec ENVIRONMENT=staging (refusé au démarrage
@@ -692,12 +729,33 @@ class Settings(BaseSettings):
             return None
         return v
 
-    # Rate limiting sur /auth/request-otp, fenêtre glissante (stockage selon
-    # RATE_LIMIT_BACKEND ci-dessus).
-    rate_limit_otp_per_phone_max: int = 3
-    rate_limit_otp_per_phone_window_seconds: int = 600
-    rate_limit_otp_per_ip_max: int = 10
-    rate_limit_otp_per_ip_window_seconds: int = 600
+    # Rate limiting sur /auth/request-otp, fenêtres glissantes (stockage selon
+    # RATE_LIMIT_BACKEND ci-dessus) : une fenêtre courte (rafales) ET une
+    # fenêtre de 24 h (usure lente), par numéro et par IP.
+    rate_limit_otp_per_phone_max: int = Field(default=3, ge=1)
+    rate_limit_otp_per_phone_window_seconds: int = Field(default=600, ge=1, le=86_400)
+    rate_limit_otp_per_phone_daily_max: int = Field(default=8, ge=1)
+    rate_limit_otp_per_phone_daily_window_seconds: int = Field(default=86_400, ge=1, le=86_400)
+    rate_limit_otp_per_ip_max: int = Field(default=20, ge=1)
+    rate_limit_otp_per_ip_window_seconds: int = Field(default=600, ge=1, le=86_400)
+    rate_limit_otp_per_ip_daily_max: int = Field(default=60, ge=1)
+    rate_limit_otp_per_ip_daily_window_seconds: int = Field(default=86_400, ge=1, le=86_400)
+    # Rate limiting sur /auth/verify-otp (chaque essai compte, juste ou faux).
+    rate_limit_otp_verify_per_phone_max: int = Field(default=10, ge=1)
+    rate_limit_otp_verify_per_phone_window_seconds: int = Field(default=600, ge=1, le=86_400)
+    rate_limit_otp_verify_per_ip_max: int = Field(default=60, ge=1)
+    rate_limit_otp_verify_per_ip_window_seconds: int = Field(default=600, ge=1, le=86_400)
+    # Plafond GLOBAL de SMS de code réellement envoyés (numéros du mode test
+    # exclus) : borne le coût d'un abus réparti sur beaucoup de numéros et
+    # d'IP. Au plafond, `request-otp` est refusé clairement (503) ; les
+    # sessions déjà ouvertes ne sont pas touchées. E-mail aux admins
+    # (best-effort) au seuil d'alerte puis au plafond journalier, une seule
+    # fois par fenêtre.
+    otp_sms_global_max_per_hour: int = Field(default=60, ge=1)
+    otp_sms_global_hour_window_seconds: int = Field(default=3600, ge=1, le=86_400)
+    otp_sms_global_max_per_day: int = Field(default=200, ge=1)
+    otp_sms_global_day_window_seconds: int = Field(default=86_400, ge=1, le=86_400)
+    otp_sms_alert_threshold_percent: int = Field(default=50, ge=1, le=99)
 
     # Rayon de recherche par défaut si le client ne précise pas `radius_m` sur
     # GET /artisans, en mètres. 10 km couvre la quasi-totalité du Grand Dakar
@@ -1290,6 +1348,40 @@ class Settings(BaseSettings):
     # différentes -- le front ne peut pas deviner l'origine du back.
     backend_public_base_url: str = "http://localhost:8000"
 
+    def _deployed_problems(self) -> list[str]:
+        """Ce qu'exige TOUT environnement déployé (staging comme production) :
+        ce qui protège les comptes ne dépend pas de l'environnement. Jamais un
+        secret dans les messages."""
+        problems: list[str] = []
+        if self.trusted_proxy_hops is None:
+            problems.append(
+                "TRUSTED_PROXY_HOPS doit être renseigné (mesuré avec "
+                "GET /api/v1/admin/diagnostics/client-ip, DEPLOYMENT.md §12.7) : sans lui, "
+                "le rate limiting par IP verrait tous les clients comme un seul."
+            )
+        if self.otp_hmac_key is None:
+            problems.append(
+                "OTP_HMAC_KEY doit être renseignée (clé secrète du hachage des codes OTP) : "
+                "uv run python scripts/generate_otp_hmac_key.py."
+            )
+        elif looks_like_placeholder(self.otp_hmac_key):
+            problems.append("OTP_HMAC_KEY est une valeur d'exemple : générez une clé aléatoire.")
+        return problems
+
+    @model_validator(mode="after")
+    def validate_deployed_environment(self) -> "Settings":
+        """Fail-fast du STAGING sur ces exigences communes. La production les
+        vérifie dans `validate_production`, avec le reste de sa liste (tous
+        les problèmes d'un coup)."""
+        if self.is_local or self.is_production:
+            return self
+        problems = self._deployed_problems()
+        if problems:
+            raise ValueError(
+                f"Configuration {self.environment} refusée :\n- " + "\n- ".join(problems)
+            )
+        return self
+
     @model_validator(mode="after")
     def validate_production(self) -> "Settings":
         """Fail-fast de PRODUCTION : refuse de démarrer sur une configuration
@@ -1302,6 +1394,7 @@ class Settings(BaseSettings):
 
         if looks_like_placeholder(self.jwt_secret):
             problems.append("JWT_SECRET est une valeur d'exemple : générez un secret aléatoire.")
+        problems.extend(self._deployed_problems())
 
         database = make_url(self.database_url)
         if (database.host or "").lower() in _LOCAL_HOSTS:
@@ -1349,12 +1442,6 @@ class Settings(BaseSettings):
             problems.append("S3_PUBLIC_BASE_URL doit être une URL publique HTTPS.")
         if self.s3_secret_access_key and looks_like_placeholder(self.s3_secret_access_key):
             problems.append("S3_SECRET_ACCESS_KEY est une valeur d'exemple.")
-
-        if self.trusted_proxy_hops is None:
-            problems.append(
-                "TRUSTED_PROXY_HOPS doit être renseigné (1 derrière le proxy Railway) : sans "
-                "lui, le rate limiting par IP verrait tous les clients comme un seul."
-            )
 
         if self.ai_triage_provider == "mistral" and not (self.mistral_api_key or "").strip():
             problems.append("AI_TRIAGE_PROVIDER=mistral exige MISTRAL_API_KEY.")

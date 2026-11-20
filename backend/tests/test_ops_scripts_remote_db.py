@@ -16,6 +16,7 @@ from app.core.config import Settings
 from app.db.target import describe_database, is_local_database
 from scripts import create_admin
 from scripts.seed import demo_seed_refusal
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 PASSWORD = "S3cr3t-Supabase-9xQ"
 SUPABASE_URL = (
@@ -32,6 +33,7 @@ def _settings(environment: str, database_url: str) -> Settings:
         jwt_secret="x" * 32,
         environment=environment,
         payment_provider="disabled",
+        **DEPLOYED_REQUIRED,  # type: ignore[arg-type]
     )
 
 

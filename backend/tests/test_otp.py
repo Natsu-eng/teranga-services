@@ -1,5 +1,6 @@
 """Service OTP : génération, hachage, persistance, invalidation, vérification."""
 
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -10,6 +11,9 @@ from app.core.config import Settings
 from app.models.otp import OtpCode
 from app.services import otp as otp_service
 from tests.factories import unique_phone
+
+# Clé GÉNÉRÉE pour ces tests (jamais une valeur écrite en dur).
+KEY = secrets.token_bytes(32)
 
 
 def _settings(**overrides: object) -> Settings:
@@ -30,16 +34,30 @@ class _FakeSmsProvider:
 
 
 def test_hash_code_roundtrip_and_never_stores_raw_code() -> None:
-    hashed = otp_service.hash_code("123456", iterations=1000)
+    hashed = otp_service.hash_code("123456", key=KEY)
 
-    assert hashed.startswith("pbkdf2_sha256$1000$")
+    assert hashed.startswith("hmac_sha256$")
     assert "123456" not in hashed
-    assert otp_service.verify_code_hash("123456", hashed) is True
-    assert otp_service.verify_code_hash("654321", hashed) is False
+    assert otp_service.verify_code_hash("123456", hashed, key=KEY) is True
+    assert otp_service.verify_code_hash("654321", hashed, key=KEY) is False
 
 
-def test_verify_code_hash_rejects_malformed_hash() -> None:
-    assert otp_service.verify_code_hash("123456", "pas-un-hash-valide") is False
+def test_another_key_never_matches() -> None:
+    """Une fuite de la table seule ne suffit pas : sans la clé, aucun code
+    ne correspond."""
+    hashed = otp_service.hash_code("123456", key=KEY)
+    assert otp_service.verify_code_hash("123456", hashed, key=b"autre-cle" * 4) is False
+
+
+def test_same_code_never_gives_the_same_hash() -> None:
+    # Sel aléatoire : deux codes identiques ne se reconnaissent pas en base.
+    assert otp_service.hash_code("123456", key=KEY) != otp_service.hash_code("123456", key=KEY)
+
+
+def test_verify_code_hash_rejects_malformed_or_legacy_hashes() -> None:
+    assert otp_service.verify_code_hash("123456", "pas-un-hash-valide", key=KEY) is False
+    legacy = "pbkdf2_sha256$1000$" + "00" * 16 + "$" + "11" * 32
+    assert otp_service.verify_code_hash("123456", legacy, key=KEY) is False
 
 
 def test_generate_code_produces_digits_of_requested_length() -> None:
@@ -61,7 +79,9 @@ async def test_request_otp_persists_hashed_code_and_sends_sms(db_session: AsyncS
 
     row = (await db_session.execute(select(OtpCode).where(OtpCode.phone == phone))).scalar_one()
     assert sent_code not in row.code_hash
-    assert otp_service.verify_code_hash(sent_code, row.code_hash)
+    # Haché avec la clé que le service utilise pour CES réglages.
+    key = otp_service.otp_hmac_key(_settings())
+    assert otp_service.verify_code_hash(sent_code, row.code_hash, key=key)
     assert row.consumed_at is None
     assert row.attempts == 0
 
@@ -135,7 +155,7 @@ async def test_verify_otp_rejects_expired_code(db_session: AsyncSession) -> None
     phone = unique_phone()
     otp = OtpCode(
         phone=phone,
-        code_hash=otp_service.hash_code("123456", iterations=1000),
+        code_hash=otp_service.hash_code("123456", key=KEY),
         expires_at=datetime.now(UTC) - timedelta(seconds=1),
         attempts=0,
     )
@@ -150,7 +170,7 @@ async def test_verify_otp_rejects_already_consumed_code(db_session: AsyncSession
     phone = unique_phone()
     otp = OtpCode(
         phone=phone,
-        code_hash=otp_service.hash_code("123456", iterations=1000),
+        code_hash=otp_service.hash_code("123456", key=KEY),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         consumed_at=datetime.now(UTC),
         attempts=0,
@@ -167,7 +187,7 @@ async def test_verify_otp_invalidates_code_after_max_attempts(db_session: AsyncS
     settings = _settings(otp_max_attempts=2)
     otp = OtpCode(
         phone=phone,
-        code_hash=otp_service.hash_code("123456", iterations=1000),
+        code_hash=otp_service.hash_code("123456", key=KEY),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
         attempts=0,
     )

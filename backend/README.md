@@ -155,11 +155,11 @@ Essai local de la configuration de production (facultatif) :
 | `OTP_CODE_LENGTH` | Non (`6`) | Longueur du code OTP (chiffres). |
 | `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
 | `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
-| `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
+| `OTP_HMAC_KEY` | **Oui hors développement** | Clé secrète (32 caractères minimum) du hachage HMAC-SHA256 des codes OTP. `uv run python scripts/generate_otp_hmac_key.py`. |
 | `RATE_LIMIT_BACKEND` | Non (`redis` si `REDIS_URL`, sinon `memory` en development/test et `postgres` ailleurs) | Stockage des compteurs de rate limiting : `redis`, `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors development/test. |
 | `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
-| `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
+| `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`20`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
 | `ARTISAN_SEARCH_DEFAULT_RADIUS_M` | Non (`10000`) | Rayon de recherche par défaut (mètres) si `radius_m` n'est pas fourni sur `GET /artisans`. |
 | `ARTISAN_SEARCH_MAX_RADIUS_M` | Non (`50000`) | Plafond dur du rayon de recherche (mètres). |
