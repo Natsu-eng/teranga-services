@@ -145,6 +145,9 @@ async def resolve_dispute(
     dispute = intervention.dispute
     if intervention.status is not InterventionStatus.LITIGE or dispute is None:
         raise InterventionTransitionInvalideError()
+    if outcome is DisputeOutcome.REMBOURSE:
+        # Vérifié AVANT toute modification : un refus ne laisse rien derrière lui.
+        payments_service.ensure_client_decision_applicable(intervention)
     # `completed_at` n'est posé QUE par une confirmation de fin des travaux :
     # renseigné ici, le litige a été ouvert après la fin (fenêtre).
     opened_after_completion = intervention.completed_at is not None
@@ -152,9 +155,13 @@ async def resolve_dispute(
     payout = None
     if outcome is DisputeOutcome.LIBERE:
         transition_intervention(intervention, InterventionStatus.TERMINEE)
+        # Litige ouvert APRÈS la fin : retour à l'état d'avant le litige. La
+        # complétion a DÉJÀ été réglée (commission créée ; aucun séquestre,
+        # puisqu'un litige est refusé une fois le paiement versé) -- rien
+        # n'est refait : ni commission, ni versement, ni date de fin.
         if not opened_after_completion:
             intervention.completed_at = datetime.now(UTC)
-        payout = payments_service.settle_on_completion(session, intervention, settings=settings)
+            payout = payments_service.settle_on_completion(session, intervention, settings=settings)
     else:
         transition_intervention(intervention, InterventionStatus.ANNULEE)
         mark_cancelled(
