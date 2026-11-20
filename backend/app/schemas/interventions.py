@@ -78,5 +78,11 @@ class InterventionOut(BaseModel):
     # tant qu'aucun devis n'est accepté. Visible des deux parties seulement
     # (et de l'admin), comme toute l'intervention.
     payment: PaymentSummaryOut | None = None
+    # Un problème peut-il être signalé MAINTENANT (règles du serveur,
+    # app/services/dispute_rules.py) : l'écran n'affiche jamais un bouton que
+    # le serveur refuserait. `dispute_deadline` : après la fin des travaux,
+    # jusqu'à quand (fenêtre DISPUTE_WINDOW_HOURS) ; null sinon.
+    can_open_dispute: bool = False
+    dispute_deadline: datetime | None = None
     dispute: DisputeOut | None = None
     created_at: datetime

@@ -1170,6 +1170,16 @@ class Settings(BaseSettings):
     # scripts/expire_requests.py l'enregistre en base (statistiques).
     request_open_ttl_days: int = Field(default=30, ge=1)
 
+    # --- Litiges -------------------------------------------------------------
+
+    # Fenêtre, en heures, pendant laquelle une partie peut encore signaler un
+    # problème APRÈS la confirmation de fin des travaux (`terminee` ->
+    # `litige`). 0 = désactivée (litige possible seulement en cours). Seulement
+    # sans paiement en ligne déjà versé : le versement différé du séquestre
+    # pendant la fenêtre viendra avec le branchement de l'agrégateur
+    # (DEPLOYMENT.md §16).
+    dispute_window_hours: int = Field(default=72, ge=0, le=720)
+
     # --- Paiements (BUILD_PLAN.md §3.5) ------------------------------------
 
     # Règle d'arrondi de la commission (app/services/commission_calculation.py).

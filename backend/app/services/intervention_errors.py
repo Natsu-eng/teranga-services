@@ -109,3 +109,42 @@ class ArtisanHorsZoneError(AppError):
             message="Cet artisan ne couvre pas géographiquement cette demande.",
             status_code=422,
         )
+
+
+class LitigeDelaiDepasseError(AppError):
+    """Fin des travaux confirmée il y a plus de DISPUTE_WINDOW_HOURS (ou
+    fenêtre désactivée) : le signalement n'est plus possible."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="LITIGE_DELAI_DEPASSE",
+            message=("Le délai pour signaler un problème sur ces travaux est dépassé."),
+            status_code=409,
+        )
+
+
+class LitigeDejaOuvertError(AppError):
+    """Un seul litige par intervention, même tranché : pas de second recours."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="LITIGE_DEJA_OUVERT",
+            message="Un problème a déjà été signalé sur cette intervention.",
+            status_code=409,
+        )
+
+
+class LitigePaiementDejaVerseError(AppError):
+    """Paiement en ligne déjà versé à l'artisan : Téranga ne détient plus les
+    fonds, un litige ne pourrait rien geler (versement différé : à venir avec
+    l'agrégateur)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            code="LITIGE_PAIEMENT_DEJA_VERSE",
+            message=(
+                "Le paiement a déjà été versé à l'artisan : ce problème ne peut plus être "
+                "signalé ici."
+            ),
+            status_code=409,
+        )

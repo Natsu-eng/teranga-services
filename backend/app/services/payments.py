@@ -509,6 +509,36 @@ async def settle_on_cancellation(
         fee.settled_at = _now()
 
 
+async def settle_on_arbitration_for_client(
+    session: AsyncSession,
+    intervention: Intervention,
+    *,
+    settings: Settings,
+    provider: PaymentProvider | None,
+) -> None:
+    """Litige tranché en faveur du client (intervention verrouillée par
+    l'appelant). Seul l'argent que Téranga DÉTIENT peut être rendu :
+
+    - fonds retenus en ligne -> remboursés ;
+    - checkout encore ouvert -> annulé (rien n'a été payé) ;
+    - espèces déclarées -> INCHANGÉES : réglées directement à l'artisan,
+      Téranga ne les détient pas et ne peut pas les rembourser ; un éventuel
+      remboursement se règle entre les parties ;
+    - commission due -> annulée (aucune commission sur un litige perdu par
+      l'artisan). Jamais de versement.
+    """
+    payment = current_payment(intervention)
+    if payment is not None:
+        if payment.status is PaymentStatus.RETENU:
+            await _refund(payment, provider=provider, settings=settings)
+        elif payment.status is PaymentStatus.EN_ATTENTE:
+            payment.status = PaymentStatus.ANNULE
+    fee = commission_fee(intervention)
+    if fee is not None and fee.status is PlatformFeeStatus.DUE:
+        fee.status = PlatformFeeStatus.ANNULEE
+        fee.settled_at = _now()
+
+
 def has_retained_funds(intervention: Intervention) -> bool:
     payment = current_payment(intervention)
     return payment is not None and payment.status is PaymentStatus.RETENU

@@ -8,7 +8,7 @@ figeage du taux de commission, autorisation) vit dans
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_payment_provider, require_role
@@ -26,6 +26,7 @@ from app.services import interventions as interventions_service
 from app.services import payouts as payouts_service
 from app.services import quotes as quotes_service
 from app.services import reviews as reviews_service
+from app.services.admin_notifications import notify_dispute_opened
 from app.services.payment_providers.base import PaymentProvider
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
@@ -156,13 +157,22 @@ async def open_dispute(
     intervention_id: uuid.UUID,
     payload: DisputeOpenIn,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    background_tasks: BackgroundTasks,
     user: Annotated[User, Depends(require_role(Role.CLIENT, Role.ARTISAN))],
 ) -> InterventionOut:
     result = await disputes_service.open_dispute(
-        session, intervention_id=intervention_id, user=user, reason=payload.reason
+        session,
+        intervention_id=intervention_id,
+        user=user,
+        reason=payload.reason,
+        settings=settings,
     )
     await session.commit()
-    return result
+    # Après le commit SEULEMENT, et après la réponse (best-effort) : un
+    # e-mail qui échoue ne fait jamais échouer le signalement.
+    background_tasks.add_task(notify_dispute_opened, result.trade_label, result.opened_by, settings)
+    return result.intervention
 
 
 @router.post("/{intervention_id}/quote", response_model=InterventionOut)
