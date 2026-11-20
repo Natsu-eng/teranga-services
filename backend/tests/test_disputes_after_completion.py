@@ -23,6 +23,7 @@ from app.models.enums import (
     ServiceRequestStatus,
 )
 from app.models.intervention import Intervention, InterventionDispute
+from app.models.payment import PlatformFee
 from app.models.request import ServiceRequest
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
@@ -41,6 +42,7 @@ from tests.payments_helpers import (
     only_payment,
     override_dependencies,
     pay_online,
+    payouts_of,
     update_settings,
 )
 
@@ -339,7 +341,7 @@ async def _public_reviews(http: AsyncClient, engagement: Engagement) -> dict[str
 
 
 @pytest.mark.parametrize("outcome", ["libere", "rembourse"])
-async def test_a_review_is_hidden_during_the_dispute_and_back_after_the_decision(
+async def test_a_client_dispute_suspends_the_review_until_the_decision(
     db_session: AsyncSession, outcome: str
 ) -> None:
     admin = await make_user(db_session, role=Role.ADMIN)
@@ -352,7 +354,7 @@ async def test_a_review_is_hidden_during_the_dispute_and_back_after_the_decision
         )
         assert posted.status_code == 201, posted.text
         before = await _public_reviews(http, engagement)
-        await _dispute(http, engagement, engagement.artisan_user)
+        await _dispute(http, engagement, engagement.client)
         during = await _public_reviews(http, engagement)
         await db_session.refresh(engagement.artisan)
         rating_during = engagement.artisan.rating_avg
@@ -365,6 +367,27 @@ async def test_a_review_is_hidden_during_the_dispute_and_back_after_the_decision
     assert rating_during is None
     assert after["pagination"]["total"] == 1
     assert engagement.artisan.rating_avg is not None and float(engagement.artisan.rating_avg) == 2
+
+
+async def test_an_artisan_dispute_never_hides_the_review(db_session: AsyncSession) -> None:
+    """Anti-censure : un artisan ne fait pas disparaître une critique en
+    ouvrant un litige."""
+    async with client() as http:
+        engagement = await _completed_cash(db_session, http)
+        posted = await http.post(
+            f"/api/v1/interventions/{engagement.intervention.id}/review",
+            json={"rating": 1, "comment": "Travail bâclé."},
+            headers=auth(engagement.client),
+        )
+        assert posted.status_code == 201, posted.text
+        opened = await _dispute(http, engagement, engagement.artisan_user)
+        during = await _public_reviews(http, engagement)
+        await db_session.refresh(engagement.artisan)
+
+    assert opened.json()["status"] == "litige"
+    assert during["pagination"]["total"] == 1
+    assert during["items"][0]["comment"] == "Travail bâclé."
+    assert engagement.artisan.rating_avg is not None and float(engagement.artisan.rating_avg) == 1
 
 
 # ------------------------------------------------------------- statistiques
@@ -473,3 +496,183 @@ def test_the_dispute_email_names_the_reporter_by_role_only() -> None:
     email = build_dispute_opened_email("Plomberie", Role.ARTISAN, settings)
     assert "Signalé par : l'artisan" in email.body
     assert "https://teranga.example/admin/litiges" in email.body
+
+
+# ------------------------------------- issue « artisan » après la fin : rien de refait
+
+
+async def _fees(db_session: AsyncSession, engagement: Engagement) -> list[PlatformFee]:
+    result = await db_session.scalars(
+        select(PlatformFee).where(PlatformFee.intervention_id == engagement.intervention.id)
+    )
+    return list(result)
+
+
+@pytest.mark.parametrize("with_cash", [True, False], ids=["especes", "sans-paiement"])
+async def test_release_after_completion_does_not_settle_the_completion_again(
+    db_session: AsyncSession, with_cash: bool
+) -> None:
+    admin = await make_user(db_session, role=Role.ADMIN)
+    engagement = await make_payable_engagement(db_session)
+    async with client() as http:
+        if with_cash:
+            await init_payment(http, engagement, "cash")
+        await _complete(http, engagement)
+        (fee_before,) = await _fees(db_session, engagement)
+        intervention = await db_session.get(Intervention, engagement.intervention.id)
+        assert intervention is not None
+        completed_at = intervention.completed_at
+        await _dispute(http, engagement, engagement.client)
+        await _resolve(http, engagement, admin, "libere")
+
+    (fee_after,) = await _fees(db_session, engagement)
+    assert fee_after.id == fee_before.id
+    assert fee_after.status is PlatformFeeStatus.DUE
+    assert await payouts_of(db_session, engagement) == []
+    await db_session.refresh(intervention)
+    assert intervention.completed_at == completed_at
+
+
+# ------------------------------------------- motifs : longueur maximale et lecture
+
+
+def _max_length_phone_reason() -> str:
+    """Motif de la longueur maximale acceptée (2000), rempli de numéros
+    séparés par du texte (chaque numéro grandit une fois masqué)."""
+    unit = "Tél. 77 123 45 67 ; "
+    return unit * (2000 // len(unit))
+
+
+async def test_a_max_length_reason_full_of_numbers_is_stored_fully_masked(
+    db_session: AsyncSession,
+) -> None:
+    reason = _max_length_phone_reason()
+    engagement = await make_payable_engagement(db_session)
+    async with client() as http:
+        response = await _dispute(http, engagement, engagement.client, reason)
+
+    assert response.status_code == 200, response.text
+    stored = await db_session.scalar(
+        select(InterventionDispute.reason).where(
+            InterventionDispute.intervention_id == engagement.intervention.id
+        )
+    )
+    assert stored is not None
+    # Colonne `Text` (non bornée) : le texte masqué, plus long que l'original,
+    # est enregistré en entier, sans aucun chiffre restant.
+    assert len(reason) == 2000
+    assert len(stored) > len(reason)
+    assert "77 123 45 67" not in stored and stored.count(PHONE_PLACEHOLDER) == 100
+    assert response.json()["dispute"]["reason"] == stored
+
+
+async def test_a_max_length_cancellation_reason_full_of_numbers_is_fully_masked(
+    db_session: AsyncSession,
+) -> None:
+    engagement = await make_payable_engagement(db_session)
+    async with client() as http:
+        response = await http.post(
+            f"/api/v1/interventions/{engagement.intervention.id}/cancel",
+            json={"reason": _max_length_phone_reason()},
+            headers=auth(engagement.artisan_user),
+        )
+
+    assert response.status_code == 200, response.text
+    reason = response.json()["cancellation"]["reason"]
+    assert "77 123 45 67" not in reason and reason.count(PHONE_PLACEHOLDER) == 100
+
+
+async def test_reasons_already_in_database_are_masked_when_read(db_session: AsyncSession) -> None:
+    """Motifs enregistrés AVANT le masquage à l'écriture : masqués à la lecture."""
+    engagement = await make_payable_engagement(db_session)
+    async with client() as http:
+        await _dispute(http, engagement, engagement.client)
+    dispute = await db_session.scalar(
+        select(InterventionDispute).where(
+            InterventionDispute.intervention_id == engagement.intervention.id
+        )
+    )
+    assert dispute is not None
+    dispute.reason = "Ancien motif : appelez le 77 123 45 67 ou ecrivez a awa@exemple.sn"
+    await db_session.flush()
+
+    async with client() as http:
+        body = (
+            await http.get(
+                f"/api/v1/interventions/{engagement.intervention.id}",
+                headers=auth(engagement.artisan_user),
+            )
+        ).json()
+
+    reason = body["dispute"]["reason"]
+    assert "77 123 45 67" not in reason and "awa@exemple.sn" not in reason
+    assert PHONE_PLACEHOLDER in reason
+
+
+async def test_legacy_cancellation_reasons_are_masked_when_read_but_admin_notes_are_kept(
+    db_session: AsyncSession,
+) -> None:
+    engagement = await make_payable_engagement(db_session)
+    async with client() as http:
+        await http.post(
+            f"/api/v1/interventions/{engagement.intervention.id}/cancel",
+            json={},
+            headers=auth(engagement.artisan_user),
+        )
+    intervention = await db_session.get(Intervention, engagement.intervention.id)
+    assert intervention is not None
+    intervention.cancellation_reason = "Indisponible, rappelez le 77 123 45 67."
+    await db_session.flush()
+
+    async with client() as http:
+        body = (
+            await http.get(
+                f"/api/v1/interventions/{engagement.intervention.id}",
+                headers=auth(engagement.client),
+            )
+        ).json()
+
+    assert "77 123 45 67" not in body["cancellation"]["reason"]
+
+
+def test_masking_is_idempotent() -> None:
+    from app.services.contact_masking import mask_contacts
+
+    once = mask_contacts("Appelez le 77 123 45 67 ou awa@exemple.sn").text
+    assert mask_contacts(once).text == once
+    assert mask_contacts(once).masked_count == 0
+
+
+# ------------------------------------------- commission déjà réglée : jamais en silence
+
+
+@pytest.mark.parametrize("settled", [PlatformFeeStatus.COLLECTEE, PlatformFeeStatus.ANNULEE])
+async def test_a_client_decision_is_refused_clearly_when_the_commission_is_settled(
+    db_session: AsyncSession, settled: PlatformFeeStatus
+) -> None:
+    admin = await make_user(db_session, role=Role.ADMIN)
+    async with client() as http:
+        engagement = await _completed_cash(db_session, http)
+        await _dispute(http, engagement, engagement.client)
+        (fee,) = await _fees(db_session, engagement)
+        fee.status = settled
+        await db_session.flush()
+        response = await http.post(
+            f"/api/v1/admin/disputes/{engagement.intervention.id}/resolve",
+            json={"outcome": "rembourse", "note": "Travaux non réalisés."},
+            headers=auth(admin),
+        )
+        after = (
+            await http.get(
+                f"/api/v1/interventions/{engagement.intervention.id}",
+                headers=auth(engagement.client),
+            )
+        ).json()
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "COMMISSION_DEJA_REGLEE"
+    assert "Rien n'a été modifié" in error["message"]
+    # Rien n'a bougé : toujours en litige, à trancher, paiement intact.
+    assert after["status"] == "litige" and after["dispute"]["outcome"] is None
+    assert (await only_payment(db_session, engagement)).status is PaymentStatus.REUSSI
