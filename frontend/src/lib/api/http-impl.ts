@@ -14,6 +14,8 @@
 import type {
   AdminVerificationListItem,
   ChatMessage,
+  CreateSupportTicketInput,
+  SupportTicket,
   ConversationDetail,
   ConversationSummary,
   MessageHistory,
@@ -68,6 +70,7 @@ import type {
   BackendArtisanListItem,
   BackendArtisanStats,
   BackendChatMessage,
+  BackendSupportTicket,
   BackendClientPayment,
   BackendConversation,
   BackendConversationSummary,
@@ -92,6 +95,7 @@ import {
   mapArtisan,
   mapArtisanStats,
   mapChatMessage,
+  mapSupportTicket,
   mapConversation,
   mapConversationSummary,
   mapIntervention,
@@ -575,6 +579,26 @@ export const httpApiClient: ApiClient = {
       method: 'POST',
     });
     return { ticket: result.ticket, expiresIn: result.expires_in };
+  },
+
+  async createSupportTicket(input: CreateSupportTicketInput): Promise<SupportTicket> {
+    return mapSupportTicket(
+      await apiRequest<BackendSupportTicket>('/support/tickets', {
+        method: 'POST',
+        body: {
+          category: input.category,
+          message: input.message,
+          intervention_id: input.interventionId ?? null,
+        },
+      }),
+    );
+  },
+
+  async listMySupportTickets(): Promise<SupportTicket[]> {
+    const page = await apiRequest<BackendPage<BackendSupportTicket>>(
+      '/support/tickets?page_size=50',
+    );
+    return page.items.map(mapSupportTicket);
   },
 
   async getPushConfig(): Promise<PushConfig> {

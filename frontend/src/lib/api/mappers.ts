@@ -15,6 +15,8 @@ import type {
   ArtisanStats,
   ArtisanTradeDetail,
   Intervention,
+  AdminSupportTicket,
+  SupportTicket,
   MyArtisanProfile,
   MyReceivedReview,
   PaymentSummary,
@@ -40,6 +42,8 @@ import type {
   BackendConversation,
   BackendConversationSummary,
   BackendIntervention,
+  BackendAdminSupportTicket,
+  BackendSupportTicket,
   BackendMediaUploadLimits,
   BackendMyReceivedReview,
   BackendMyVerification,
@@ -151,6 +155,30 @@ export function mapPayoutSettings(settings: BackendPayoutSettings): PayoutSettin
     chosen: settings.chosen,
     allowedChannels: settings.allowed_channels,
     destinationPhone: settings.destination_phone,
+  };
+}
+
+export function mapSupportTicket(ticket: BackendSupportTicket): SupportTicket {
+  return {
+    id: ticket.id,
+    category: ticket.category,
+    message: ticket.message,
+    interventionId: ticket.intervention_id,
+    interventionTradeLabel: ticket.intervention_trade_label,
+    status: ticket.status,
+    adminReply: ticket.admin_reply,
+    repliedAt: ticket.replied_at,
+    resolvedAt: ticket.resolved_at,
+    createdAt: ticket.created_at,
+  };
+}
+
+export function mapAdminSupportTicket(ticket: BackendAdminSupportTicket): AdminSupportTicket {
+  return {
+    ...mapSupportTicket(ticket),
+    authorId: ticket.author_id,
+    authorName: ticket.author_name,
+    authorRole: ticket.author_role,
   };
 }
 

@@ -1,6 +1,8 @@
 import type {
   AdminVerificationListItem,
   ChatMessage,
+  CreateSupportTicketInput,
+  SupportTicket,
   ConversationDetail,
   ConversationSummary,
   MessageHistory,
@@ -219,6 +221,9 @@ export interface ApiClient extends AdminBackofficeApi {
   markConversationRead(conversationId: string, lastReadSeq: number): Promise<ConversationDetail>;
   getMessageAttachmentBlob(conversationId: string, messageId: string): Promise<Blob>;
   createRealtimeTicket(): Promise<RealtimeTicket>;
+  // Aide : demandes de l'utilisateur connecté (les siennes seulement).
+  createSupportTicket(input: CreateSupportTicketInput): Promise<SupportTicket>;
+  listMySupportTickets(): Promise<SupportTicket[]>;
   // Notifications push (nouveau message, même application fermée).
   getPushConfig(): Promise<PushConfig>;
   /** Enregistre (ou rafraîchit) l'abonnement de cet appareil ; idempotent. */

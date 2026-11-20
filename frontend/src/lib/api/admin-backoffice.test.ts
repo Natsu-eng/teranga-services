@@ -114,6 +114,62 @@ describe('back-office HTTP', () => {
     expect(rate.interventionsCount).toBe(0);
   });
 
+  it("liste la file d'aide par statut, et mappe l'auteur", async () => {
+    const fetchMock = stubFetch({
+      items: [
+        {
+          id: 't1',
+          category: 'bug',
+          message: 'Écran blanc.',
+          intervention_id: null,
+          intervention_trade_label: null,
+          status: 'ouvert',
+          admin_reply: null,
+          replied_at: null,
+          resolved_at: null,
+          created_at: '2026-11-10T10:00:00Z',
+          author_id: 'u1',
+          author_name: 'Awa Diop',
+          author_role: 'client',
+        },
+      ],
+      pagination: { page: 1, page_size: 20, total: 1, total_pages: 1 },
+    });
+
+    const result = await httpApiClient.listAdminSupportTickets({ status: 'resolu' });
+
+    expect(lastCall(fetchMock).url).toMatch(/\/admin\/support\/tickets\?status=resolu$/);
+    expect(result.items[0]).toMatchObject({ authorName: 'Awa Diop', authorRole: 'client' });
+  });
+
+  it("répond à une demande d'aide (avec ou sans clôture)", async () => {
+    const fetchMock = stubFetch({
+      id: 't1',
+      category: 'bug',
+      message: 'Écran blanc.',
+      intervention_id: null,
+      intervention_trade_label: null,
+      status: 'ouvert',
+      admin_reply: 'Précisez le navigateur ?',
+      replied_at: '2026-11-11T10:00:00Z',
+      resolved_at: null,
+      created_at: '2026-11-10T10:00:00Z',
+      author_id: 'u1',
+      author_name: 'Awa Diop',
+      author_role: 'client',
+    });
+
+    await httpApiClient.replySupportTicket('t1', 'Précisez le navigateur ?', false);
+
+    const { url, init } = lastCall(fetchMock);
+    expect(url).toMatch(/\/admin\/support\/tickets\/t1\/reply$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      reply: 'Précisez le navigateur ?',
+      resolve: false,
+    });
+  });
+
   it('filtre le journal par type de cible', async () => {
     const fetchMock = stubFetch(emptyPage);
 

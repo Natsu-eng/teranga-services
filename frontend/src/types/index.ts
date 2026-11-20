@@ -8,3 +8,4 @@ export * from './requests';
 export * from './interventions';
 export * from './payments';
 export * from './messaging';
+export * from './support';

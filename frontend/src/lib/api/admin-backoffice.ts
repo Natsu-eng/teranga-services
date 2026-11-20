@@ -25,7 +25,10 @@ import type {
   CommissionRate,
   PageResult,
 } from '../../types/admin';
+import type { AdminSupportFilters, AdminSupportTicket } from '../../types/support';
+import type { BackendAdminSupportTicket } from './backend-types';
 import { apiRequest } from './http';
+import { mapAdminSupportTicket } from './mappers';
 import type {
   BackendAdminArtisanDetail,
   BackendAdminArtisanListItem,
@@ -63,6 +66,14 @@ export interface AdminBackofficeApi {
   getCommissionGrid(): Promise<CommissionGrid>;
   addCommissionRate(input: AddCommissionRateInput): Promise<CommissionRate>;
   listAuditEntries(filters?: AuditFilters): Promise<PageResult<AuditEntry>>;
+  /** Aide : file des demandes (ouvertes par défaut, la plus ancienne d'abord). */
+  listAdminSupportTickets(filters?: AdminSupportFilters): Promise<PageResult<AdminSupportTicket>>;
+  /** Répond à une demande, et la clôt si `resolve`. Journalisé par le serveur. */
+  replySupportTicket(
+    ticketId: string,
+    reply: string,
+    resolve: boolean,
+  ): Promise<AdminSupportTicket>;
 }
 
 /** Paramètres de requête, sans les valeurs absentes ni les chaînes vides. */
@@ -203,5 +214,21 @@ export const httpAdminBackoffice: AdminBackofficeApi = {
       })}`,
     );
     return mapPage(page, mapAuditEntry);
+  },
+
+  async listAdminSupportTickets(filters) {
+    const page = await apiRequest<BackendPage<BackendAdminSupportTicket>>(
+      `/admin/support/tickets${query({ status: filters?.status, page: filters?.page })}`,
+    );
+    return mapPage(page, mapAdminSupportTicket);
+  },
+
+  async replySupportTicket(ticketId, reply, resolve) {
+    return mapAdminSupportTicket(
+      await apiRequest<BackendAdminSupportTicket>(`/admin/support/tickets/${ticketId}/reply`, {
+        method: 'POST',
+        body: { reply, resolve },
+      }),
+    );
   },
 };

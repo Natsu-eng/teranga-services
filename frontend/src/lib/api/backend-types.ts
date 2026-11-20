@@ -182,6 +182,25 @@ export interface BackendQuote {
   created_at: string;
 }
 
+export interface BackendSupportTicket {
+  id: string;
+  category: 'compte' | 'utilisateur' | 'paiement' | 'bug' | 'autre';
+  message: string;
+  intervention_id: string | null;
+  intervention_trade_label: string | null;
+  status: 'ouvert' | 'resolu';
+  admin_reply: string | null;
+  replied_at: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface BackendAdminSupportTicket extends BackendSupportTicket {
+  author_id: string;
+  author_name: string;
+  author_role: 'client' | 'artisan' | 'admin';
+}
+
 export interface BackendIntervention {
   id: string;
   service_request: BackendServiceRequest;

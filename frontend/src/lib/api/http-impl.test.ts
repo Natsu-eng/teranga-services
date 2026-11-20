@@ -1355,6 +1355,59 @@ describe('httpApiClient', () => {
     });
   });
 
+  describe('aide', () => {
+    const backendTicket = {
+      id: 't1',
+      category: 'compte',
+      message: 'Je ne peux pas changer mon nom.',
+      intervention_id: 'int-1',
+      intervention_trade_label: 'Plomberie',
+      status: 'ouvert',
+      admin_reply: null,
+      replied_at: null,
+      resolved_at: null,
+      created_at: '2026-11-10T10:00:00Z',
+    };
+
+    it("envoie une demande d'aide (intervention facultative en snake_case)", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, backendTicket));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const ticket = await httpApiClient.createSupportTicket({
+        category: 'compte',
+        message: 'Je ne peux pas changer mon nom.',
+        interventionId: 'int-1',
+      });
+
+      const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toMatch(/\/support\/tickets$/);
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body as string)).toEqual({
+        category: 'compte',
+        message: 'Je ne peux pas changer mon nom.',
+        intervention_id: 'int-1',
+      });
+      expect(ticket).toMatchObject({ interventionTradeLabel: 'Plomberie', status: 'ouvert' });
+    });
+
+    it('lit ses propres demandes', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          jsonResponse(200, {
+            items: [backendTicket],
+            pagination: { page: 1, page_size: 50, total: 1, total_pages: 1 },
+          }),
+        ),
+      );
+
+      const tickets = await httpApiClient.listMySupportTickets();
+
+      expect(tickets).toHaveLength(1);
+      expect(tickets[0].message).toBe('Je ne peux pas changer mon nom.');
+    });
+  });
+
   describe('notifications push', () => {
     it('lit la configuration (clé publique VAPID)', async () => {
       vi.stubGlobal(

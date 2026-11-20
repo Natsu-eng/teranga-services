@@ -127,6 +127,14 @@ const mockAdminBackoffice: AdminBackofficeApi = {
     await simulateNetworkLatency();
     return emptyPage();
   },
+  async listAdminSupportTickets() {
+    await simulateNetworkLatency();
+    return emptyPage();
+  },
+  async replySupportTicket() {
+    await simulateNetworkLatency();
+    throw NOT_FOUND();
+  },
 };
 
 // Mêmes codes que le seed backend (backend/scripts/seed.py).
@@ -298,6 +306,17 @@ export const mockApiClient: ApiClient = {
   async createRealtimeTicket(): Promise<never> {
     await simulateNetworkLatency();
     throw new ApiError('network', 'Temps réel indisponible.');
+  },
+
+  // Aide : jamais simulée (le mock est réservé aux tests).
+  async createSupportTicket(): Promise<never> {
+    await simulateNetworkLatency();
+    throw new ApiError('network', "L'aide n'est pas disponible.");
+  },
+
+  async listMySupportTickets() {
+    await simulateNetworkLatency();
+    return [];
   },
 
   // Notifications push : jamais simulées (désactivées dans le mock).

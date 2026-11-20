@@ -62,10 +62,17 @@ export type AuditAction =
   | 'user.revoke_admin'
   | 'review.hide'
   | 'review.restore'
-  | 'commission_rate.create';
+  | 'commission_rate.create'
+  | 'support_ticket.reply';
 
 export type AuditTargetType =
-  'verification' | 'intervention' | 'artisan' | 'user' | 'review' | 'commission_rate';
+  | 'verification'
+  | 'intervention'
+  | 'artisan'
+  | 'user'
+  | 'review'
+  | 'commission_rate'
+  | 'support_ticket';
 
 export interface AuditEntry {
   id: string;
