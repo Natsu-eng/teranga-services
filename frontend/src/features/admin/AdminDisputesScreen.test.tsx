@@ -84,6 +84,38 @@ describe('AdminDisputesScreen', () => {
     expect(await screen.findByText('Aucun litige à trancher.')).toBeInTheDocument();
   });
 
+  it('en espèces, propose une médiation et jamais un remboursement par Téranga', async () => {
+    mockedApi.listAdminDisputes.mockResolvedValue([
+      { ...disputed, payment: paymentFixture({ status: 'reussi', channel: 'cash' }) },
+    ]);
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clore en faveur du client' }));
+
+    expect(screen.queryByRole('button', { name: 'Rembourser le client' })).toBeNull();
+    expect(screen.getByText(/aucun remboursement n'est effectué par Téranga/)).toBeVisible();
+  });
+
+  it('un litige tranché en espèces est étiqueté selon ce qui a été fait', async () => {
+    mockedApi.listAdminDisputes.mockResolvedValue([
+      {
+        ...disputed,
+        status: 'annulee',
+        payment: paymentFixture({ status: 'reussi', channel: 'cash' }),
+        dispute: {
+          ...disputed.dispute!,
+          outcome: 'rembourse',
+          resolvedAt: '2026-10-12T10:00:00Z',
+          resolutionNote: 'Travaux non réalisés.',
+        },
+      },
+    ]);
+    renderScreen();
+
+    expect(await screen.findByText('Clos en faveur du client')).toBeVisible();
+    expect(screen.queryByText('Client remboursé')).toBeNull();
+  });
+
   it('affiche les litiges déjà tranchés', async () => {
     renderScreen();
     await screen.findByText('Le client ne confirme pas la fin des travaux.');

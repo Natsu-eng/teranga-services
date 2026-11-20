@@ -12,25 +12,13 @@ import { ApiError, api } from '../../lib/api';
 import { formatFcfa } from '../../lib/format';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { Intervention } from '../../types';
+import { adminOutcomeLabels, adminOutcomePill } from '../interventions/disputeText';
 import { CHANNEL_LABELS, formatPaymentDate, formatRate } from '../payments/paymentText';
 
 /** Longueur minimale de la justification (alignée sur la validation serveur). */
 const MIN_NOTE_LENGTH = 3;
 
 type Outcome = 'libere' | 'rembourse';
-
-const OUTCOME_LABELS: Record<Outcome, { action: string; effect: string }> = {
-  libere: {
-    action: "Verser à l'artisan",
-    effect:
-      "L'intervention est close comme terminée ; l'artisan reçoit son net, la commission est prélevée.",
-  },
-  rembourse: {
-    action: 'Rembourser le client',
-    effect:
-      "L'intervention est annulée ; le client est intégralement remboursé, aucune commission.",
-  },
-};
 
 const PARTY: Record<string, string> = {
   client: 'le client',
@@ -49,6 +37,10 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
   const { dispute, payment } = intervention;
   if (!dispute) return null;
   const isOpen = dispute.outcome === null;
+  // Boutons et effets annoncés selon l'argent RÉELLEMENT détenu (séquestre,
+  // ou médiation en espèces / hors plateforme) : jamais un remboursement
+  // que Téranga ne pourrait pas faire.
+  const outcomeLabels = adminOutcomeLabels(payment);
 
   const confirm = async () => {
     if (!outcome || note.trim().length < MIN_NOTE_LENGTH) return;
@@ -74,11 +66,9 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
           </p>
         </div>
         <StatusPill tone={isOpen ? 'danger' : 'neutral'}>
-          {isOpen
+          {isOpen || dispute.outcome === null
             ? 'À trancher'
-            : dispute.outcome === 'libere'
-              ? 'Versé à l’artisan'
-              : 'Client remboursé'}
+            : adminOutcomePill(dispute.outcome, payment)}
         </StatusPill>
       </div>
 
@@ -121,8 +111,8 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
         (outcome ? (
           <div className="space-y-3">
             <p className="text-sm text-foreground">
-              <span className="font-semibold">{OUTCOME_LABELS[outcome].action}.</span>{' '}
-              {OUTCOME_LABELS[outcome].effect}
+              <span className="font-semibold">{outcomeLabels[outcome].action}.</span>{' '}
+              {outcomeLabels[outcome].effect}
             </p>
             <TextAreaField
               label="Justification (visible des deux parties)"
@@ -153,10 +143,10 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
         ) : (
           <div className="flex flex-wrap gap-2">
             <Button variant="brand" size="sm" onClick={() => setOutcome('libere')}>
-              {OUTCOME_LABELS.libere.action}
+              {outcomeLabels.libere.action}
             </Button>
             <Button variant="danger-outline" size="sm" onClick={() => setOutcome('rembourse')}>
-              {OUTCOME_LABELS.rembourse.action}
+              {outcomeLabels.rembourse.action}
             </Button>
           </div>
         ))}
@@ -165,9 +155,10 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
 };
 
 /**
- * Litiges (/admin/litiges) : l'argent d'une intervention en litige est
- * gelé ; un admin examine (motif, échanges, montants) puis tranche —
- * versement à l'artisan ou remboursement du client, toujours justifié.
+ * Litiges (/admin/litiges) : un admin examine (motif, échanges, montants)
+ * puis tranche, toujours justifié. Paiement en ligne retenu : versement à
+ * l'artisan ou remboursement du client. Espèces ou hors plateforme : Téranga
+ * ne détient rien, la décision clôt la médiation (commission due ou annulée).
  */
 export const AdminDisputesScreen: React.FC = () => {
   const [resolved, setResolved] = useState(false);
@@ -185,7 +176,8 @@ export const AdminDisputesScreen: React.FC = () => {
       <div className="space-y-1">
         <h1 className="font-display text-display-md font-semibold text-primary">Litiges</h1>
         <p className="text-sm text-muted-foreground">
-          L&apos;argent d&apos;une intervention en litige est gelé jusqu&apos;à votre décision.
+          Un paiement en ligne retenu reste gelé jusqu&apos;à votre décision. En espèces, Téranga ne
+          détient pas l&apos;argent : la décision clôt la médiation.
         </p>
       </div>
       <div className="flex gap-2" role="group" aria-label="Filtrer les litiges">
