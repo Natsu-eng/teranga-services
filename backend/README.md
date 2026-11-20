@@ -144,7 +144,7 @@ Essai local de la configuration de production (facultatif) :
 | `ENVIRONMENT` | Non (`development`) | `development` \| `test` \| `staging` \| `production` (ensemble fermé ; ancien nom `APP_ENV`, valeurs `dev`/`prod` acceptées). Format des logs (JSON hors development/test), code OTP journalisé seulement en development/test, et en production fail-fast sur toute configuration incomplète ou de dev (DEPLOYMENT.md). |
 | `LOG_LEVEL` | Non (`INFO`) | Niveau de log Python standard. |
 | `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules : origines exactes (`https://hote[:port]`, sans chemin ni `/` final), jamais de joker (refusés au démarrage). En production : HTTPS publiques, et l'origine du front obligatoire si front et API sont sur deux origines. |
-| `TRUSTED_PROXY_HOPS` | Non (vide = 0) ; **obligatoire en production** | Nombre de proxys de confiance : l'IP du client est lue à cette position en partant de la droite de `X-Forwarded-For` (non falsifiable). Railway : `1`. |
+| `TRUSTED_PROXY_HOPS` | Non (vide = 0) ; **obligatoire en staging et en production** | Nombre de proxys de confiance : l'IP du client est lue à cette position en partant de la droite de `X-Forwarded-For` (non falsifiable). Railway : `1`. |
 | `REDIS_URL` | Non (vide) | Redis partagé (`redis://`, `rediss://`) : rate limiting, diffusion temps réel, tickets WebSocket. Vide : repli mémoire (et PostgreSQL pour le rate limiting hors dev). Obligatoire dès 2 instances. |
 | `JWT_SECRET` | Oui | Secret de signature des JWT. Aucune valeur par défaut : le démarrage échoue si absent ou trop court (< 32 caractères). |
 | `JWT_ACCESS_TTL_SECONDS` | Non (`900`) | Durée de vie de l'access token (secondes). |
