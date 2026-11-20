@@ -1809,3 +1809,22 @@ Paiements (après le lot `feat/paiements`, §3.5) : recouvrement des
 commissions dues sur le cash, planification des relances de versements,
 libération automatique d'un séquestre après un délai sans contestation,
 abonnement « Vérifié » (la `platform_fee` découplée le permet déjà).
+
+Points ouverts relevés au lot `feat/disputes-support` (à traiter dans des
+lots dédiés, après le lot Aide) :
+
+- **Masquage des coordonnées : contournement par un chiffre accolé.**
+  `app/services/contact_masking.py` ne masque jamais « un nombre plus long »
+  (garde-fou anti-sur-masquage) : un numéro suivi d'un autre chiffre
+  (`77 123 45 67 8`) ou deux numéros séparés d'un simple espace passent EN
+  CLAIR, dans la messagerie comme dans les motifs. Correctif prévu, dans un
+  lot SÉPARÉ : masquer, dans une suite de chiffres, chaque tranche qui
+  commence par un préfixe sénégalais (70/75/76/77/78/33) suivie de
+  7 chiffres, sans toucher aux montants suivis d'une devise ni aux dates ;
+  contrepartie à mesurer : de longues références commençant par 77… seraient
+  masquées. Mettre à jour les tests anti-sur-masquage en conséquence.
+- **Litige : décision « en faveur du client » impossible si la commission
+  espèces est déjà collectée.** Aujourd'hui refusée (`COMMISSION_DEJA_REGLEE`,
+  409) avant toute modification, et annoncée sur la carte du back-office.
+  À faire plus tard : autoriser la décision et signaler à l'admin la
+  commission à RESTITUER à l'artisan (suivi explicite, jamais en silence).
