@@ -1070,14 +1070,18 @@ s'applique pleinement.
   Best-effort : un échec est journalisé (`Notification admin (litige ouvert)
   NON envoyée : ...`), le signalement reste enregistré.
 - Le **motif** (comme celui d'une annulation ou d'un refus) est **masqué** à
-  l'écriture : numéros et e-mails remplacés, comme dans la messagerie — il est
-  montré à l'autre partie.
+  l'écriture ET à la lecture (motifs enregistrés avant ce lot compris) :
+  numéros et e-mails remplacés, comme dans la messagerie — il est montré à
+  l'autre partie. Colonnes `Text` non bornées : le texte masqué, parfois plus
+  long que l'original, est toujours enregistré en entier.
 - Paiement en ligne **retenu** : gelé (ni versement ni remboursement).
   Espèces ou hors plateforme : Téranga ne détient rien, le litige est une
   **médiation** ; l'interface ne parle jamais d'« argent gelé ».
-- L'**avis** éventuel du client n'est plus public (liste, compteur et note de
-  l'artisan recalculés sans lui) ; il redevient public dès la décision, quelle
-  qu'elle soit.
+- L'**avis** éventuel du client n'est plus public **si c'est le client qui a
+  signalé** (liste, compteur et note de l'artisan recalculés sans lui) ; il
+  redevient public dès la décision, quelle qu'elle soit. Un litige ouvert par
+  l'**artisan** ne masque jamais l'avis (anti-censure : on ne fait pas
+  disparaître une critique en ouvrant un litige).
 
 ### 16.3 Les issues, selon l'argent réellement détenu
 
@@ -1094,6 +1098,13 @@ libellés dépendent du paiement :
   conservée (issue artisan), et la demande **n'est pas rouverte** (issue
   client) — les travaux ont eu lieu. Ouvert pendant les travaux : la demande
   redevient ouverte (issue client), comme avant.
+- Issue « artisan » sur un litige ouvert après la fin : retour à l'état
+  d'avant, **rien n'est refait** (même commission, aucun versement, même date
+  de fin).
+- Commission **déjà réglée** (prélevée ou annulée) : une décision « en faveur
+  du client » est **refusée** (`COMMISSION_DEJA_REGLEE`, HTTP 409) avant
+  toute modification — rien n'est changé, l'admin traite le cas à la main. Le
+  back-office l'annonce sur la carte du litige avant la décision.
 - Chaque décision est justifiée (visible des deux parties) et inscrite au
   journal d'audit (avec `opened_after_completion`).
 
