@@ -1180,6 +1180,13 @@ class Settings(BaseSettings):
     # (DEPLOYMENT.md §16).
     dispute_window_hours: int = Field(default=72, ge=0, le=720)
 
+    # --- Aide (demandes au support) --------------------------------------------
+
+    # Budget de demandes d'aide par utilisateur authentifié : assez pour un
+    # usage réel (quelques demandes), trop peu pour remplir la file des admins.
+    rate_limit_support_ticket_per_user_max: int = Field(default=5, ge=1)
+    rate_limit_support_ticket_per_user_window_seconds: int = Field(default=3600, ge=1)
+
     # --- Paiements (BUILD_PLAN.md §3.5) ------------------------------------
 
     # Règle d'arrondi de la commission (app/services/commission_calculation.py).

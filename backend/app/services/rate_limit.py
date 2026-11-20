@@ -166,6 +166,7 @@ MESSAGE_SEND_BUCKET = "message_send"
 MESSAGE_ATTACHMENT_BUCKET = "message_attachment"
 PAYMENT_INIT_BUCKET = "payment_init"
 PUSH_SUBSCRIPTION_BUCKET = "push_subscription"
+SUPPORT_TICKET_BUCKET = "support_ticket"
 
 _memory_limiters: dict[str, SlidingWindowRateLimiter] = {}
 _postgres_limiters: dict[str, PostgresRateLimiter] = {}
@@ -234,6 +235,12 @@ def get_payment_init_rate_limiter(settings: SettingsDep) -> RateLimiter:
     """`POST /api/v1/payments/init` -- clé par utilisateur authentifié :
     chaque appel peut ouvrir un checkout chez le fournisseur."""
     return _limiter_for(PAYMENT_INIT_BUCKET, settings)
+
+
+def get_support_ticket_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/support/tickets` -- clé par utilisateur authentifié :
+    chaque demande alimente la file des admins (et un e-mail)."""
+    return _limiter_for(SUPPORT_TICKET_BUCKET, settings)
 
 
 def get_push_subscription_rate_limiter(settings: SettingsDep) -> RateLimiter:
