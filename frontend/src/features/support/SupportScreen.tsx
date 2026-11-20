@@ -154,8 +154,7 @@ export const SupportScreen: React.FC = () => {
             />
             <p className="flex items-start gap-2 text-caption text-muted-foreground">
               <ShieldCheck aria-hidden className="w-4 h-4 shrink-0 text-primary-emerald" />
-              Les numéros de téléphone et e-mails sont masqués automatiquement : n&apos;en écrivez
-              pas, nous vous répondons ici.
+              Seuls vous et l&apos;équipe Téranga lisez ce message. Nous vous répondons ici.
             </p>
             {sendError && (
               <p role="alert" className="text-sm text-destructive">

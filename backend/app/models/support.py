@@ -26,9 +26,9 @@ class SupportTicket(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Demande d'aide d'un client ou d'un artisan (« Aide / Signaler un
     problème », Profil), traitée par un admin.
 
-    - `message` : MASQUÉ à l'écriture (numéros, e-mails), et de nouveau à la
-      lecture. Colonne `Text` : le texte masqué, parfois plus long que la
-      saisie, est toujours enregistré en entier.
+    - `message` : enregistré TEL QU'ÉCRIT (non masqué) -- lu seulement par son
+      auteur et par les admins, jamais par l'autre partie d'une intervention.
+      Il ne figure ni dans l'e-mail aux admins ni dans le journal d'audit.
     - `intervention_id` : facultatif ; s'il est donné, l'intervention
       appartient à l'auteur (client ou artisan), vérifié par le service.
     - Réponse de l'admin (`admin_reply`, `replied_by_id`, `replied_at`) :

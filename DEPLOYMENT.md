@@ -1138,9 +1138,12 @@ un admin répond depuis **Support** (`/admin/support`). Lot
 - Comptes **client et artisan connectés** seulement (anonyme : 401 ; admin :
   403). Sujets : compte, un artisan ou un client, paiement, problème dans
   l'application, autre.
-- Message de **10 à 2000 caractères** (borné par le schéma), **masqué** à
-  l'écriture et à la lecture (numéros, e-mails) : la version d'origine n'est
-  jamais conservée.
+- Message de **10 à 2000 caractères** (borné par le schéma), **conservé tel
+  qu'écrit, sans masquage** (lot `feat/hardening-masking-otp`) : il n'est lu
+  que par son auteur et par les admins, jamais par l'autre partie d'une
+  intervention — l'utilisateur peut donc y laisser un moyen de le
+  recontacter. Il ne figure ni dans l'e-mail aux admins, ni dans le journal
+  d'audit.
 - **Intervention facultative**, pré-remplie depuis l'encart « Un souci ? »
   d'une intervention quand le signalement n'y est plus possible (délai
   dépassé, intervention close). Elle doit appartenir à l'auteur (client ou
@@ -1155,8 +1158,8 @@ un admin répond depuis **Support** (`/admin/support`). Lot
 ### 17.2 Côté admin
 
 - File des demandes **ouvertes** (la plus ancienne d'abord) ou **résolues** :
-  sujet, rôle et nom public de l'auteur (jamais son numéro), message masqué,
-  intervention liée.
+  sujet, rôle et nom public de l'auteur (jamais le numéro de son compte),
+  message tel qu'écrit, intervention liée.
 - Réponse **« Répondre et clore »** (résolue, définitive) ou **« Répondre sans
   clore »** (demande de précision, reste ouverte). Une demande résolue ne
   change plus (409 `DEMANDE_AIDE_DEJA_RESOLUE`).
