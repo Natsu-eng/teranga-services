@@ -197,6 +197,8 @@ export interface BackendIntervention {
   review: BackendReview | null;
   conversation_id?: string | null;
   payment?: BackendPaymentSummary | null;
+  can_open_dispute?: boolean;
+  dispute_deadline?: string | null;
   dispute?: BackendDispute | null;
   created_at: string;
 }

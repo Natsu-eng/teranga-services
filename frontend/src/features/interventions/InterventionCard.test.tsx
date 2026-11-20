@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { InterventionCard } from './InterventionCard';
 import { api } from '../../lib/api';
@@ -54,6 +54,8 @@ function interventionFixture(overrides: Partial<Intervention>): Intervention {
     completedAt: null,
     cancellation: null,
     payment: null,
+    canOpenDispute: false,
+    disputeDeadline: null,
     dispute: null,
     quote: null,
     review: null,
@@ -304,8 +306,14 @@ describe('InterventionCard', () => {
   });
 
   describe('paiement, annulation et litige', () => {
+    // En cours : le serveur autorise le signalement (`can_open_dispute`).
     const inProgress = (payment = paymentFixture()) =>
-      interventionFixture({ status: 'en_cours', agreedAmountFcfa: 12_000, payment });
+      interventionFixture({
+        status: 'en_cours',
+        agreedAmountFcfa: 12_000,
+        payment,
+        canOpenDispute: true,
+      });
 
     function renderCard(intervention: Intervention, role: 'client' | 'artisan') {
       return render(
@@ -447,23 +455,152 @@ describe('InterventionCard', () => {
       expect(screen.getByText('Remboursé')).toBeInTheDocument();
     });
 
-    it('annonce un arbitrage en faveur du client', () => {
-      renderCard(
-        interventionFixture({
-          status: 'annulee',
-          cancellation: {
-            kind: 'arbitrage',
-            by: 'admin',
-            reason: 'Non réalisé.',
-            at: '2026-10-11T10:00:00Z',
-          },
-        }),
-        'artisan',
-      );
+    const arbitrated = (payment: ReturnType<typeof paymentFixture> | null) =>
+      interventionFixture({
+        status: 'annulee',
+        agreedAmountFcfa: 12_000,
+        payment,
+        cancellation: {
+          kind: 'arbitrage',
+          by: 'admin',
+          reason: 'Non réalisé.',
+          at: '2026-10-11T10:00:00Z',
+        },
+      });
+
+    it('annonce un remboursement seulement quand le séquestre a été rendu', () => {
+      renderCard(arbitrated(paymentFixture({ status: 'rembourse', channel: 'wave' })), 'artisan');
 
       expect(
         screen.getByText(/Litige tranché par Téranga : le client a été remboursé/),
       ).toBeInTheDocument();
+    });
+
+    it('en espèces, jamais de « remboursement » que Téranga ne peut pas faire', () => {
+      renderCard(arbitrated(paymentFixture({ status: 'reussi', channel: 'cash' })), 'client');
+
+      expect(screen.getByText(/en faveur du client : aucune commission n'est due/)).toBeVisible();
+      expect(screen.getByText(/ne peut pas les rembourser/)).toBeVisible();
+      expect(screen.queryByText(/a été remboursé/)).not.toBeInTheDocument();
+    });
+
+    it('sans aucun paiement, la décision est dite sans parler d’argent', () => {
+      renderCard(arbitrated(null), 'artisan');
+
+      expect(
+        screen.getByText(/en faveur du client : aucune commission n'est due\.$/),
+      ).toBeVisible();
+    });
+
+    it('en espèces, un litige en cours est une médiation, jamais « argent gelé »', () => {
+      renderCard(
+        interventionFixture({
+          status: 'litige',
+          agreedAmountFcfa: 12_000,
+          payment: paymentFixture({ status: 'reussi', channel: 'cash' }),
+          dispute: {
+            openedBy: 'artisan',
+            reason: 'Le client ne confirme pas la fin.',
+            openedAt: '2026-10-11T10:00:00Z',
+            outcome: null,
+            resolvedAt: null,
+            resolutionNote: null,
+          },
+        }),
+        'client',
+      );
+
+      expect(screen.getByText(/examine la situation \(médiation\)/)).toBeVisible();
+      expect(screen.queryByText(/gelé/)).not.toBeInTheDocument();
+    });
+
+    it('après des travaux reconnus en espèces, rien n’est dit « versé »', () => {
+      renderCard(
+        interventionFixture({
+          status: 'terminee',
+          agreedAmountFcfa: 12_000,
+          payment: paymentFixture({ status: 'reussi', channel: 'cash' }),
+          dispute: {
+            openedBy: 'client',
+            reason: 'Joint qui fuit.',
+            openedAt: '2026-10-11T10:00:00Z',
+            outcome: 'libere',
+            resolvedAt: '2026-10-12T10:00:00Z',
+            resolutionNote: 'Photos examinées.',
+          },
+        }),
+        'client',
+      );
+
+      expect(screen.getByText(/Litige clos par Téranga : travaux reconnus/)).toBeVisible();
+      expect(screen.queryByText(/versé/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('encart « Un souci ? »', () => {
+    function renderCard(intervention: Intervention, role: 'client' | 'artisan') {
+      return render(
+        <MemoryRouter>
+          <InterventionCard intervention={intervention} role={role} onChanged={onChanged} />
+        </MemoryRouter>,
+      );
+    }
+
+    it("après les travaux, propose de signaler un problème jusqu'à la limite donnée par le serveur", () => {
+      renderCard(
+        interventionFixture({
+          status: 'terminee',
+          agreedAmountFcfa: 12_000,
+          completedAt: '2026-10-10T10:00:00Z',
+          canOpenDispute: true,
+          disputeDeadline: '2026-10-13T10:00:00Z',
+          payment: paymentFixture({ status: 'reussi', channel: 'cash' }),
+        }),
+        'client',
+      );
+
+      const box = screen.getByRole('region', { name: 'Un souci ?' });
+      expect(within(box).getByText(/Vous pouvez le signaler jusqu'au 13 octobre/)).toBeVisible();
+      fireEvent.click(within(box).getByRole('button', { name: 'Signaler un problème' }));
+      expect(screen.getByText(/ne peut pas les rembourser/)).toBeVisible();
+    });
+
+    it('délai dépassé (le serveur refuse) : aucun bouton, aucun encart', () => {
+      renderCard(
+        interventionFixture({
+          status: 'terminee',
+          agreedAmountFcfa: 12_000,
+          completedAt: '2026-10-01T10:00:00Z',
+          canOpenDispute: false,
+          disputeDeadline: null,
+        }),
+        'client',
+      );
+
+      expect(screen.queryByRole('region', { name: 'Un souci ?' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'Signaler un problème' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("avant les travaux, explique qu'on peut annuler", () => {
+      renderCard(interventionFixture({ status: 'acceptee' }), 'client');
+
+      const box = screen.getByRole('region', { name: 'Un souci ?' });
+      expect(within(box).getByText(/Les travaux n'ont pas commencé/)).toBeVisible();
+      expect(within(box).getByRole('button', { name: 'Annuler' })).toBeVisible();
+      expect(within(box).queryByRole('button', { name: 'Signaler un problème' })).toBeNull();
+    });
+
+    it('pendant les travaux, le signalement est mis en avant', () => {
+      renderCard(
+        interventionFixture({ status: 'en_cours', agreedAmountFcfa: 12_000, canOpenDispute: true }),
+        'artisan',
+      );
+
+      const box = screen.getByRole('region', { name: 'Un souci ?' });
+      expect(within(box).getByText(/Un problème pendant les travaux/)).toBeVisible();
+      expect(within(box).getByRole('button', { name: 'Signaler un problème' })).toBeVisible();
     });
   });
 });

@@ -170,6 +170,9 @@ export function mapIntervention(intervention: BackendIntervention): Intervention
     review: intervention.review ? mapReview(intervention.review) : null,
     conversationId: intervention.conversation_id ?? null,
     payment: intervention.payment ? mapPaymentSummary(intervention.payment) : null,
+    // Absent d'une ancienne réponse : jamais de bouton supposé disponible.
+    canOpenDispute: intervention.can_open_dispute ?? false,
+    disputeDeadline: intervention.dispute_deadline ?? null,
     dispute: intervention.dispute
       ? {
           openedBy: intervention.dispute.opened_by,
