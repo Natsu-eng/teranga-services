@@ -59,3 +59,33 @@ async def test_readiness_returns_503_when_db_unreachable() -> None:
     body = response.json()
     assert body["status"] == "unavailable"
     assert "detail" in body
+
+
+async def test_liveness_answers_head_without_a_body() -> None:
+    # Les sondes de disponibilité envoient souvent HEAD (lot hardening).
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.head("/api/v1/health")
+
+    assert response.status_code == 200
+    assert response.content == b""
+
+
+async def test_readiness_answers_head_too() -> None:
+    class _WorkingSession:
+        async def execute(self, *args: object, **kwargs: object) -> None:
+            return None
+
+    async def _working_get_session() -> AsyncGenerator[AsyncSession, None]:
+        yield _WorkingSession()  # type: ignore[misc]
+
+    app.dependency_overrides[get_session] = _working_get_session
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.head("/api/v1/health/ready")
+    finally:
+        app.dependency_overrides.pop(get_session, None)
+
+    assert response.status_code == 200
+    assert response.content == b""
