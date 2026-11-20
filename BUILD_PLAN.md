@@ -1217,6 +1217,7 @@ grille) :
 | `GET /admin/reviews` · `POST /admin/reviews/{id}/hide` · `/restore` | modération : signalés d'abord ; masquer exige un motif ; rétablir/maintenir ; note recalculée, profil verrouillé. |
 | `GET /admin/commission-rates` · `POST /admin/commission-rates` | grille complète (en vigueur / programmé / archivé, nombre d'interventions qui ont figé chaque taux) ; ajout d'un taux daté. |
 | `GET /admin/audit` | journal, filtres action / type de cible / cible / auteur. Méthode GET seule (testé). |
+| `GET /admin/support/tickets` · `POST /admin/support/tickets/{id}/reply` | aide (lot `feat/disputes-support`) : demandes ouvertes (la plus ancienne d'abord) ou résolues ; réponse avec ou sans clôture, journalisée (`support_ticket.reply`) ; une demande résolue est définitive. Côté utilisateur : `POST` / `GET /support/tickets` (client et artisan, ses demandes seulement, message masqué, intervention à l'auteur sinon 404, limite de débit). DEPLOYMENT.md §17. |
 
 Côté artisan : `GET /artisans/me/reviews` (tous ses avis, masqués compris,
 avec statut de modération) et `POST /artisans/me/reviews/{id}/report`

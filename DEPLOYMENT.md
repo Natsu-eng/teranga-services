@@ -1126,3 +1126,56 @@ tranché.
 | Variable | Rôle | Valeur |
 |---|---|---|
 | `DISPUTE_WINDOW_HOURS` | Heures pour signaler un problème après la fin des travaux | `72` (défaut), `0` = seulement pendant les travaux, au plus `720` |
+
+## 17. Aide (demandes au support)
+
+Un client ou un artisan écrit à Téranga depuis **Profil > Aide** (`/aide`) ;
+un admin répond depuis **Support** (`/admin/support`). Lot
+`feat/disputes-support`.
+
+### 17.1 Côté utilisateur
+
+- Comptes **client et artisan connectés** seulement (anonyme : 401 ; admin :
+  403). Sujets : compte, un artisan ou un client, paiement, problème dans
+  l'application, autre.
+- Message de **10 à 2000 caractères** (borné par le schéma), **masqué** à
+  l'écriture et à la lecture (numéros, e-mails) : la version d'origine n'est
+  jamais conservée.
+- **Intervention facultative**, pré-remplie depuis l'encart « Un souci ? »
+  d'une intervention quand le signalement n'y est plus possible (délai
+  dépassé, intervention close). Elle doit appartenir à l'auteur (client ou
+  artisan) ; sinon **404 identique** à une intervention inexistante (aucune
+  fuite d'existence).
+- « Mes demandes » : ses demandes **et seulement les siennes** (filtrées par
+  l'auteur côté serveur), avec statut et réponse de Téranga.
+- **Limite de débit** par utilisateur : `RATE_LIMIT_SUPPORT_TICKET_PER_USER_MAX`
+  demandes par `RATE_LIMIT_SUPPORT_TICKET_PER_USER_WINDOW_SECONDS` (5 par
+  heure par défaut) ; au-delà, 429 et rien n'est enregistré.
+
+### 17.2 Côté admin
+
+- File des demandes **ouvertes** (la plus ancienne d'abord) ou **résolues** :
+  sujet, rôle et nom public de l'auteur (jamais son numéro), message masqué,
+  intervention liée.
+- Réponse **« Répondre et clore »** (résolue, définitive) ou **« Répondre sans
+  clore »** (demande de précision, reste ouverte). Une demande résolue ne
+  change plus (409 `DEMANDE_AIDE_DEJA_RESOLUE`).
+- Chaque réponse est inscrite au **journal d'audit** (`support_ticket.reply`) :
+  catégorie, rôle de l'auteur, réponse de l'admin, résolue ou non — jamais le
+  message de l'utilisateur ni son nom.
+
+### 17.3 E-mail aux admins
+
+Si `ADMIN_NOTIFICATION_EMAILS` et le fournisseur e-mail sont configurés
+(§14) : un e-mail par nouvelle demande, avec la **catégorie, le rôle de
+l'auteur et le lien** `/admin/support` seulement (ni message, ni nom, ni
+numéro). Best-effort, en arrière-plan : un échec est journalisé
+(`Notification admin (demande d'aide) NON envoyée : ...`), la demande reste
+enregistrée.
+
+### 17.4 Migration
+
+`55f1da51e156` : table `support_ticket` et ajout de `support_ticket.reply` /
+`support_ticket` aux contraintes du journal d'audit. Downgrade refusé avec un
+message explicite si des réponses sont déjà journalisées (journal en ajout
+seul).
