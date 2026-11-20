@@ -1,25 +1,37 @@
 """Masquage anti-fuite des coordonnées dans la messagerie (BUILD_PLAN.md §3.2,
 Messagerie ; deuxième étage de la protection anti-désintermédiation après la
-fiche publique sans téléphone).
+fiche publique sans téléphone). Aussi appliqué aux motifs de litige et
+d'annulation, montrés à l'autre partie.
 
 Appliqué À L'ENVOI, avant persistance : le texte stocké, renvoyé par l'API et
 diffusé par WebSocket est toujours la version masquée. La version d'origine
 n'est jamais conservée (minimisation des données) ; seul un drapeau
 (`message.contact_masked`) trace la tentative, pour une future modération.
 
-Ce qui est masqué :
-- numéros sénégalais à 9 chiffres : mobiles 70/75/76/77/78 et fixes 33,
-  suivis de 7 chiffres, avec ou sans indicatif (+221, 00221, 221), quels que
-  soient les séparateurs (espaces, points, tirets, barres, parenthèses) — y
-  compris l'espacement chiffre par chiffre (« 7 7 1 2 3 … »), parade
-  classique de contournement ;
-- numéros internationaux explicites (« + » ou « 00 » suivi de 9 à 15
-  chiffres), pour ne pas laisser passer un numéro étranger ;
-- adresses e-mail.
+**Méthode (lot `feat/hardening-masking-otp`).** Le texte est lu sous une forme
+normalisée -- chiffres de toute écriture ramenés à 0-9 (pleine largeur
+« ７７ »...), emoji chiffres (« 7 + touche emoji ») réduits à leur chiffre -- puis découpé en
+SUITES de chiffres (séparateurs tolérés : espaces, `. - / ( ) _ , * |`).
+Dans chaque suite :
 
-Ce qui n'est PAS masqué (garde-fous contre le sur-masquage, prouvés par les
-tests) : nombres plus longs ou collés à d'autres chiffres, montants suivis
-d'une devise (« 775 000 000 FCFA »), dimensions, quantités, dates, heures.
+- forme internationale (`+` ou `00` en tête) : `+221` / `00221` retiré puis
+  règle sénégalaise ; tout autre indicatif de 9 à 15 chiffres : la suite
+  entière est masquée ;
+- règle sénégalaise : CHAQUE fenêtre de 9 chiffres qui commence par
+  70/75/76/77/78 (mobiles) ou 33 (fixes) est masquée, OÙ QU'ELLE SOIT dans la
+  suite -- un chiffre accolé (« 77 123 45 67 8 »), deux numéros collés ou un
+  zéro devant ne protègent plus le numéro.
+
+Exceptions conservées : une suite suivie d'une devise (FCFA, CFA, F, francs,
+XOF) est un montant ; une suite qui n'est qu'une date ou une heure n'est
+jamais masquée. Seuls les passages masqués changent : le reste du texte est
+rendu tel qu'écrit (aucune normalisation visible).
+
+**Faux positifs ACCEPTÉS** (compromis validé, figé par les tests) : une
+longue référence sans devise qui contient une fenêtre 70/75/76/77/78/33 de
+9 chiffres est masquée en partie (environ 11 % des références de 10 chiffres,
+26 % de 13 chiffres), de même que deux montants accolés sans devise
+(« 70 000 75 000 »).
 
 Limites assumées (documentées dans BUILD_PLAN.md) : un numéro écrit en
 toutes lettres (« sept sept un... ») ou présent DANS une image n'est pas
@@ -27,39 +39,31 @@ détecté — ce serait le rôle d'une modération NLP / OCR ultérieure.
 """
 
 import re
+import unicodedata
 from dataclasses import dataclass
 
 PHONE_PLACEHOLDER = "[numéro masqué]"
 EMAIL_PLACEHOLDER = "[e-mail masqué]"
 
-# Séparateurs tolérés entre deux chiffres d'un même numéro.
-_SEP = r"[\s.\-/()]*"
+# Préfixes d'un numéro sénégalais à 9 chiffres : mobiles, puis fixes.
+SENEGAL_PREFIXES = frozenset({"70", "75", "76", "77", "78", "33"})
+SENEGAL_NUMBER_LENGTH = 9
+SENEGAL_COUNTRY_CODES = ("00221", "221")
+# Numéro international explicite (« + » ou « 00 ») : 9 à 15 chiffres.
+INTERNATIONAL_MIN_DIGITS = 9
+INTERNATIONAL_MAX_DIGITS = 15
 
-_SENEGAL_PHONE = re.compile(
-    rf"""
-    (?<![\d+])                      # pas collé à un chiffre ou à un « + » qui précède
-    (?:\(\s*)?                     # parenthèse ouvrante éventuelle : « (+221) ... »
-    (?:
-        (?:\+|00){_SEP}2{_SEP}2{_SEP}1{_SEP}   # indicatif +221 / 00221
-      | 2{_SEP}2{_SEP}1{_SEP}                  # indicatif sans « + » (ex. wa.me/221...)
-    )?
-    (?:7{_SEP}[05678]|3{_SEP}3)     # mobiles 70/75/76/77/78, fixes 33
-    (?:{_SEP}\d){{7}}               # puis exactement 7 chiffres
-    (?!{_SEP}\d)                    # jamais le début d'un nombre plus long
-    (?!{_SEP}(?:f\s*cfa|fcfa|cfa|xof|francs?|f)\b)   # ni un montant
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
-
-_INTERNATIONAL_PHONE = re.compile(
-    rf"""
-    (?<![\w+])                      # pas collé à un mot ou à un autre « + »
-    (?:\+|00){_SEP}[1-9]            # « + » ou « 00 », puis indicatif pays
-    (?:{_SEP}\d){{8,14}}            # 9 à 15 chiffres au total
-    (?!{_SEP}\d)
-    """,
-    re.VERBOSE,
-)
+# Séparateurs tolérés entre deux chiffres d'une même suite.
+_SEP = r"[\s.\-/()_,*|]"
+# Une suite : parenthèse ouvrante et « + » / « 00 » éventuels, puis des
+# chiffres séparés par des séparateurs (sur le texte NORMALISÉ).
+_RUN = re.compile(rf"(?:\(\s*)?\+?\d(?:{_SEP}*\d)*")
+# Devise juste après la suite : c'est un montant, jamais un numéro.
+_CURRENCY_AFTER = re.compile(r"\s*(?:f\s*cfa|fcfa|cfa|xof|francs?|f)\b", re.IGNORECASE)
+# Suite qui n'est qu'une date (17/10/2026, 17-10-26) ou une heure (14.30).
+_DATE_OR_TIME = re.compile(r"\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?")
+# Emoji chiffre : le chiffre, puis U+FE0F (variation) et U+20E3 (touche).
+_EMOJI_DIGIT_MARKS = frozenset({chr(0xFE0F), chr(0x20E3)})
 
 _EMAIL = re.compile(r"[\w.+\-]+@[\w\-]+(?:\.[\w\-]+)+", re.UNICODE)
 
@@ -75,20 +79,98 @@ class MaskingResult:
         return self.masked_count > 0
 
 
+def _normalized_view(text: str) -> tuple[str, list[int]]:
+    """Forme de LECTURE du texte : chiffres de toute écriture ramenés à 0-9,
+    marques d'emoji chiffre retirées. Renvoie aussi, pour chaque caractère
+    lu, sa position dans le texte d'origine (pour masquer le texte d'origine,
+    jamais une version transformée)."""
+    chars: list[str] = []
+    origin: list[int] = []
+    for index, char in enumerate(text):
+        if char in _EMOJI_DIGIT_MARKS and chars and chars[-1].isdigit():
+            continue
+        if not char.isascii() and unicodedata.category(char) == "Nd":
+            char = str(unicodedata.decimal(char))
+        chars.append(char)
+        origin.append(index)
+    return "".join(chars), origin
+
+
+def _phone_spans(view: str) -> list[tuple[int, int]]:
+    """Intervalles [début, fin) à masquer, en positions de `view`."""
+    spans: list[tuple[int, int]] = []
+    for match in _RUN.finditer(view):
+        run_start, run_end = match.span()
+        run = match.group()
+        if _CURRENCY_AFTER.match(view, run_end):
+            continue
+        if _DATE_OR_TIME.fullmatch(run.strip("( ")):
+            continue
+        positions = [run_start + i for i, char in enumerate(run) if char.isdigit()]
+        digits = "".join(view[p] for p in positions)
+        international = "+" in run[:3] or digits.startswith("00")
+
+        offset = 0
+        for code in SENEGAL_COUNTRY_CODES:
+            plain_code = code.removeprefix("00")
+            if digits.startswith(code) and len(digits) - len(code) >= SENEGAL_NUMBER_LENGTH:
+                offset = len(code)
+                break
+            if (
+                international
+                and digits.startswith(plain_code)
+                and len(digits) - len(plain_code) >= SENEGAL_NUMBER_LENGTH
+            ):
+                offset = len(plain_code)
+                break
+        if international and offset == 0:
+            # Autre indicatif : un numéro étranger complet, masqué en entier.
+            significant = len(digits) - (2 if digits.startswith("00") else 0)
+            if INTERNATIONAL_MIN_DIGITS <= significant <= INTERNATIONAL_MAX_DIGITS:
+                spans.append((run_start, positions[-1] + 1))
+                continue
+
+        k = offset
+        while k + SENEGAL_NUMBER_LENGTH <= len(digits):
+            if digits[k : k + 2] in SENEGAL_PREFIXES:
+                end = positions[k + SENEGAL_NUMBER_LENGTH - 1] + 1
+                # Fenêtre en tête de suite (ou juste après l'indicatif) : la
+                # parenthèse et l'indicatif sont masqués avec le numéro.
+                start = run_start if k == offset else positions[k]
+                spans.append((start, end))
+                k += SENEGAL_NUMBER_LENGTH
+            else:
+                k += 1
+    return spans
+
+
+def _mask_phones(text: str) -> tuple[str, int]:
+    view, origin = _normalized_view(text)
+    spans = _phone_spans(view)
+    if not spans:
+        return text, 0
+    pieces: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        original_start = origin[start]
+        # Fin : jusqu'au DERNIER caractère d'origine du chiffre final (un
+        # emoji chiffre compte trois caractères d'origine : chiffre, U+FE0F,
+        # U+20E3).
+        original_end = origin[end] if end < len(origin) else len(text)
+        pieces.append(text[cursor:original_start])
+        pieces.append(PHONE_PLACEHOLDER)
+        cursor = original_end
+    pieces.append(text[cursor:])
+    return "".join(pieces), len(spans)
+
+
 def mask_contacts(text: str) -> MaskingResult:
     """Remplace numéros de téléphone et e-mails par une mention neutre.
 
-    L'ordre compte : les e-mails d'abord (un e-mail peut contenir des
-    chiffres), puis les numéros sénégalais (règle la plus précise), puis les
-    numéros internationaux restants.
+    Les e-mails d'abord (un e-mail peut contenir des chiffres), puis les
+    numéros. Idempotent : les mentions de remplacement ne contiennent ni
+    chiffre ni « @ ».
     """
-    count = 0
-    masked = text
-    for pattern, placeholder in (
-        (_EMAIL, EMAIL_PLACEHOLDER),
-        (_SENEGAL_PHONE, PHONE_PLACEHOLDER),
-        (_INTERNATIONAL_PHONE, PHONE_PLACEHOLDER),
-    ):
-        masked, replaced = pattern.subn(placeholder, masked)
-        count += replaced
-    return MaskingResult(text=masked, masked_count=count)
+    masked, emails = _EMAIL.subn(EMAIL_PLACEHOLDER, text)
+    masked, phones = _mask_phones(masked)
+    return MaskingResult(text=masked, masked_count=emails + phones)

@@ -78,12 +78,13 @@ def test_masks_several_contacts_in_one_message() -> None:
         "Le devis est de 75 000 FCFA.",
         "Budget total : 775 000 000 FCFA",
         "Entre 70 000 et 75 000 F selon le matériel.",
-        "Fourchette 70 000 75 000",
+        # « Fourchette 70 000 75 000 » (deux montants accolés sans devise) est
+        # désormais un faux positif ACCEPTÉ : test_contact_masking_bypasses.py.
         "Rendez-vous le 17/10/2026 à 14h30.",
         "Je suis disponible de 8h à 18h, appartement 7, 3e étage.",
         "Surface : 150 m², hauteur 2,70 m.",
         "Référence commande 2077123456",
-        "Compteur n° 7712345678 (10 chiffres)",
+        # « Compteur n° 7712345678 » : faux positif ACCEPTÉ, même fichier.
         "Promo -15 % sur 77 articles",
         "Ticket @Idrissa merci",
     ],
