@@ -173,6 +173,16 @@ def mark_cancelled(
     intervention.cancellation_reason = reason
 
 
+def _masked_party_text(text: str | None, *, by: Role) -> str | None:
+    """Motif d'une PARTIE masqué aussi à la LECTURE : couvre les motifs
+    enregistrés avant le masquage à l'écriture. Idempotent (les mentions de
+    remplacement ne contiennent ni chiffre ni « @ »). Le texte d'un admin
+    (note d'arbitrage) est rendu tel quel."""
+    if text is None or by is Role.ADMIN:
+        return text
+    return mask_contacts(text).text
+
+
 def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
     if (
         intervention.cancelled_at is None
@@ -183,7 +193,7 @@ def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
     return CancellationOut(
         kind=intervention.cancellation_kind,
         by=intervention.cancelled_by,
-        reason=intervention.cancellation_reason,
+        reason=_masked_party_text(intervention.cancellation_reason, by=intervention.cancelled_by),
         at=intervention.cancelled_at,
     )
 
@@ -239,7 +249,7 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
         dispute=(
             DisputeOut(
                 opened_by=intervention.dispute.opened_by_role,
-                reason=intervention.dispute.reason,
+                reason=mask_contacts(intervention.dispute.reason).text,
                 opened_at=intervention.dispute.created_at,
                 outcome=intervention.dispute.outcome,
                 resolved_at=intervention.dispute.resolved_at,
