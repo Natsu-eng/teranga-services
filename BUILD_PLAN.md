@@ -1334,7 +1334,8 @@ L'erreur qui révèle l'existence d'un compte (`COMPTE_DEJA_EXISTANT` en
 signup, `COMPTE_INEXISTANT` en login) n'apparaît **qu'après** une
 vérification de code OTP réussie, donc après une preuve de possession du
 numéro (code livré uniquement par SMS, usage unique, TTL court, tentatives
-limitées, haché PBKDF2). Un attaquant sans accès au SMS de la victime ne
+limitées, haché en HMAC-SHA256 avec une clé secrète hors base -- PBKDF2 jusqu'au
+lot `feat/hardening-masking-otp`, voir DEPLOYMENT.md §18). Un attaquant sans accès au SMS de la victime ne
 peut donc jamais obtenir cette information ; seul le titulaire légitime du
 numéro l'apprend sur son propre compte. Risque résiduel accepté : quelqu'un
 qui contrôle déjà le SMS d'une victime (SIM-swap ciblé) apprend qu'un
@@ -1814,16 +1815,15 @@ abonnement « Vérifié » (la `platform_fee` découplée le permet déjà).
 Points ouverts relevés au lot `feat/disputes-support` (à traiter dans des
 lots dédiés, après le lot Aide) :
 
-- **Masquage des coordonnées : contournement par un chiffre accolé.**
-  `app/services/contact_masking.py` ne masque jamais « un nombre plus long »
-  (garde-fou anti-sur-masquage) : un numéro suivi d'un autre chiffre
-  (`77 123 45 67 8`) ou deux numéros séparés d'un simple espace passent EN
-  CLAIR, dans la messagerie comme dans les motifs. Correctif prévu, dans un
-  lot SÉPARÉ : masquer, dans une suite de chiffres, chaque tranche qui
-  commence par un préfixe sénégalais (70/75/76/77/78/33) suivie de
-  7 chiffres, sans toucher aux montants suivis d'une devise ni aux dates ;
-  contrepartie à mesurer : de longues références commençant par 77… seraient
-  masquées. Mettre à jour les tests anti-sur-masquage en conséquence.
+- ~~Masquage des coordonnées : contournement par un chiffre accolé.~~
+  **Corrigé** au lot `feat/hardening-masking-otp` : dans chaque suite de
+  chiffres (texte normalisé : chiffres pleine largeur, emoji chiffres ;
+  séparateurs `, _ * |` ajoutés), chaque fenêtre de 9 chiffres commençant par
+  70/75/76/77/78/33 est masquée où qu'elle soit ; montants suivis d'une
+  devise, dates et heures conservés. Faux positifs ACCEPTÉS et figés par les
+  tests : longues références sans devise (environ 11 % à 26 % des
+  références de 10 à 13 chiffres masquées en partie), deux montants accolés
+  sans devise. Limite maintenue : nombres écrits en lettres non traités.
 - **Litige : décision « en faveur du client » impossible si la commission
   espèces est déjà collectée.** Aujourd'hui refusée (`COMMISSION_DEJA_REGLEE`,
   409) avant toute modification, et annoncée sur la carte du back-office.

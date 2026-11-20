@@ -1,22 +1,31 @@
 """Service OTP : génération, hachage, persistance, envoi et vérification.
 
 Exigences de sécurité (BUILD_PLAN.md §4) :
-- code jamais stocké en clair (PBKDF2-HMAC-SHA256, salé, itérations élevées --
-  un hachage rapide type SHA-256 seul serait trivialement bruteforçable hors
-  ligne vu la faible entropie d'un code à 6 chiffres) ;
-- comparaison en temps constant (`secrets.compare_digest`), jamais `==` ;
-- usage unique (`consumed_at`) ;
-- TTL court, compteur `attempts` avec seuil ;
+- code jamais stocké en clair : HMAC-SHA256 salé, avec une clé SECRÈTE
+  (`OTP_HMAC_KEY`) gardée hors de la base -- une fuite de la table seule ne
+  permet plus de retrouver les codes, et le calcul est instantané (l'ancien
+  PBKDF2 à 600 000 itérations bloquait la boucle asynchrone ~1 s par appel) ;
+- comparaison en temps constant (`hmac.compare_digest`), jamais `==` ;
+- usage unique (`consumed_at`), consommation ATOMIQUE ;
+- TTL court, compteur `attempts` incrémenté ATOMIQUEMENT AVANT la
+  comparaison : N requêtes simultanées ne donnent jamais plus de
+  OTP_MAX_ATTEMPTS essais pour un même code ;
 - un nouveau code invalide tous les codes non consommés du même numéro.
+
+Codes PBKDF2 émis avant ce changement : plus acceptés (refusés comme
+expirés, l'utilisateur redemande un code) -- ils ne vivent que
+OTP_TTL_SECONDS (5 minutes par défaut), l'effet se limite au déploiement.
 """
 
 import hashlib
+import hmac
 import logging
 import secrets
 import string
+import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
@@ -28,7 +37,12 @@ from app.services.sms import SmsProvider, get_sms_provider
 
 logger = logging.getLogger(__name__)
 
-_HASH_ALGO = "pbkdf2_sha256"
+_HASH_ALGO = "hmac_sha256"
+_SALT_BYTES = 16
+# Clé de repli pour le SEUL poste de développement (et les tests) sans
+# OTP_HMAC_KEY : aléatoire, propre au processus, jamais écrite nulle part.
+# Hors development/test, la configuration exige OTP_HMAC_KEY au démarrage.
+_LOCAL_FALLBACK_KEY = secrets.token_bytes(32)
 
 
 class OtpInvalideError(AppError):
@@ -77,29 +91,43 @@ def generate_code(length: int) -> str:
     return "".join(secrets.choice(string.digits) for _ in range(length))
 
 
-def hash_code(code: str, *, iterations: int) -> str:
-    """PBKDF2-HMAC-SHA256, salé. Format auto-descriptif : les futurs
-    changements de `iterations` n'invalident pas les hachages déjà en base.
-    """
-    salt = secrets.token_bytes(16)
-    derived = _pbkdf2(code, salt, iterations)
-    return f"{_HASH_ALGO}${iterations}${salt.hex()}${derived.hex()}"
+def otp_hmac_key(settings: Settings) -> bytes:
+    """Clé du hachage : OTP_HMAC_KEY, ou la clé de repli du poste de
+    développement. Hors poste local sans clé : refus (déjà bloqué au
+    démarrage par `validate_deployed_environment`, défense en profondeur)."""
+    if settings.otp_hmac_key:
+        return settings.otp_hmac_key.encode("utf-8")
+    if not settings.is_local:
+        raise RuntimeError("OTP_HMAC_KEY manquante hors poste de développement.")
+    return _LOCAL_FALLBACK_KEY
 
 
-def verify_code_hash(code: str, stored_hash: str) -> bool:
-    """Compare en temps constant -- jamais `==` sur un secret."""
+def _digest(code: str, salt: bytes, key: bytes) -> str:
+    return hmac.new(key, salt + code.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def hash_code(code: str, *, key: bytes) -> str:
+    """HMAC-SHA256 salé : `hmac_sha256$<sel>$<empreinte>` (format
+    auto-descriptif, un ancien format est reconnu et refusé)."""
+    salt = secrets.token_bytes(_SALT_BYTES)
+    return f"{_HASH_ALGO}${salt.hex()}${_digest(code, salt, key)}"
+
+
+def is_current_hash_format(stored_hash: str) -> bool:
+    return stored_hash.startswith(f"{_HASH_ALGO}$")
+
+
+def verify_code_hash(code: str, stored_hash: str, *, key: bytes) -> bool:
+    """Compare en temps constant -- jamais `==` sur un secret. Un hachage
+    d'un autre format (ancien PBKDF2) ou malformé ne correspond jamais."""
     try:
-        algo, iterations_raw, salt_hex, digest_hex = stored_hash.split("$")
+        algo, salt_hex, digest_hex = stored_hash.split("$")
+        salt = bytes.fromhex(salt_hex)
     except ValueError:
         return False
     if algo != _HASH_ALGO:
         return False
-    derived = _pbkdf2(code, bytes.fromhex(salt_hex), int(iterations_raw))
-    return secrets.compare_digest(derived.hex(), digest_hex)
-
-
-def _pbkdf2(code: str, salt: bytes, iterations: int) -> bytes:
-    return hashlib.pbkdf2_hmac("sha256", code.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(_digest(code, salt, key), digest_hex)
 
 
 async def request_otp(
@@ -135,7 +163,7 @@ async def request_otp(
     code = test_code if test_code is not None else generate_code(settings.otp_code_length)
     otp = OtpCode(
         phone=phone,
-        code_hash=hash_code(code, iterations=settings.otp_hash_iterations),
+        code_hash=hash_code(code, key=otp_hmac_key(settings)),
         expires_at=now + timedelta(seconds=settings.otp_ttl_seconds),
         attempts=0,
         # Explicite plutôt que le server_default `now()` de la colonne :
@@ -192,23 +220,58 @@ async def verify_otp(
     if otp.expires_at < now:
         raise OtpExpireError()
 
-    if otp.attempts >= settings.otp_max_attempts:
-        # Défensif : ce cas ne devrait pas se produire (le code est
-        # consommé dès que le seuil est atteint, ci-dessous), mais on
-        # refuse quand même explicitement si l'invariant est violé.
-        otp.consumed_at = now
-        await session.flush()
-        raise OtpTropTentativesError()
+    if not is_current_hash_format(otp.code_hash):
+        # Code émis avant le passage à HMAC (ancien PBKDF2) : plus accepté,
+        # consommé et présenté comme expiré -- l'utilisateur en redemande un.
+        await _consume(session, otp.id, now=now)
+        raise OtpExpireError()
 
-    if not verify_code_hash(code, otp.code_hash):
-        otp.attempts += 1
-        if otp.attempts >= settings.otp_max_attempts:
-            otp.consumed_at = now
-            await session.flush()
+    # RÉSERVE l'essai AVANT toute comparaison, en une seule instruction
+    # atomique : sous accès concurrents, PostgreSQL sérialise les UPDATE de
+    # la ligne et réévalue la condition -- jamais plus de OTP_MAX_ATTEMPTS
+    # essais pour ce code, quel que soit le nombre de requêtes simultanées.
+    attempt = (
+        await session.execute(
+            update(OtpCode)
+            .where(
+                OtpCode.id == otp.id,
+                OtpCode.consumed_at.is_(None),
+                OtpCode.attempts < settings.otp_max_attempts,
+            )
+            .values(attempts=OtpCode.attempts + 1)
+            .returning(OtpCode.attempts)
+        )
+    ).scalar_one_or_none()
+    if attempt is None:
+        # Essais épuisés, ou code consommé entre-temps par une autre requête :
+        # le message dit laquelle des deux (relu en base, pas en mémoire).
+        attempts_now = (
+            await session.execute(select(OtpCode.attempts).where(OtpCode.id == otp.id))
+        ).scalar_one()
+        if attempts_now >= settings.otp_max_attempts:
             raise OtpTropTentativesError()
-        await session.flush()
+        raise OtpDejaUtiliseError()
+
+    if not verify_code_hash(code, otp.code_hash, key=otp_hmac_key(settings)):
+        if attempt >= settings.otp_max_attempts:
+            await _consume(session, otp.id, now=now)
+            raise OtpTropTentativesError()
         raise OtpInvalideError()
 
-    otp.consumed_at = now
-    await session.flush()
+    # Bon code : consommation atomique (une seule requête peut l'emporter).
+    if not await _consume(session, otp.id, now=now):
+        raise OtpDejaUtiliseError()
     return phone
+
+
+async def _consume(session: AsyncSession, otp_id: uuid.UUID, *, now: datetime) -> bool:
+    """Consomme le code s'il ne l'est pas déjà ; vrai si CETTE requête l'a fait."""
+    consumed = (
+        await session.execute(
+            update(OtpCode)
+            .where(OtpCode.id == otp_id, OtpCode.consumed_at.is_(None))
+            .values(consumed_at=now)
+            .returning(OtpCode.id)
+        )
+    ).scalar_one_or_none()
+    return consumed is not None

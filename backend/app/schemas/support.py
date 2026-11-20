@@ -1,8 +1,7 @@
 """Schémas des demandes d'aide (`/api/v1/support`, `/api/v1/admin/support`).
 
-Entrées BORNÉES ici (protection contre un corps démesuré) ; le contenu est
-ensuite masqué par le service (numéros, e-mails). Le message renvoyé est
-toujours la version masquée.
+Entrées BORNÉES ici (protection contre un corps démesuré). Le message n'est
+pas masqué : seuls son auteur et les admins le lisent.
 """
 
 import uuid

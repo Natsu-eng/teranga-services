@@ -19,7 +19,7 @@ const mockedApi = vi.mocked(api, true);
 const open: AdminSupportTicket = {
   id: 't1',
   category: 'paiement',
-  message: 'Rappelez-moi au [numéro masqué], mon paiement n’apparaît pas.',
+  message: 'Rappelez-moi au 77 123 45 67, mon paiement n’apparaît pas.',
   interventionId: null,
   interventionTradeLabel: null,
   status: 'ouvert',
@@ -52,12 +52,12 @@ describe('AdminSupportScreen', () => {
   });
   afterEach(cleanup);
 
-  it('présente la demande : sujet, auteur, message masqué', async () => {
+  it('présente la demande : sujet, auteur, message tel qu’écrit', async () => {
     renderScreen();
 
     expect(await screen.findByText('Un paiement')).toBeVisible();
     expect(screen.getByText(/Client · Awa Diop/)).toBeVisible();
-    expect(screen.getByText(/\[numéro masqué\]/)).toBeVisible();
+    expect(screen.getByText(/Rappelez-moi au 77 123 45 67/)).toBeVisible();
     expect(mockedApi.listAdminSupportTickets).toHaveBeenCalledWith({ status: 'ouvert', page: 1 });
   });
 

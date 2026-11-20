@@ -2,7 +2,8 @@
 
 Application réelle en ASGI, base de dev dans une transaction annulée.
 Propriété des demandes, intervention d'autrui refusée sans fuite, limite de
-débit, masquage, e-mail sans fuite, journal d'audit, garde admin.
+débit, message conservé tel qu'écrit (non masqué : lu seulement par l'auteur
+et les admins), e-mail sans fuite, journal d'audit, garde admin.
 """
 
 import logging
@@ -112,33 +113,20 @@ async def test_a_client_or_an_artisan_can_ask_for_help(
     assert body["admin_reply"] is None and body["intervention_id"] is None
 
 
-async def test_the_message_is_masked_when_written(db_session: AsyncSession) -> None:
+async def test_the_message_is_kept_as_written(db_session: AsyncSession) -> None:
+    """Non masqué : seuls l'auteur et les admins le lisent ; l'utilisateur peut
+    y laisser un moyen de le recontacter."""
     user = await make_user(db_session, role=Role.CLIENT)
     async with _client() as http:
         response = await _create(http, user, message=PHONE_MESSAGE, category="paiement")
+        (item,) = await _mine(http, user)
 
-    assert "77 123 45 67" not in response.json()["message"]
+    assert response.json()["message"] == PHONE_MESSAGE
+    assert item["message"] == PHONE_MESSAGE
     stored = await db_session.scalar(
         select(SupportTicket.message).where(SupportTicket.author_id == user.id)
     )
-    assert stored is not None and "77 123 45 67" not in stored and PHONE_PLACEHOLDER in stored
-
-
-async def test_a_message_already_in_database_is_masked_when_read(
-    db_session: AsyncSession,
-) -> None:
-    user = await make_user(db_session, role=Role.CLIENT)
-    async with _client() as http:
-        await _create(http, user)
-        ticket = await db_session.scalar(
-            select(SupportTicket).where(SupportTicket.author_id == user.id)
-        )
-        assert ticket is not None
-        ticket.message = "Ancien message : appelez le 77 123 45 67 ou awa@exemple.sn"
-        await db_session.flush()
-        (item,) = await _mine(http, user)
-
-    assert "77 123 45 67" not in item["message"] and "awa@exemple.sn" not in item["message"]
+    assert stored == PHONE_MESSAGE and PHONE_PLACEHOLDER not in stored
 
 
 @pytest.mark.parametrize(
@@ -359,7 +347,8 @@ async def test_admin_replies_resolves_and_the_author_sees_the_answer(
 
     queued = next(item for item in queue.json()["items"] if item["id"] == ticket_id)
     assert queued["author_name"] == "Awa Diop" and queued["author_role"] == "client"
-    assert "77 123 45 67" not in queued["message"]
+    # Message tel qu'écrit pour l'admin ; jamais le numéro du COMPTE de l'auteur.
+    assert queued["message"] == PHONE_MESSAGE
     assert "phone" not in queued and user.phone not in queue.text
     assert reply.status_code == 200, reply.text
     assert reply.json()["status"] == "resolu" and reply.json()["resolved_at"] is not None

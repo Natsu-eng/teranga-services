@@ -14,6 +14,10 @@ il peut contenir des détails personnels ; l'admin le lit dans le back-office.
 (`app.services.support`) -- la catégorie et le rôle de l'auteur seulement,
 jamais le message.
 
+`notify_otp_sms_budget` : le plafond global de SMS de code
+(`app.services.otp_sms_budget`) atteint son seuil d'alerte ou son maximum
+journalier -- des chiffres agrégés seulement, jamais un numéro ni une IP.
+
 **Best-effort, toujours** : appelée APRÈS la validation de l'envoi de
 l'artisan (tâche d'arrière-plan), elle ne lève jamais d'exception -- un
 échec d'e-mail est journalisé, l'envoi des documents reste réussi.
@@ -30,6 +34,7 @@ import re
 from app.core.config import Settings
 from app.models.enums import Role, SupportCategory
 from app.services.email import EmailProvider, EmailSendError, OutgoingEmail, get_email_provider
+from app.services.otp_sms_budget import SmsBudgetAlert, alert_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +177,64 @@ async def notify_support_ticket_created(
         return
     logger.info(
         "Notification admin envoyée (demande d'aide) à %d destinataire(s).",
+        len(settings.admin_notification_emails),
+    )
+
+
+def build_otp_sms_budget_email(alert: SmsBudgetAlert, settings: Settings) -> OutgoingEmail:
+    """Chiffres agrégés seulement : ni numéro, ni IP, ni code."""
+    day_max = settings.otp_sms_global_max_per_day
+    hours = settings.otp_sms_global_day_window_seconds // 3600
+    if alert is SmsBudgetAlert.FULL:
+        subject = "Téranga : plafond journalier de SMS de code atteint"
+        headline = (
+            f"Le plafond de {day_max} SMS de code sur {hours} h glissantes est atteint : "
+            "les nouvelles demandes de code sont refusées jusqu'à ce que la fenêtre se libère."
+        )
+    else:
+        percent = settings.otp_sms_alert_threshold_percent
+        subject = f"Téranga : {percent} % du plafond journalier de SMS de code atteint"
+        headline = (
+            f"{alert_threshold(settings)} SMS de code envoyés sur {hours} h glissantes "
+            f"({percent} % du plafond de {day_max})."
+        )
+    lines = [
+        "Bonjour,",
+        "",
+        headline,
+        "Les sessions déjà ouvertes ne sont pas touchées.",
+        "Si ce volume ne correspond pas à l'activité réelle, il peut s'agir d'un abus : "
+        "vérifiez les journaux (DEPLOYMENT.md §18).",
+        "",
+        "— Téranga",
+    ]
+    return OutgoingEmail(
+        to=tuple(settings.admin_notification_emails),
+        subject=subject,
+        body="\n".join(lines),
+    )
+
+
+async def notify_otp_sms_budget(
+    alert: SmsBudgetAlert,
+    settings: Settings,
+    *,
+    provider: EmailProvider | None = None,
+) -> None:
+    """Prévient les admins d'un seuil du plafond de SMS ; n'échoue JAMAIS."""
+    if not settings.admin_notification_emails:
+        logger.warning("Plafond de SMS de code (%s) : aucun destinataire configuré.", alert)
+        return
+    try:
+        email = build_otp_sms_budget_email(alert, settings)
+        await (provider or get_email_provider(settings)).send(email)
+    except Exception as exc:  # best-effort
+        detail = exc.safe_detail if isinstance(exc, EmailSendError) else type(exc).__name__
+        logger.error("Notification admin (plafond SMS %s) NON envoyée : %s.", alert, detail)
+        return
+    logger.info(
+        "Notification admin envoyée (plafond SMS %s) à %d destinataire(s).",
+        alert,
         len(settings.admin_notification_emails),
     )
 

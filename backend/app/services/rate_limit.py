@@ -159,6 +159,8 @@ class PostgresRateLimiter:
 # Un limiteur par fonctionnalité : une même IP ou un même utilisateur ne
 # partage jamais son compteur entre deux usages sans rapport.
 OTP_BUCKET = "otp"
+OTP_VERIFY_BUCKET = "otp_verify"
+OTP_SMS_BUDGET_BUCKET = "otp_sms_budget"
 AI_ANALYZE_BUCKET = "ai_analyze"
 DOCUMENT_UPLOAD_BUCKET = "document_upload"
 PROFILE_MEDIA_UPLOAD_BUCKET = "profile_media_upload"
@@ -199,6 +201,17 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 def get_otp_rate_limiter(settings: SettingsDep) -> RateLimiter:
     """`POST /api/v1/auth/request-otp` -- clés par numéro et par IP."""
     return _limiter_for(OTP_BUCKET, settings)
+
+
+def get_otp_verify_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """`POST /api/v1/auth/verify-otp` -- clés par numéro et par IP ; chaque
+    essai compte, juste ou faux."""
+    return _limiter_for(OTP_VERIFY_BUCKET, settings)
+
+
+def get_otp_sms_budget_rate_limiter(settings: SettingsDep) -> RateLimiter:
+    """Plafond GLOBAL des SMS de code (`app.services.otp_sms_budget`)."""
+    return _limiter_for(OTP_SMS_BUDGET_BUCKET, settings)
 
 
 def get_ai_analyze_rate_limiter(settings: SettingsDep) -> RateLimiter:

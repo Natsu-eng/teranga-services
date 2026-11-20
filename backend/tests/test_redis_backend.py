@@ -30,6 +30,7 @@ from app.services.redis_backend import (
     RedisTicketStore,
     realtime_over_redis,
 )
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 REDIS_URL = "redis://redis.test:6379/0"
 
@@ -39,6 +40,7 @@ def _settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://user:pass@localhost:5432/db",
         "jwt_secret": "x" * 32,
         "payment_provider": "disabled",
+        **DEPLOYED_REQUIRED,
     }
     return Settings(_env_file=None, **{**base, **overrides})  # type: ignore[arg-type]
 

@@ -142,8 +142,10 @@ describe('SupportScreen', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Intervention introuvable.');
   });
 
-  it('prévient que les coordonnées sont masquées', async () => {
+  it('dit qui lit le message (l’auteur et l’équipe Téranga seulement)', async () => {
     renderScreen();
-    expect(await screen.findByText(/masqués automatiquement/)).toBeVisible();
+    expect(
+      await screen.findByText(/Seuls vous et l'équipe Téranga lisez ce message/),
+    ).toBeVisible();
   });
 });

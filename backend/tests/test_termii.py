@@ -27,6 +27,7 @@ from app.services import otp as otp_service
 from app.services.rate_limit import SlidingWindowRateLimiter, get_otp_rate_limiter
 from app.services.sms import OtpEnvoiIndisponibleError, get_sms_provider
 from app.services.sms_termii import TERMII_SEND_PATH, TermiiSmsProvider, mask_phone
+from tests.deployed_settings import DEPLOYED_REQUIRED
 from tests.factories import unique_phone
 from tests.test_production_settings import PRODUCTION
 
@@ -50,6 +51,7 @@ def _settings(environment: str = "staging", **overrides: object) -> Settings:
         "environment": environment,
         "payment_provider": "disabled",
         **TERMII,
+        **DEPLOYED_REQUIRED,
     }
     return Settings(_env_file=None, **{**base, **overrides})  # type: ignore[arg-type]
 

@@ -155,8 +155,8 @@ export const AdminSupportScreen: React.FC = () => {
       <div className="space-y-1">
         <h1 className="font-display text-display-md font-semibold text-primary">Support</h1>
         <p className="text-sm text-muted-foreground">
-          Demandes d&apos;aide des clients et des artisans. Les coordonnées sont masquées ; chaque
-          réponse est inscrite au journal.
+          Demandes d&apos;aide des clients et des artisans, telles qu&apos;écrites (lues par vous
+          seuls). Chaque réponse est inscrite au journal.
         </p>
       </div>
       <div className="flex gap-2" role="group" aria-label="Filtrer les demandes">

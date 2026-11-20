@@ -108,6 +108,30 @@ services:
       # (DEPLOYMENT.md §16) : 72 par défaut si absente, 0 = désactivé.
       - key: DISPUTE_WINDOW_HOURS
         sync: false
+      # Codes de connexion (DEPLOYMENT.md §18). OTP_HMAC_KEY : SECRET
+      # OBLIGATOIRE hors développement (scripts/generate_otp_hmac_key.py).
+      - key: OTP_HMAC_KEY
+        sync: false
+      # Limites et plafond global de SMS : valeurs par défaut sûres si
+      # absentes (config.py) ; à n'ajuster qu'en connaissance de cause.
+      - key: RATE_LIMIT_OTP_PER_PHONE_MAX
+        sync: false
+      - key: RATE_LIMIT_OTP_PER_PHONE_DAILY_MAX
+        sync: false
+      - key: RATE_LIMIT_OTP_PER_IP_MAX
+        sync: false
+      - key: RATE_LIMIT_OTP_PER_IP_DAILY_MAX
+        sync: false
+      - key: RATE_LIMIT_OTP_VERIFY_PER_PHONE_MAX
+        sync: false
+      - key: RATE_LIMIT_OTP_VERIFY_PER_IP_MAX
+        sync: false
+      - key: OTP_SMS_GLOBAL_MAX_PER_HOUR
+        sync: false
+      - key: OTP_SMS_GLOBAL_MAX_PER_DAY
+        sync: false
+      - key: OTP_SMS_ALERT_THRESHOLD_PERCENT
+        sync: false
       - key: OTP_TEST_WHITELIST
         sync: false
       - key: OTP_TEST_CODE

@@ -39,6 +39,7 @@ from app.services.storage import (
     get_message_attachment_storage_backend,
     get_storage_backend,
 )
+from tests.deployed_settings import DEPLOYED_REQUIRED
 from tests.factories import make_artisan_profile, make_user
 from tests.images import make_png
 
@@ -96,6 +97,7 @@ def _settings(**overrides: object) -> Settings:
         "database_url": "postgresql+asyncpg://user:pass@localhost:5432/db",
         "jwt_secret": "x" * 32,
         "payment_provider": "disabled",
+        **DEPLOYED_REQUIRED,
     }
     return Settings(_env_file=None, **{**base, **overrides})  # type: ignore[arg-type]
 

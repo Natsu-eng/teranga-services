@@ -703,7 +703,10 @@ taux de commission initial deviendrait implicite. La commande unique ci-dessus
 reste explicite et journalisée ; à reconsidérer si les redéploiements à zéro
 se multiplient.
 
-### 12.7 Mesurer TRUSTED_PROXY_HOPS (obligatoire)
+### 12.7 Mesurer TRUSTED_PROXY_HOPS (obligatoire, staging compris)
+
+Depuis le lot `feat/hardening-masking-otp`, le backend refuse de démarrer en
+staging comme en production si `TRUSTED_PROXY_HOPS` est absent (§18.5).
 
 Le rate limiting par IP (OTP, triage IA) lit l'adresse du client dans
 `X-Forwarded-For`, à `TRUSTED_PROXY_HOPS` crans **en partant de la droite**
@@ -1138,9 +1141,12 @@ un admin répond depuis **Support** (`/admin/support`). Lot
 - Comptes **client et artisan connectés** seulement (anonyme : 401 ; admin :
   403). Sujets : compte, un artisan ou un client, paiement, problème dans
   l'application, autre.
-- Message de **10 à 2000 caractères** (borné par le schéma), **masqué** à
-  l'écriture et à la lecture (numéros, e-mails) : la version d'origine n'est
-  jamais conservée.
+- Message de **10 à 2000 caractères** (borné par le schéma), **conservé tel
+  qu'écrit, sans masquage** (lot `feat/hardening-masking-otp`) : il n'est lu
+  que par son auteur et par les admins, jamais par l'autre partie d'une
+  intervention — l'utilisateur peut donc y laisser un moyen de le
+  recontacter. Il ne figure ni dans l'e-mail aux admins, ni dans le journal
+  d'audit.
 - **Intervention facultative**, pré-remplie depuis l'encart « Un souci ? »
   d'une intervention quand le signalement n'y est plus possible (délai
   dépassé, intervention close). Elle doit appartenir à l'auteur (client ou
@@ -1155,8 +1161,8 @@ un admin répond depuis **Support** (`/admin/support`). Lot
 ### 17.2 Côté admin
 
 - File des demandes **ouvertes** (la plus ancienne d'abord) ou **résolues** :
-  sujet, rôle et nom public de l'auteur (jamais son numéro), message masqué,
-  intervention liée.
+  sujet, rôle et nom public de l'auteur (jamais le numéro de son compte),
+  message tel qu'écrit, intervention liée.
 - Réponse **« Répondre et clore »** (résolue, définitive) ou **« Répondre sans
   clore »** (demande de précision, reste ouverte). Une demande résolue ne
   change plus (409 `DEMANDE_AIDE_DEJA_RESOLUE`).
@@ -1179,3 +1185,78 @@ enregistrée.
 `support_ticket` aux contraintes du journal d'audit. Downgrade refusé avec un
 message explicite si des réponses sont déjà journalisées (journal en ajout
 seul).
+
+## 18. Codes de connexion : durcissement (OTP)
+
+Lot `feat/hardening-masking-otp`. Ce qui protège les comptes et le budget SMS.
+
+### 18.1 Hachage des codes : HMAC-SHA256 avec clé secrète
+
+- Les codes sont hachés en **HMAC-SHA256 salé** avec `OTP_HMAC_KEY`, une clé
+  gardée **hors de la base** : une fuite de la table `otp_code` seule ne
+  permet plus de retrouver un code. Comparaison en temps constant.
+- Remplace PBKDF2 à 600 000 itérations, qui bloquait la boucle du serveur
+  environ 1 s par demande et par vérification (toutes les requêtes et les
+  WebSockets étaient figés pendant ce temps sur l'offre gratuite de Render).
+- **`OTP_HMAC_KEY` est obligatoire en staging et en production** (démarrage
+  refusé sinon), 32 caractères minimum, valeur jamais affichée dans une
+  erreur. En développement sans clé : clé aléatoire propre au processus.
+- Générer, depuis `backend/` : `uv run python scripts/generate_otp_hmac_key.py`
+  (n'écrit rien sur le disque). Une clé par environnement.
+- **Au déploiement de ce lot** : les codes PBKDF2 encore en cours ne sont
+  plus acceptés (refusés comme « expirés », l'utilisateur en redemande un).
+  Ils ne vivent que `OTP_TTL_SECONDS` (5 minutes) : l'effet se limite aux
+  personnes en train de se connecter à ce moment-là. Les sessions ouvertes ne
+  sont pas touchées. Même effet si la clé est changée plus tard.
+
+### 18.2 Essais : jamais plus que le maximum
+
+Chaque essai est **réservé atomiquement en base avant la comparaison**
+(`UPDATE … WHERE attempts < max RETURNING`). Cent vérifications simultanées
+ne donnent jamais plus de `OTP_MAX_ATTEMPTS` essais pour un code (prouvé par
+un test de concurrence réelle), et un bon code ne sert qu'une fois.
+
+### 18.3 Limites (fenêtres glissantes, stockage partagé)
+
+| Route | Clé | Défaut | Variables |
+|---|---|---|---|
+| `request-otp` | numéro | 3 / 10 min **et** 8 / 24 h | `RATE_LIMIT_OTP_PER_PHONE_*`, `RATE_LIMIT_OTP_PER_PHONE_DAILY_*` |
+| `request-otp` | IP | 20 / 10 min **et** 60 / 24 h | `RATE_LIMIT_OTP_PER_IP_*`, `RATE_LIMIT_OTP_PER_IP_DAILY_*` |
+| `verify-otp` | numéro | 10 / 10 min | `RATE_LIMIT_OTP_VERIFY_PER_PHONE_*` |
+| `verify-otp` | IP | 60 / 10 min | `RATE_LIMIT_OTP_VERIFY_PER_IP_*` |
+
+Les compteurs vivent dans Redis si `REDIS_URL` est renseignée, sinon dans
+PostgreSQL (staging et production) : partagés par toutes les instances,
+conservés aux redéploiements. Dépassement : 429 `TROP_DE_DEMANDES`.
+
+### 18.4 Plafond global de SMS (coût maximal)
+
+- **60 SMS / heure et 200 SMS / 24 h** pour toute la plateforme
+  (`OTP_SMS_GLOBAL_MAX_PER_HOUR`, `OTP_SMS_GLOBAL_MAX_PER_DAY`), comptés sur
+  les SMS **réellement envoyés** : les numéros du mode test (staging) n'en
+  consomment pas. Un refus horaire ne consomme pas le budget du jour.
+- **Au plafond** : `request-otp` répond 503 `ENVOI_CODES_SATURE` avec un
+  message clair ; les **sessions ouvertes ne sont pas touchées** (le
+  rafraîchissement de jeton ne passe pas par là).
+- **E-mail aux admins** (best-effort, §14) quand l'usage sur 24 h atteint
+  `OTP_SMS_ALERT_THRESHOLD_PERCENT` (50 %) puis 100 % du plafond journalier,
+  **une seule fois par fenêtre**, même avec plusieurs instances. Chiffres
+  agrégés seulement : ni numéro, ni IP, ni code. Journal :
+  `Plafond global de SMS de code atteint : demande refusée.`
+- **Coût maximal** : 200 SMS par 24 h glissantes, soit, à 30 FCFA le SMS
+  (prix à vérifier sur le tableau de bord Termii), **6 000 FCFA par jour au
+  plus**, et 1 800 FCFA par heure au plus — quel que soit le nombre de numéros
+  ou d'adresses utilisés par un abus. À relever quand l'audience grandit.
+
+### 18.5 IP réelle et `TRUSTED_PROXY_HOPS`
+
+`TRUSTED_PROXY_HOPS` est désormais **obligatoire en staging comme en
+production** (démarrage refusé sinon) : sans lui, tous les utilisateurs
+partagent l'IP du proxy de Render et les limites par IP s'appliquent à toute
+la plateforme. Mesurer la valeur avec §12.7.
+
+### 18.6 Santé
+
+`/api/v1/health` et `/api/v1/health/ready` acceptent aussi `HEAD` (sondes
+de disponibilité de type UptimeRobot) ; le contrôle de santé de Render, en
+GET, ne change pas.

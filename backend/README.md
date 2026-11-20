@@ -144,7 +144,7 @@ Essai local de la configuration de production (facultatif) :
 | `ENVIRONMENT` | Non (`development`) | `development` \| `test` \| `staging` \| `production` (ensemble fermé ; ancien nom `APP_ENV`, valeurs `dev`/`prod` acceptées). Format des logs (JSON hors development/test), code OTP journalisé seulement en development/test, et en production fail-fast sur toute configuration incomplète ou de dev (DEPLOYMENT.md). |
 | `LOG_LEVEL` | Non (`INFO`) | Niveau de log Python standard. |
 | `CORS_ORIGINS` | Non (vide) | Origines autorisées, séparées par des virgules : origines exactes (`https://hote[:port]`, sans chemin ni `/` final), jamais de joker (refusés au démarrage). En production : HTTPS publiques, et l'origine du front obligatoire si front et API sont sur deux origines. |
-| `TRUSTED_PROXY_HOPS` | Non (vide = 0) ; **obligatoire en production** | Nombre de proxys de confiance : l'IP du client est lue à cette position en partant de la droite de `X-Forwarded-For` (non falsifiable). Railway : `1`. |
+| `TRUSTED_PROXY_HOPS` | Non (vide = 0) ; **obligatoire en staging et en production** | Nombre de proxys de confiance : l'IP du client est lue à cette position en partant de la droite de `X-Forwarded-For` (non falsifiable). Railway : `1`. |
 | `REDIS_URL` | Non (vide) | Redis partagé (`redis://`, `rediss://`) : rate limiting, diffusion temps réel, tickets WebSocket. Vide : repli mémoire (et PostgreSQL pour le rate limiting hors dev). Obligatoire dès 2 instances. |
 | `JWT_SECRET` | Oui | Secret de signature des JWT. Aucune valeur par défaut : le démarrage échoue si absent ou trop court (< 32 caractères). |
 | `JWT_ACCESS_TTL_SECONDS` | Non (`900`) | Durée de vie de l'access token (secondes). |
@@ -155,11 +155,11 @@ Essai local de la configuration de production (facultatif) :
 | `OTP_CODE_LENGTH` | Non (`6`) | Longueur du code OTP (chiffres). |
 | `OTP_TTL_SECONDS` | Non (`300`) | TTL du code OTP (secondes, 5 min par défaut). |
 | `OTP_MAX_ATTEMPTS` | Non (`5`) | Tentatives de vérification autorisées avant invalidation du code. |
-| `OTP_HASH_ITERATIONS` | Non (`600000`) | Itérations PBKDF2-HMAC-SHA256 pour le hachage du code OTP. |
+| `OTP_HMAC_KEY` | **Oui hors développement** | Clé secrète (32 caractères minimum) du hachage HMAC-SHA256 des codes OTP. `uv run python scripts/generate_otp_hmac_key.py`. |
 | `RATE_LIMIT_BACKEND` | Non (`redis` si `REDIS_URL`, sinon `memory` en development/test et `postgres` ailleurs) | Stockage des compteurs de rate limiting : `redis`, `postgres` (table `rate_limit_hit`, partagée entre instances, persistante) ou `memory` (processus, dev/tests). `memory` est refusé hors development/test. |
 | `RATE_LIMIT_OTP_PER_PHONE_MAX` | Non (`3`) | Nombre max de `request-otp` par numéro sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_PHONE_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par numéro (secondes). |
-| `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`10`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
+| `RATE_LIMIT_OTP_PER_IP_MAX` | Non (`20`) | Nombre max de `request-otp` par IP sur la fenêtre glissante. |
 | `RATE_LIMIT_OTP_PER_IP_WINDOW_SECONDS` | Non (`600`) | Largeur de la fenêtre glissante par IP (secondes). |
 | `ARTISAN_SEARCH_DEFAULT_RADIUS_M` | Non (`10000`) | Rayon de recherche par défaut (mètres) si `radius_m` n'est pas fourni sur `GET /artisans`. |
 | `ARTISAN_SEARCH_MAX_RADIUS_M` | Non (`50000`) | Plafond dur du rayon de recherche (mètres). |

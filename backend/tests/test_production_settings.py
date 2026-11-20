@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from pytest import MonkeyPatch
 
 from app.core.config import Settings, normalize_environment_name
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
@@ -34,6 +35,7 @@ PRODUCTION: dict[str, object] = {
     "s3_private_bucket": "teranga-prive",
     "s3_public_bucket": "teranga-public",
     "s3_public_base_url": "https://media.teranga.sn",
+    **DEPLOYED_REQUIRED,
 }
 
 
@@ -87,6 +89,7 @@ def test_environment_variable_wins_over_the_legacy_name(monkeypatch: MonkeyPatch
         database_url="postgresql+asyncpg://user:pass@localhost:5432/db",
         jwt_secret="a" * 32,
         payment_provider="disabled",
+        **DEPLOYED_REQUIRED,  # type: ignore[arg-type]
     )
     assert settings.environment == "staging"
 

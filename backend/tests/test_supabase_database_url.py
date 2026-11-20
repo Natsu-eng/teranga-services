@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import Settings
+from tests.deployed_settings import DEPLOYED_REQUIRED
 
 POOLER = "aws-0-eu-central-1.pooler.supabase.com"
 SESSION_URL = (
@@ -28,6 +29,7 @@ def _settings(database_url: str) -> Settings:
         jwt_secret="x" * 32,
         environment="staging",
         payment_provider="disabled",
+        **DEPLOYED_REQUIRED,  # type: ignore[arg-type]
     )
 
 

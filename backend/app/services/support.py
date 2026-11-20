@@ -7,8 +7,10 @@
 - **Intervention facultative, à l'auteur** : client ou artisan de cette
   intervention ; sinon la même erreur qu'une intervention inexistante (404,
   aucune fuite d'existence).
-- **Message masqué** à l'écriture ET à la lecture (numéros, e-mails), comme
-  les motifs de litige.
+- **Message NON masqué** : il n'est lu que par son auteur et par les admins
+  (jamais par l'autre partie d'une intervention). L'utilisateur peut donc y
+  laisser un moyen de le recontacter. L'e-mail aux admins, lui, ne contient
+  jamais le message (`app.services.admin_notifications`).
 - **Réponse de l'admin** : sous verrou de la ligne, journalisée (journal
   d'audit en ajout seul, dans la même transaction) ; une demande résolue
   est définitive.
@@ -37,7 +39,6 @@ from app.schemas.pagination import Page
 from app.schemas.support import AdminSupportTicketOut, SupportTicketCreateIn, SupportTicketOut
 from app.services import audit as audit_service
 from app.services.artisan_errors import PageHorsBornesError
-from app.services.contact_masking import mask_contacts
 from app.services.identity import public_display_name
 from app.services.intervention_errors import InterventionIntrouvableError
 
@@ -86,8 +87,8 @@ def _to_out(ticket: SupportTicket) -> SupportTicketOut:
     return SupportTicketOut(
         id=ticket.id,
         category=ticket.category,
-        # Masqué aussi à la LECTURE (idempotent) : jamais un numéro en clair.
-        message=mask_contacts(ticket.message).text,
+        # Tel qu'écrit : seuls l'auteur et les admins le lisent.
+        message=ticket.message,
         intervention_id=ticket.intervention_id,
         intervention_trade_label=_trade_label(ticket),
         status=ticket.status,
@@ -129,8 +130,8 @@ async def create_ticket(
         author_id=user.id,
         author_role=user.role,
         category=payload.category,
-        # Masqué à l'écriture : la version d'origine n'est jamais conservée.
-        message=mask_contacts(payload.message.strip()).text,
+        # Tel qu'écrit (sans masquage) : lu seulement par l'auteur et les admins.
+        message=payload.message.strip(),
         intervention_id=payload.intervention_id,
         status=SupportTicketStatus.OUVERT,
     )
