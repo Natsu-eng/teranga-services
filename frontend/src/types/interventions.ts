@@ -56,6 +56,14 @@ export interface Intervention {
   conversationId: string | null;
   /** Volet financier, dès qu'un devis est accepté (deux parties et admin seulement). */
   payment: PaymentSummary | null;
+  /**
+   * Un problème peut-il être signalé MAINTENANT (règles du serveur : pendant
+   * les travaux, ou dans la fenêtre qui suit leur fin) : l'écran n'affiche
+   * jamais un bouton que le serveur refuserait.
+   */
+  canOpenDispute: boolean;
+  /** Après la fin des travaux : limite du signalement (ISO) ; null sinon. */
+  disputeDeadline: string | null;
   dispute: Dispute | null;
   createdAt: string;
 }

@@ -5,8 +5,31 @@ messages et statuts HTTP inchangés.
 """
 
 from app.core.errors import AppError
+from app.models.enums import PlatformFeeStatus
 
 # ------------------------------------------------------------------ erreurs
+
+
+class CommissionDejaRegleeError(AppError):
+    """Décision « en faveur du client » impossible à appliquer telle quelle :
+    la commission n'est plus due (déjà prélevée ou déjà annulée). Rien n'est
+    modifié ; l'admin traite le cas manuellement."""
+
+    _LABELS = {
+        PlatformFeeStatus.COLLECTEE: "déjà prélevée",
+        PlatformFeeStatus.ANNULEE: "déjà annulée",
+    }
+
+    def __init__(self, status: PlatformFeeStatus) -> None:
+        super().__init__(
+            code="COMMISSION_DEJA_REGLEE",
+            message=(
+                f"La commission de cette intervention est {self._LABELS.get(status, status)} : "
+                "la décision en faveur du client ne peut pas être appliquée automatiquement. "
+                "Rien n'a été modifié ; traitez ce cas manuellement."
+            ),
+            status_code=409,
+        )
 
 
 class PaiementNonExigibleError(AppError):

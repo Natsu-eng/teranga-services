@@ -75,6 +75,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   'review.hide': 'Avis masqué',
   'review.restore': 'Avis rétabli',
   'commission_rate.create': 'Taux de commission ajouté',
+  'support_ticket.reply': "Réponse à une demande d'aide",
 };
 
 export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
@@ -84,6 +85,7 @@ export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {
   user: 'Compte',
   review: 'Avis',
   commission_rate: 'Taux de commission',
+  support_ticket: "Demande d'aide",
 };
 
 /** Statuts d'intervention, dans l'ordre du parcours (clés du backend). */

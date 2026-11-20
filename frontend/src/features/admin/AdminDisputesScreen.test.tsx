@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { AdminDisputesScreen } from './AdminDisputesScreen';
-import { api } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { useAuth } from '../auth/hooks/useAuth';
 import type { AuthContextValue } from '../auth/auth-context';
 import { payableInterventionFixture, paymentFixture } from '../payments/paymentFixtures';
@@ -82,6 +82,67 @@ describe('AdminDisputesScreen', () => {
       ),
     );
     expect(await screen.findByText('Aucun litige à trancher.')).toBeInTheDocument();
+  });
+
+  it('en espèces, propose une médiation et jamais un remboursement par Téranga', async () => {
+    mockedApi.listAdminDisputes.mockResolvedValue([
+      { ...disputed, payment: paymentFixture({ status: 'reussi', channel: 'cash' }) },
+    ]);
+    renderScreen();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Clore en faveur du client' }));
+
+    expect(screen.queryByRole('button', { name: 'Rembourser le client' })).toBeNull();
+    expect(screen.getByText(/aucun remboursement n'est effectué par Téranga/)).toBeVisible();
+  });
+
+  it('un litige tranché en espèces est étiqueté selon ce qui a été fait', async () => {
+    mockedApi.listAdminDisputes.mockResolvedValue([
+      {
+        ...disputed,
+        status: 'annulee',
+        payment: paymentFixture({ status: 'reussi', channel: 'cash' }),
+        dispute: {
+          ...disputed.dispute!,
+          outcome: 'rembourse',
+          resolvedAt: '2026-10-12T10:00:00Z',
+          resolutionNote: 'Travaux non réalisés.',
+        },
+      },
+    ]);
+    renderScreen();
+
+    expect(await screen.findByText('Clos en faveur du client')).toBeVisible();
+    expect(screen.queryByText('Client remboursé')).toBeNull();
+  });
+
+  it('signale clairement une commission déjà réglée, et affiche le refus du serveur', async () => {
+    mockedApi.listAdminDisputes.mockResolvedValue([
+      {
+        ...disputed,
+        payment: paymentFixture({
+          status: 'reussi',
+          channel: 'cash',
+          commission: { rateBps: 1000, amountFcfa: 1_200, status: 'collectee' },
+        }),
+      },
+    ]);
+    mockedApi.resolveDispute.mockRejectedValue(
+      new ApiError(
+        'validation',
+        "La commission de cette intervention est déjà prélevée : la décision en faveur du client ne peut pas être appliquée automatiquement. Rien n'a été modifié ; traitez ce cas manuellement.",
+      ),
+    );
+    renderScreen();
+
+    expect(await screen.findByRole('note')).toHaveTextContent('Commission déjà prélevée');
+    fireEvent.click(screen.getByRole('button', { name: 'Clore en faveur du client' }));
+    fireEvent.change(screen.getByLabelText('Justification (visible des deux parties)'), {
+      target: { value: 'Travaux non réalisés.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer la décision' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Rien n'a été modifié");
   });
 
   it('affiche les litiges déjà tranchés', async () => {

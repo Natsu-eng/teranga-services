@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FilePlus2,
   LayoutDashboard,
+  LifeBuoy,
   LogOut,
   MapPin,
   Receipt,
@@ -132,6 +133,12 @@ const ClientProfile: React.FC<{ name: string; location: string; phone?: string |
             label="Mes paiements"
             description="Vos règlements et leur état."
           />
+          <MenuLink
+            to="/aide"
+            icon={LifeBuoy}
+            label="Aide"
+            description="Un souci ? Écrivez à Téranga et suivez vos demandes."
+          />
         </ul>
       </Card>
     </section>
@@ -217,6 +224,12 @@ const ArtisanProfile: React.FC<{
                 description="Telle que les clients la voient."
               />
             )}
+            <MenuLink
+              to="/aide"
+              icon={LifeBuoy}
+              label="Aide"
+              description="Un souci ? Écrivez à Téranga et suivez vos demandes."
+            />
           </ul>
         </Card>
       </section>

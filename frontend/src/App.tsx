@@ -37,6 +37,8 @@ import { AdminUsersScreen } from './features/admin/AdminUsersScreen';
 import { AdminReviewsScreen } from './features/admin/AdminReviewsScreen';
 import { AdminCommissionsScreen } from './features/admin/AdminCommissionsScreen';
 import { AdminAuditScreen } from './features/admin/AdminAuditScreen';
+import { AdminSupportScreen } from './features/admin/AdminSupportScreen';
+import { SupportScreen } from './features/support/SupportScreen';
 import { PaymentScreen } from './features/payments/PaymentScreen';
 import { MyPaymentsScreen } from './features/payments/MyPaymentsScreen';
 import { EarningsScreen } from './features/payments/EarningsScreen';
@@ -102,6 +104,7 @@ export function AppRoutes() {
                 <Route path="litiges" element={<AdminDisputesScreen />} />
                 <Route path="commissions" element={<AdminCommissionsScreen />} />
                 <Route path="journal" element={<AdminAuditScreen />} />
+                <Route path="support" element={<AdminSupportScreen />} />
                 <Route path="*" element={<NotFoundScreen />} />
               </Route>
             </Route>
@@ -131,6 +134,15 @@ export function AppRoutes() {
                 element={
                   <ProtectedRoute roles={CLIENT_ONLY}>
                     <PaymentScreen />
+                  </ProtectedRoute>
+                }
+              />
+              {/* Aide : écrire à Téranga et suivre ses demandes (client et artisan). */}
+              <Route
+                path="aide"
+                element={
+                  <ProtectedRoute roles={CLIENT_OR_ARTISAN}>
+                    <SupportScreen />
                   </ProtectedRoute>
                 }
               />

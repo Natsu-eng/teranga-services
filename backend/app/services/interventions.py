@@ -63,6 +63,8 @@ from app.services import payments as payments_service
 from app.services import requests as requests_service
 from app.services.artisan_errors import PageHorsBornesError
 from app.services.artisans import get_artisan_or_404
+from app.services.contact_masking import mask_contacts
+from app.services.dispute_rules import dispute_refusal, open_dispute_deadline
 from app.services.engagement import evaluate_engagement
 from app.services.identity import public_display_name
 from app.services.intervention_errors import (
@@ -96,7 +98,10 @@ _ALLOWED_TRANSITIONS: dict[InterventionStatus, frozenset[InterventionStatus]] = 
     InterventionStatus.EN_COURS: frozenset(
         {InterventionStatus.TERMINEE, InterventionStatus.ANNULEE, InterventionStatus.LITIGE}
     ),
-    InterventionStatus.TERMINEE: frozenset(),
+    # Après la fin des travaux : un litige seulement, et seulement dans la
+    # fenêtre DISPUTE_WINDOW_HOURS (règles complètes : app.services.dispute_rules,
+    # vérifiées par `open_dispute` AVANT cette transition).
+    InterventionStatus.TERMINEE: frozenset({InterventionStatus.LITIGE}),
     InterventionStatus.ANNULEE: frozenset(),
     InterventionStatus.LITIGE: frozenset({InterventionStatus.TERMINEE, InterventionStatus.ANNULEE}),
 }
@@ -155,11 +160,27 @@ def mark_cancelled(
     reason: str | None,
 ) -> None:
     """Renseigne la clôture d'une intervention qui vient de passer `annulee`
-    (les quatre champs vont ensemble, CHECK `cancellation_fields_together`)."""
+    (les quatre champs vont ensemble, CHECK `cancellation_fields_together`).
+
+    Le motif d'une PARTIE est masqué à l'écriture (numéros, e-mails), comme
+    la messagerie : il est montré à l'autre partie. La note d'arbitrage d'un
+    admin est conservée telle quelle (texte de Téranga)."""
+    if reason is not None and by is not Role.ADMIN:
+        reason = mask_contacts(reason).text
     intervention.cancelled_at = datetime.now(UTC)
     intervention.cancelled_by = by
     intervention.cancellation_kind = kind
     intervention.cancellation_reason = reason
+
+
+def _masked_party_text(text: str | None, *, by: Role) -> str | None:
+    """Motif d'une PARTIE masqué aussi à la LECTURE : couvre les motifs
+    enregistrés avant le masquage à l'écriture. Idempotent (les mentions de
+    remplacement ne contiennent ni chiffre ni « @ »). Le texte d'un admin
+    (note d'arbitrage) est rendu tel quel."""
+    if text is None or by is Role.ADMIN:
+        return text
+    return mask_contacts(text).text
 
 
 def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
@@ -172,7 +193,7 @@ def to_cancellation_out(intervention: Intervention) -> CancellationOut | None:
     return CancellationOut(
         kind=intervention.cancellation_kind,
         by=intervention.cancelled_by,
-        reason=intervention.cancellation_reason,
+        reason=_masked_party_text(intervention.cancellation_reason, by=intervention.cancelled_by),
         at=intervention.cancelled_at,
     )
 
@@ -212,10 +233,23 @@ def to_intervention_out(intervention: Intervention) -> InterventionOut:
             rounding=get_settings().commission_rounding,
             online_available=online_payment_available(get_settings()),
         ),
+        can_open_dispute=(
+            dispute_refusal(
+                intervention,
+                window_hours=get_settings().dispute_window_hours,
+                now=datetime.now(UTC),
+            )
+            is None
+        ),
+        dispute_deadline=open_dispute_deadline(
+            intervention,
+            window_hours=get_settings().dispute_window_hours,
+            now=datetime.now(UTC),
+        ),
         dispute=(
             DisputeOut(
                 opened_by=intervention.dispute.opened_by_role,
-                reason=intervention.dispute.reason,
+                reason=mask_contacts(intervention.dispute.reason).text,
                 opened_at=intervention.dispute.created_at,
                 outcome=intervention.dispute.outcome,
                 resolved_at=intervention.dispute.resolved_at,

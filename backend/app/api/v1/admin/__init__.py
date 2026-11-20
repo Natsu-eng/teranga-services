@@ -26,6 +26,7 @@ from app.api.v1.admin import (
     disputes,
     overview,
     reviews,
+    support,
     users,
     verifications,
 )
@@ -36,3 +37,5 @@ for section in (verifications, artisans, disputes, audit, overview, users, revie
     router.include_router(section.router)
 # Diagnostic d'exploitation (réglage des proxys), ajouté après la découpe.
 router.include_router(diagnostics.router)
+# Aide : file des demandes d'aide (lot feat/disputes-support).
+router.include_router(support.router)

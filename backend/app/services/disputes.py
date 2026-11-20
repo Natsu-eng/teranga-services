@@ -1,12 +1,20 @@
 """Litiges sur une intervention (BUILD_PLAN.md §3.5) : ouverture par une
 partie, arbitrage par un admin (journalisé), liste pour le back-office.
 
-Extraits de `app.services.interventions` sans changement de logique :
-l'argent reste gelé pendant le litige, l'arbitrage règle le volet financier
-dans la même transaction, sous verrou de la ligne.
+- **Ouverture** : pendant les travaux, ou après leur fin pendant
+  DISPUTE_WINDOW_HOURS (règles pures : `app.services.dispute_rules`). Un seul
+  litige par intervention. Motif MASQUÉ à l'écriture (numéros, e-mails),
+  comme la messagerie : il est montré à l'autre partie.
+- **Pendant le litige** : l'argent RETENU en ligne reste gelé ; l'avis
+  éventuel n'est plus public (note de l'artisan recalculée).
+- **Arbitrage** (sous verrou de la ligne, même transaction que le volet
+  financier) : les valeurs stockées restent `libere`/`rembourse`, mais
+  l'effet dépend de l'argent réellement détenu -- jamais de « remboursement »
+  que Téranga ne peut pas faire (espèces, règlement hors plateforme).
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,9 +40,15 @@ from app.schemas.interventions import (
 from app.schemas.pagination import Page
 from app.services import audit as audit_service
 from app.services import payments as payments_service
+from app.services import reviews as reviews_service
 from app.services.artisan_errors import PageHorsBornesError
+from app.services.contact_masking import mask_contacts
+from app.services.dispute_rules import DisputeRefusal, dispute_refusal
 from app.services.intervention_errors import (
     InterventionTransitionInvalideError,
+    LitigeDejaOuvertError,
+    LitigeDelaiDepasseError,
+    LitigePaiementDejaVerseError,
 )
 from app.services.interventions import (
     SettledIntervention,
@@ -46,27 +60,63 @@ from app.services.interventions import (
 )
 from app.services.payment_providers.base import PaymentProvider
 
+_REFUSAL_ERRORS = {
+    DisputeRefusal.TRANSITION: InterventionTransitionInvalideError,
+    DisputeRefusal.ALREADY_DISPUTED: LitigeDejaOuvertError,
+    DisputeRefusal.WINDOW_ELAPSED: LitigeDelaiDepasseError,
+    DisputeRefusal.ONLINE_PAYMENT_RELEASED: LitigePaiementDejaVerseError,
+}
+
+
+@dataclass(frozen=True)
+class OpenedDispute:
+    """Litige ouvert, et ce qu'il faut pour prévenir les admins (APRÈS le
+    commit) : le métier et qui a signalé -- jamais le motif."""
+
+    intervention: InterventionOut
+    trade_label: str
+    opened_by: Role
+
 
 async def open_dispute(
-    session: AsyncSession, *, intervention_id: uuid.UUID, user: User, reason: str
-) -> InterventionOut:
-    """Une partie signale un problème sur des travaux en cours
-    (`en_cours` -> `litige`). L'argent est GELÉ tel quel -- ni versement ni
+    session: AsyncSession,
+    *,
+    intervention_id: uuid.UUID,
+    user: User,
+    reason: str,
+    settings: Settings,
+) -> OpenedDispute:
+    """Une partie signale un problème (`en_cours` ou `terminee` -> `litige`).
+    L'argent retenu en ligne est GELÉ tel quel -- ni versement ni
     remboursement -- jusqu'à la décision d'un admin. C'est aussi le recours
     de l'artisan quand un client ne confirme jamais la fin des travaux."""
     intervention = await _get_for_update_or_404(session, intervention_id)
     role = _party_role(intervention, user)
+    refusal = dispute_refusal(
+        intervention, window_hours=settings.dispute_window_hours, now=datetime.now(UTC)
+    )
+    if refusal is not None:
+        raise _REFUSAL_ERRORS[refusal]()
+    had_review = intervention.review is not None
     transition_intervention(intervention, InterventionStatus.LITIGE)
     dispute = InterventionDispute(
         intervention=intervention,
         opened_by_id=user.id,
         opened_by_role=role,
-        reason=reason,
+        # Montré à l'autre partie : jamais un numéro ni un e-mail en clair.
+        reason=mask_contacts(reason).text,
         created_at=datetime.now(UTC),
     )
     session.add(dispute)
     await session.flush()
-    return to_intervention_out(intervention)
+    if had_review:
+        # L'avis n'est plus public pendant le litige : note recalculée sans lui.
+        await reviews_service.recalculate_artisan_rating(session, intervention.artisan_id)
+    return OpenedDispute(
+        intervention=to_intervention_out(intervention),
+        trade_label=intervention.service_request.trade.label_fr,
+        opened_by=role,
+    )
 
 
 async def resolve_dispute(
@@ -81,32 +131,49 @@ async def resolve_dispute(
 ) -> SettledIntervention:
     """Un admin tranche un litige (BUILD_PLAN.md §3.5) :
 
-    - `libere` : travaux reconnus faits -> `terminee`, même enchaînement
-      qu'une complétion (séquestre libéré, versement du net) ;
-    - `rembourse` : -> `annulee` (arbitrage), client remboursé, ni
-      versement ni commission.
+    - `libere` (en faveur de l'artisan) : -> `terminee`, même enchaînement
+      qu'une complétion (séquestre retenu libéré, versement du net ;
+      espèces ou hors plateforme : commission due). Litige ouvert APRÈS les
+      travaux : leur date de fin d'origine est conservée.
+    - `rembourse` (en faveur du client) : -> `annulee` (arbitrage),
+      commission annulée ; remboursement SEULEMENT des fonds réellement
+      retenus en ligne (`settle_on_arbitration_for_client`). La demande
+      redevient ouverte seulement si le litige a été ouvert pendant les
+      travaux -- après leur fin, il n'y a plus de besoin à pourvoir.
     """
     intervention = await _get_for_update_or_404(session, intervention_id)
     dispute = intervention.dispute
     if intervention.status is not InterventionStatus.LITIGE or dispute is None:
         raise InterventionTransitionInvalideError()
+    if outcome is DisputeOutcome.REMBOURSE:
+        # Vérifié AVANT toute modification : un refus ne laisse rien derrière lui.
+        payments_service.ensure_client_decision_applicable(intervention)
+    # `completed_at` n'est posé QUE par une confirmation de fin des travaux :
+    # renseigné ici, le litige a été ouvert après la fin (fenêtre).
+    opened_after_completion = intervention.completed_at is not None
 
     payout = None
     if outcome is DisputeOutcome.LIBERE:
         transition_intervention(intervention, InterventionStatus.TERMINEE)
-        intervention.completed_at = datetime.now(UTC)
-        payout = payments_service.settle_on_completion(session, intervention, settings=settings)
+        # Litige ouvert APRÈS la fin : retour à l'état d'avant le litige. La
+        # complétion a DÉJÀ été réglée (commission créée ; aucun séquestre,
+        # puisqu'un litige est refusé une fois le paiement versé) -- rien
+        # n'est refait : ni commission, ni versement, ni date de fin.
+        if not opened_after_completion:
+            intervention.completed_at = datetime.now(UTC)
+            payout = payments_service.settle_on_completion(session, intervention, settings=settings)
     else:
         transition_intervention(intervention, InterventionStatus.ANNULEE)
         mark_cancelled(
             intervention, by=Role.ADMIN, kind=InterventionCancellationKind.ARBITRAGE, reason=note
         )
-        await payments_service.settle_on_cancellation(
+        await payments_service.settle_on_arbitration_for_client(
             session, intervention, settings=settings, provider=provider
         )
-        await requests_repository.set_status(
-            session, intervention.service_request, ServiceRequestStatus.OUVERTE
-        )
+        if not opened_after_completion:
+            await requests_repository.set_status(
+                session, intervention.service_request, ServiceRequestStatus.OUVERTE
+            )
     dispute.outcome = outcome
     dispute.resolved_by_id = admin.id
     dispute.resolved_at = datetime.now(UTC)
@@ -122,9 +189,13 @@ async def resolve_dispute(
             "outcome": outcome,
             "note": note,
             "opened_by": dispute.opened_by_role,
+            "opened_after_completion": opened_after_completion,
             "payout_id": payout.id if payout is not None else None,
         },
     )
+    if intervention.review is not None:
+        # Décision rendue, quelle qu'elle soit : l'avis redevient public.
+        await reviews_service.recalculate_artisan_rating(session, intervention.artisan_id)
     return SettledIntervention(
         intervention=to_intervention_out(intervention),
         payout_id=payout.id if payout is not None else None,

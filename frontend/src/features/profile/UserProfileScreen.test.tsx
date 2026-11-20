@@ -155,6 +155,7 @@ describe('UserProfileScreen', () => {
       );
       expect(screen.queryByRole('link', { name: /Tableau de bord/ })).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Mes gains/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /^Aide/ })).toHaveAttribute('href', '/aide');
     });
 
     it('en mode espèces : espèces actives, moyens en ligne « Bientôt », aucun séquestre promis', () => {
@@ -243,6 +244,7 @@ describe('UserProfileScreen', () => {
         'href',
         '/artisans/a1',
       );
+      expect(screen.getByRole('link', { name: /^Aide/ })).toHaveAttribute('href', '/aide');
       expect(screen.getByText('Votre compte est en cours de vérification')).toBeInTheDocument();
     });
 

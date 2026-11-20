@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Check, MessageCircle, ReceiptText, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, LifeBuoy, MessageCircle, ReceiptText, XCircle } from 'lucide-react';
 import { Button, ButtonLink } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { TextAreaField, TextField } from '../../components/ui/Field';
@@ -11,11 +11,18 @@ import type { Intervention, UserRole } from '../../types';
 import { PaymentPanel } from '../payments/components/PaymentPanel';
 import { ProgressSteps } from './components/ProgressSteps';
 import {
+  disputeFormNotice,
+  disputeOutcomeText,
+  disputePendingNotice,
+  isFundsHeld,
+} from './disputeText';
+import {
   DISPUTE_REASON_MIN_LENGTH,
   STATUS,
   STEP_INDEX,
   cancellationText,
   formatDate,
+  formatDateTime,
   partyLabel,
 } from './interventionText';
 
@@ -70,13 +77,23 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
   const status = STATUS[intervention.status];
   const step = STEP_INDEX[intervention.status];
   const { quote, payment, cancellation, dispute } = intervention;
-  const fundsHeld = payment?.status === 'retenu';
+  const fundsHeld = isFundsHeld(payment);
   const checkoutOpen = payment?.status === 'en_attente' && payment.checkoutUrl !== null;
   const canCancel =
     role === 'client'
       ? ['proposee', 'acceptee', 'en_cours'].includes(intervention.status) && !fundsHeld
       : ['acceptee', 'en_cours'].includes(intervention.status);
-  const canDispute = intervention.status === 'en_cours';
+  // Règle du SERVEUR (pendant les travaux, ou dans la fenêtre après leur fin).
+  const canDispute = intervention.canOpenDispute;
+  // Encart « Un souci ? » : seulement quand une action est réellement possible.
+  const notStarted = intervention.status === 'proposee' || intervention.status === 'acceptee';
+  // Signalement plus possible (délai dépassé, intervention close) : l'aide
+  // reste joignable, avec l'intervention pré-remplie.
+  const canContactSupport =
+    !canDispute &&
+    !canCancel &&
+    (intervention.status === 'terminee' || intervention.status === 'annulee');
+  const showTroubleBox = canDispute || canCancel || canContactSupport;
   const disputeReasonTooShort = formReason.trim().length < DISPUTE_REASON_MIN_LENGTH;
 
   return (
@@ -376,19 +393,13 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
             Problème signalé {dispute.openedBy === role ? 'par vous' : partyLabel(dispute.openedBy)}
           </p>
           <p className="text-foreground">{dispute.reason}</p>
-          <p className="text-muted-foreground">
-            L&apos;argent est gelé : un conseiller Téranga examine la situation et tranchera
-            (versement à l&apos;artisan ou remboursement du client).
-          </p>
+          <p className="text-muted-foreground">{disputePendingNotice(payment)}</p>
         </div>
       )}
 
       {dispute?.outcome && (
         <p className="text-sm text-muted-foreground">
-          Litige tranché par Téranga :{' '}
-          {dispute.outcome === 'libere'
-            ? "paiement versé à l'artisan."
-            : 'le client a été remboursé.'}
+          {disputeOutcomeText(dispute.outcome, payment)}
           {dispute.resolutionNote ? ` ${dispute.resolutionNote}` : ''}
         </p>
       )}
@@ -414,7 +425,7 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
               ? fundsHeld
                 ? 'Le client sera intégralement remboursé ; aucune commission ne sera prélevée.'
                 : "L'intervention sera close et la demande à nouveau ouverte."
-              : "L'argent reste gelé jusqu'à la décision d'un conseiller Téranga. Expliquez la situation."}
+              : disputeFormNotice(payment)}
           </p>
           <TextAreaField
             label={openForm === 'cancel' ? "Motif de l'annulation" : 'Description du problème'}
@@ -456,29 +467,62 @@ export const InterventionCard: React.FC<InterventionCardProps> = ({
           </div>
         </div>
       ) : (
-        (canCancel || canDispute) && (
-          <div className="flex flex-wrap gap-2">
-            {canDispute && (
-              <Button
-                variant="ghost"
-                size="sm"
-                leadingIcon={<AlertTriangle aria-hidden className="w-4 h-4" />}
-                onClick={() => setOpenForm('dispute')}
-              >
-                Signaler un problème
-              </Button>
-            )}
-            {canCancel && (
-              <Button
-                variant="danger-ghost"
-                size="sm"
-                leadingIcon={<XCircle aria-hidden className="w-4 h-4" />}
-                onClick={() => setOpenForm('cancel')}
-              >
-                Annuler
-              </Button>
-            )}
-          </div>
+        showTroubleBox && (
+          <section
+            aria-labelledby={`souci-${intervention.id}`}
+            className="space-y-2 rounded-field bg-surface-muted p-3"
+          >
+            <h4
+              id={`souci-${intervention.id}`}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground"
+            >
+              <AlertTriangle aria-hidden className="w-4 h-4 text-accent-foreground" />
+              Un souci ?
+            </h4>
+            <p className="text-sm text-muted-foreground">
+              {canDispute
+                ? intervention.disputeDeadline
+                  ? `Un problème après les travaux ? Vous pouvez le signaler jusqu'au ${formatDateTime(intervention.disputeDeadline)}.`
+                  : 'Un problème pendant les travaux ? Signalez-le : un conseiller Téranga examinera la situation.'
+                : canContactSupport
+                  ? "Le signalement n'est plus possible sur cette intervention, mais Téranga peut toujours vous aider."
+                  : notStarted
+                    ? "Les travaux n'ont pas commencé : vous pouvez annuler la mise en relation."
+                    : 'Vous pouvez annuler la mise en relation.'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {canDispute && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  leadingIcon={<AlertTriangle aria-hidden className="w-4 h-4" />}
+                  onClick={() => setOpenForm('dispute')}
+                >
+                  Signaler un problème
+                </Button>
+              )}
+              {canCancel && (
+                <Button
+                  variant="danger-ghost"
+                  size="sm"
+                  leadingIcon={<XCircle aria-hidden className="w-4 h-4" />}
+                  onClick={() => setOpenForm('cancel')}
+                >
+                  Annuler
+                </Button>
+              )}
+              {canContactSupport && (
+                <ButtonLink
+                  to={`/aide?intervention=${intervention.id}`}
+                  variant="outline"
+                  size="sm"
+                  leadingIcon={<LifeBuoy aria-hidden className="w-4 h-4" />}
+                >
+                  Contacter l&apos;aide
+                </ButtonLink>
+              )}
+            </div>
+          </section>
         )
       )}
     </Card>

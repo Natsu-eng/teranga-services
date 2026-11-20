@@ -1105,12 +1105,19 @@ plateforme est mesuré, jamais ignoré.
   checkout ouvert ou espèces -> `annule`, commission `annulee`, **jamais de
   versement ni de commission**, demande rouverte.
 - Litige (`POST /interventions/{id}/dispute`, client ou artisan, travaux en
-  cours) : l'argent est **gelé** tel quel. C'est aussi le recours de
-  l'artisan si le client ne confirme jamais la fin. Un admin tranche
-  (`POST /admin/disputes/{id}/resolve`) : `libere` -> même enchaînement
-  qu'une complétion (versement du net) ; `rembourse` -> intervention
-  annulée (arbitrage), client remboursé, aucune commission. Justification
-  obligatoire, visible des deux parties.
+  cours, ou après leur fin pendant `DISPUTE_WINDOW_HOURS` -- 72 h par
+  défaut -- sans paiement en ligne déjà versé ; un seul par intervention) :
+  l'argent retenu est **gelé** tel quel. C'est aussi le recours de
+  l'artisan si le client ne confirme jamais la fin. Motif masqué (numéros,
+  e-mails), e-mail aux admins sans le motif, avis suspendu publiquement
+  jusqu'à la décision. Un admin tranche (`POST /admin/disputes/{id}/resolve`) :
+  `libere` -> même enchaînement qu'une complétion (versement du net ;
+  espèces : commission due ; date de fin d'origine conservée) ; `rembourse`
+  -> intervention annulée (arbitrage), commission annulée, **remboursement
+  seulement des fonds réellement retenus** (espèces : rien à rembourser par
+  Téranga, paiement laissé tel quel), demande rouverte seulement si le
+  litige a été ouvert pendant les travaux. Justification obligatoire,
+  visible des deux parties. Détail : DEPLOYMENT.md §16.
 - Remboursement **idempotent** (clé `refund-<id>`) et exécuté AVANT le
   commit : si notre transaction échoue après l'appel, la relance ne
   rembourse pas deux fois. Fournisseur indisponible -> 502, rien ne change.
@@ -1169,7 +1176,10 @@ recevez ». Aucun montant n'est calculé par le front.
 **Limites connues.** Recouvrement des commissions dues (cash) non codé ;
 versements relancés par script (pas encore de planificateur) ; montant
 incohérent signalé par un webhook traité manuellement ; litige sans
-délai automatique de libération ; un seul fournisseur actif à la fois (un
+délai automatique de libération ; **versement différé pendant la fenêtre de
+litige non codé** (le versement en ligne part à la confirmation ; un litige
+après un versement est refusé) -- à faire avec l'agrégateur réel et un
+déclenchement planifié ; un seul fournisseur actif à la fois (un
 remboursement exige le fournisseur d'origine).
 
 
@@ -1207,6 +1217,7 @@ grille) :
 | `GET /admin/reviews` · `POST /admin/reviews/{id}/hide` · `/restore` | modération : signalés d'abord ; masquer exige un motif ; rétablir/maintenir ; note recalculée, profil verrouillé. |
 | `GET /admin/commission-rates` · `POST /admin/commission-rates` | grille complète (en vigueur / programmé / archivé, nombre d'interventions qui ont figé chaque taux) ; ajout d'un taux daté. |
 | `GET /admin/audit` | journal, filtres action / type de cible / cible / auteur. Méthode GET seule (testé). |
+| `GET /admin/support/tickets` · `POST /admin/support/tickets/{id}/reply` | aide (lot `feat/disputes-support`) : demandes ouvertes (la plus ancienne d'abord) ou résolues ; réponse avec ou sans clôture, journalisée (`support_ticket.reply`) ; une demande résolue est définitive. Côté utilisateur : `POST` / `GET /support/tickets` (client et artisan, ses demandes seulement, message masqué, intervention à l'auteur sinon 404, limite de débit). DEPLOYMENT.md §17. |
 
 Côté artisan : `GET /artisans/me/reviews` (tous ses avis, masqués compris,
 avec statut de modération) et `POST /artisans/me/reviews/{id}/report`
@@ -1799,3 +1810,22 @@ Paiements (après le lot `feat/paiements`, §3.5) : recouvrement des
 commissions dues sur le cash, planification des relances de versements,
 libération automatique d'un séquestre après un délai sans contestation,
 abonnement « Vérifié » (la `platform_fee` découplée le permet déjà).
+
+Points ouverts relevés au lot `feat/disputes-support` (à traiter dans des
+lots dédiés, après le lot Aide) :
+
+- **Masquage des coordonnées : contournement par un chiffre accolé.**
+  `app/services/contact_masking.py` ne masque jamais « un nombre plus long »
+  (garde-fou anti-sur-masquage) : un numéro suivi d'un autre chiffre
+  (`77 123 45 67 8`) ou deux numéros séparés d'un simple espace passent EN
+  CLAIR, dans la messagerie comme dans les motifs. Correctif prévu, dans un
+  lot SÉPARÉ : masquer, dans une suite de chiffres, chaque tranche qui
+  commence par un préfixe sénégalais (70/75/76/77/78/33) suivie de
+  7 chiffres, sans toucher aux montants suivis d'une devise ni aux dates ;
+  contrepartie à mesurer : de longues références commençant par 77… seraient
+  masquées. Mettre à jour les tests anti-sur-masquage en conséquence.
+- **Litige : décision « en faveur du client » impossible si la commission
+  espèces est déjà collectée.** Aujourd'hui refusée (`COMMISSION_DEJA_REGLEE`,
+  409) avant toute modification, et annoncée sur la carte du back-office.
+  À faire plus tard : autoriser la décision et signaler à l'admin la
+  commission à RESTITUER à l'artisan (suivi explicite, jamais en silence).

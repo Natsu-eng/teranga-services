@@ -104,6 +104,10 @@ services:
         sync: false
       - key: S3_PUBLIC_BASE_URL
         sync: false
+      # Heures pour signaler un problème après la fin des travaux
+      # (DEPLOYMENT.md §16) : 72 par défaut si absente, 0 = désactivé.
+      - key: DISPUTE_WINDOW_HOURS
+        sync: false
       - key: OTP_TEST_WHITELIST
         sync: false
       - key: OTP_TEST_CODE

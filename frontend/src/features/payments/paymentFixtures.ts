@@ -59,6 +59,8 @@ export function payableInterventionFixture(overrides: Partial<Intervention> = {}
     review: null,
     conversationId: null,
     payment: paymentFixture(),
+    canOpenDispute: false,
+    disputeDeadline: null,
     dispute: null,
     createdAt: '2026-10-01T00:00:00Z',
     ...overrides,

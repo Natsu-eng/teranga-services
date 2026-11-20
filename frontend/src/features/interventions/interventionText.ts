@@ -5,6 +5,7 @@
  */
 import type { StatusTone } from '../../components/ui/StatusPill';
 import type { Intervention, InterventionStatus, UserRole } from '../../types';
+import { disputeOutcomeText } from './disputeText';
 
 export const STATUS: Record<InterventionStatus, { label: string; tone: StatusTone }> = {
   proposee: { label: 'En attente de réponse', tone: 'warning' },
@@ -36,6 +37,16 @@ export function formatDate(iso: string): string {
   });
 }
 
+/** Date et heure (limite de signalement d'un problème après les travaux). */
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 /** Un litige se décrit : en dessous, il ne serait pas exploitable (même borne que le serveur). */
 export const DISPUTE_REASON_MIN_LENGTH = 10;
 
@@ -54,7 +65,8 @@ export function cancellationText(intervention: Intervention, role: UserRole): st
       : 'Vous avez refusé cette mise en relation.';
   }
   if (cancellation.kind === 'arbitrage') {
-    return 'Litige tranché par Téranga : le client a été remboursé, aucune commission prélevée.';
+    // Fidèle à l'argent réellement détenu : « remboursé » seulement s'il l'a été.
+    return disputeOutcomeText('rembourse', intervention.payment);
   }
   if (cancellation.by === role) return 'Vous avez annulé cette mise en relation.';
   return cancellation.by === 'client'

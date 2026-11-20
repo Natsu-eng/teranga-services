@@ -42,7 +42,7 @@ afterEach(() => {
 });
 
 describe('AdminLayout', () => {
-  it('relie les huit sections du back-office et rend la section courante', () => {
+  it('relie les neuf sections du back-office et rend la section courante', () => {
     mockedUseAuth.mockReturnValue(authValue());
 
     renderAt('/admin/avis');
@@ -58,6 +58,7 @@ describe('AdminLayout', () => {
       'Utilisateurs',
       'Avis',
       'Litiges',
+      'Support',
       'Commissions',
       'Journal',
     ]);

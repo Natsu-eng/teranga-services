@@ -13,6 +13,7 @@ const ADMIN_SECTIONS = [
   { to: '/admin/utilisateurs', label: 'Utilisateurs', end: false },
   { to: '/admin/avis', label: 'Avis', end: false },
   { to: '/admin/litiges', label: 'Litiges', end: false },
+  { to: '/admin/support', label: 'Support', end: false },
   { to: '/admin/commissions', label: 'Commissions', end: false },
   { to: '/admin/journal', label: 'Journal', end: false },
 ] as const;

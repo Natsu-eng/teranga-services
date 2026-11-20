@@ -104,6 +104,8 @@ function interventionFixture(overrides: Partial<Intervention>): Intervention {
     completedAt: null,
     cancellation: null,
     payment: null,
+    canOpenDispute: false,
+    disputeDeadline: null,
     dispute: null,
     quote: null,
     review: null,

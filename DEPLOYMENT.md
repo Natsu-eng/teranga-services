@@ -1034,3 +1034,148 @@ sécurisé) avec un backend où `WEB_PUSH_ENABLED=true`.
   (`pushsubscriptionchange`, surtout Firefox), le nouveau n'est enregistré
   qu'à la prochaine ouverture de l'app ; l'ancien, refusé en 410, est alors
   supprimé.
+
+## 16. Litiges (signaler un problème)
+
+Une partie (client ou artisan) signale un problème sur une intervention ; un
+admin tranche depuis `/admin/litiges`. Règles du lot `feat/disputes-support` :
+
+### 16.1 Quand un problème peut être signalé
+
+- **Pendant les travaux** (`en_cours`) : toujours.
+- **Après la fin des travaux** (`terminee`) : pendant `DISPUTE_WINDOW_HOURS`
+  heures après la confirmation du client (**72 par défaut**, `0` = désactivé),
+  à condition qu'aucun litige n'ait déjà eu lieu sur l'intervention (un seul,
+  même tranché) et qu'**aucun paiement en ligne n'ait été versé** à l'artisan.
+  Refus clairs : `LITIGE_DELAI_DEPASSE`, `LITIGE_DEJA_OUVERT`,
+  `LITIGE_PAIEMENT_DEJA_VERSE` (HTTP 409).
+- L'écran ne montre le bouton « Signaler un problème » que si le serveur
+  l'accepterait (`can_open_dispute`, et `dispute_deadline` pour la limite
+  affichée après les travaux).
+
+**Versement différé : REPORTÉ.** Aujourd'hui, un paiement en ligne est versé
+à l'artisan dès la confirmation de fin des travaux : la fenêtre ne s'applique
+donc pas au séquestre (refus `LITIGE_PAIEMENT_DEJA_VERSE`). Retenir le
+versement jusqu'à la fin de la fenêtre exige un déclenchement planifié (cron
+Render payant, GitHub Action planifiée vers un endpoint protégé...) : à faire
+avec le branchement de l'agrégateur de paiement réel. En beta
+(`PAYMENT_PROVIDER=disabled`), tout se règle en espèces : la fenêtre
+s'applique pleinement.
+
+### 16.2 Ce qui se passe pendant le litige
+
+- Les admins reçoivent un **e-mail** (si `ADMIN_NOTIFICATION_EMAILS` et le
+  fournisseur e-mail sont configurés, §14) : métier, qui a signalé (client ou
+  artisan), lien `/admin/litiges`. **Jamais le motif**, ni nom, ni numéro.
+  Best-effort : un échec est journalisé (`Notification admin (litige ouvert)
+  NON envoyée : ...`), le signalement reste enregistré.
+- Le **motif** (comme celui d'une annulation ou d'un refus) est **masqué** à
+  l'écriture ET à la lecture (motifs enregistrés avant ce lot compris) :
+  numéros et e-mails remplacés, comme dans la messagerie — il est montré à
+  l'autre partie. Colonnes `Text` non bornées : le texte masqué, parfois plus
+  long que l'original, est toujours enregistré en entier.
+- Paiement en ligne **retenu** : gelé (ni versement ni remboursement).
+  Espèces ou hors plateforme : Téranga ne détient rien, le litige est une
+  **médiation** ; l'interface ne parle jamais d'« argent gelé ».
+- L'**avis** éventuel du client n'est plus public **si c'est le client qui a
+  signalé** (liste, compteur et note de l'artisan recalculés sans lui) ; il
+  redevient public dès la décision, quelle qu'elle soit. Un litige ouvert par
+  l'**artisan** ne masque jamais l'avis (anti-censure : on ne fait pas
+  disparaître une critique en ouvrant un litige).
+
+### 16.3 Les issues, selon l'argent réellement détenu
+
+Les valeurs stockées restent `libere` / `rembourse` ; leur effet et leurs
+libellés dépendent du paiement :
+
+| Cas | Issue « artisan » (`libere`) | Issue « client » (`rembourse`) |
+|---|---|---|
+| Paiement en ligne retenu | terminée, versement du net, commission prélevée | annulée, **client remboursé**, aucune commission |
+| Espèces | terminée, commission **due** par l'artisan | annulée, commission **annulée** ; le paiement espèces reste enregistré tel quel (Téranga ne peut pas le rembourser) |
+| Aucun paiement | terminée, commission due | annulée, commission annulée |
+
+- Litige ouvert **après** la fin des travaux : la date de fin d'origine est
+  conservée (issue artisan), et la demande **n'est pas rouverte** (issue
+  client) — les travaux ont eu lieu. Ouvert pendant les travaux : la demande
+  redevient ouverte (issue client), comme avant.
+- Issue « artisan » sur un litige ouvert après la fin : retour à l'état
+  d'avant, **rien n'est refait** (même commission, aucun versement, même date
+  de fin).
+- Commission **déjà réglée** (prélevée ou annulée) : une décision « en faveur
+  du client » est **refusée** (`COMMISSION_DEJA_REGLEE`, HTTP 409) avant
+  toute modification — rien n'est changé, l'admin traite le cas à la main. Le
+  back-office l'annonce sur la carte du litige avant la décision.
+- Chaque décision est justifiée (visible des deux parties) et inscrite au
+  journal d'audit (avec `opened_after_completion`).
+
+### 16.4 Effet temporaire sur les statistiques
+
+Le temps d'un litige ouvert après la fin, l'intervention n'est plus
+`terminee` : elle sort des compteurs qui ne regardent que ce statut —
+interventions terminées de l'artisan, espèces encaissées, commission due
+(`app/repositories/artisans.py` `count_completed_interventions`,
+`app/repositories/payments.py` `artisan_earnings_totals`) ; la vue
+d'ensemble admin la compte alors en commission « à prélever ». Tout revient
+à l'identique si l'issue est `libere` ; en faveur du client, l'intervention
+sort définitivement des terminées (commission annulée). Comportement voulu :
+un travail contesté n'est pas compté comme réussi tant qu'il n'est pas
+tranché.
+
+### 16.5 Variable
+
+| Variable | Rôle | Valeur |
+|---|---|---|
+| `DISPUTE_WINDOW_HOURS` | Heures pour signaler un problème après la fin des travaux | `72` (défaut), `0` = seulement pendant les travaux, au plus `720` |
+
+## 17. Aide (demandes au support)
+
+Un client ou un artisan écrit à Téranga depuis **Profil > Aide** (`/aide`) ;
+un admin répond depuis **Support** (`/admin/support`). Lot
+`feat/disputes-support`.
+
+### 17.1 Côté utilisateur
+
+- Comptes **client et artisan connectés** seulement (anonyme : 401 ; admin :
+  403). Sujets : compte, un artisan ou un client, paiement, problème dans
+  l'application, autre.
+- Message de **10 à 2000 caractères** (borné par le schéma), **masqué** à
+  l'écriture et à la lecture (numéros, e-mails) : la version d'origine n'est
+  jamais conservée.
+- **Intervention facultative**, pré-remplie depuis l'encart « Un souci ? »
+  d'une intervention quand le signalement n'y est plus possible (délai
+  dépassé, intervention close). Elle doit appartenir à l'auteur (client ou
+  artisan) ; sinon **404 identique** à une intervention inexistante (aucune
+  fuite d'existence).
+- « Mes demandes » : ses demandes **et seulement les siennes** (filtrées par
+  l'auteur côté serveur), avec statut et réponse de Téranga.
+- **Limite de débit** par utilisateur : `RATE_LIMIT_SUPPORT_TICKET_PER_USER_MAX`
+  demandes par `RATE_LIMIT_SUPPORT_TICKET_PER_USER_WINDOW_SECONDS` (5 par
+  heure par défaut) ; au-delà, 429 et rien n'est enregistré.
+
+### 17.2 Côté admin
+
+- File des demandes **ouvertes** (la plus ancienne d'abord) ou **résolues** :
+  sujet, rôle et nom public de l'auteur (jamais son numéro), message masqué,
+  intervention liée.
+- Réponse **« Répondre et clore »** (résolue, définitive) ou **« Répondre sans
+  clore »** (demande de précision, reste ouverte). Une demande résolue ne
+  change plus (409 `DEMANDE_AIDE_DEJA_RESOLUE`).
+- Chaque réponse est inscrite au **journal d'audit** (`support_ticket.reply`) :
+  catégorie, rôle de l'auteur, réponse de l'admin, résolue ou non — jamais le
+  message de l'utilisateur ni son nom.
+
+### 17.3 E-mail aux admins
+
+Si `ADMIN_NOTIFICATION_EMAILS` et le fournisseur e-mail sont configurés
+(§14) : un e-mail par nouvelle demande, avec la **catégorie, le rôle de
+l'auteur et le lien** `/admin/support` seulement (ni message, ni nom, ni
+numéro). Best-effort, en arrière-plan : un échec est journalisé
+(`Notification admin (demande d'aide) NON envoyée : ...`), la demande reste
+enregistrée.
+
+### 17.4 Migration
+
+`55f1da51e156` : table `support_ticket` et ajout de `support_ticket.reply` /
+`support_ticket` aux contraintes du journal d'audit. Downgrade refusé avec un
+message explicite si des réponses sont déjà journalisées (journal en ajout
+seul).

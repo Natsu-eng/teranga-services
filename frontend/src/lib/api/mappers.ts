@@ -15,6 +15,8 @@ import type {
   ArtisanStats,
   ArtisanTradeDetail,
   Intervention,
+  AdminSupportTicket,
+  SupportTicket,
   MyArtisanProfile,
   MyReceivedReview,
   PaymentSummary,
@@ -40,6 +42,8 @@ import type {
   BackendConversation,
   BackendConversationSummary,
   BackendIntervention,
+  BackendAdminSupportTicket,
+  BackendSupportTicket,
   BackendMediaUploadLimits,
   BackendMyReceivedReview,
   BackendMyVerification,
@@ -154,6 +158,30 @@ export function mapPayoutSettings(settings: BackendPayoutSettings): PayoutSettin
   };
 }
 
+export function mapSupportTicket(ticket: BackendSupportTicket): SupportTicket {
+  return {
+    id: ticket.id,
+    category: ticket.category,
+    message: ticket.message,
+    interventionId: ticket.intervention_id,
+    interventionTradeLabel: ticket.intervention_trade_label,
+    status: ticket.status,
+    adminReply: ticket.admin_reply,
+    repliedAt: ticket.replied_at,
+    resolvedAt: ticket.resolved_at,
+    createdAt: ticket.created_at,
+  };
+}
+
+export function mapAdminSupportTicket(ticket: BackendAdminSupportTicket): AdminSupportTicket {
+  return {
+    ...mapSupportTicket(ticket),
+    authorId: ticket.author_id,
+    authorName: ticket.author_name,
+    authorRole: ticket.author_role,
+  };
+}
+
 export function mapIntervention(intervention: BackendIntervention): Intervention {
   return {
     id: intervention.id,
@@ -170,6 +198,9 @@ export function mapIntervention(intervention: BackendIntervention): Intervention
     review: intervention.review ? mapReview(intervention.review) : null,
     conversationId: intervention.conversation_id ?? null,
     payment: intervention.payment ? mapPaymentSummary(intervention.payment) : null,
+    // Absent d'une ancienne réponse : jamais de bouton supposé disponible.
+    canOpenDispute: intervention.can_open_dispute ?? false,
+    disputeDeadline: intervention.dispute_deadline ?? null,
     dispute: intervention.dispute
       ? {
           openedBy: intervention.dispute.opened_by,

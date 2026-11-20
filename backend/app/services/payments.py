@@ -58,6 +58,7 @@ from app.services.intervention_errors import (
     InterventionIntrouvableError,
 )
 from app.services.payment_errors import (
+    CommissionDejaRegleeError,
     FournisseurPaiementIndisponibleError,
     MoyenPaiementIndisponibleError,
     PaiementDejaEffectueError,
@@ -505,6 +506,50 @@ async def settle_on_cancellation(
             payment.status = PaymentStatus.ANNULE
     fee = commission_fee(intervention)
     if fee is not None and fee.status is PlatformFeeStatus.DUE:
+        fee.status = PlatformFeeStatus.ANNULEE
+        fee.settled_at = _now()
+
+
+def ensure_client_decision_applicable(intervention: Intervention) -> None:
+    """Refuse une décision « en faveur du client » si la commission n'est plus
+    due (déjà prélevée ou annulée) : à appeler AVANT toute modification,
+    pour que le refus ne laisse rien derrière lui."""
+    fee = commission_fee(intervention)
+    if fee is not None and fee.status is not PlatformFeeStatus.DUE:
+        raise CommissionDejaRegleeError(fee.status)
+
+
+async def settle_on_arbitration_for_client(
+    session: AsyncSession,
+    intervention: Intervention,
+    *,
+    settings: Settings,
+    provider: PaymentProvider | None,
+) -> None:
+    """Litige tranché en faveur du client (intervention verrouillée par
+    l'appelant). Seul l'argent que Téranga DÉTIENT peut être rendu :
+
+    - fonds retenus en ligne -> remboursés ;
+    - checkout encore ouvert -> annulé (rien n'a été payé) ;
+    - espèces déclarées -> INCHANGÉES : réglées directement à l'artisan,
+      Téranga ne les détient pas et ne peut pas les rembourser ; un éventuel
+      remboursement se règle entre les parties ;
+    - commission due -> annulée (aucune commission sur un litige perdu par
+      l'artisan). Jamais de versement.
+
+    Commission déjà RÉGLÉE (collectée ou annulée) : refus explicite
+    (`ensure_client_decision_applicable`), AVANT tout remboursement --
+    jamais une décision appliquée à moitié en silence ; l'admin voit pourquoi.
+    """
+    ensure_client_decision_applicable(intervention)
+    fee = commission_fee(intervention)
+    payment = current_payment(intervention)
+    if payment is not None:
+        if payment.status is PaymentStatus.RETENU:
+            await _refund(payment, provider=provider, settings=settings)
+        elif payment.status is PaymentStatus.EN_ATTENTE:
+            payment.status = PaymentStatus.ANNULE
+    if fee is not None:
         fee.status = PlatformFeeStatus.ANNULEE
         fee.settled_at = _now()
 
