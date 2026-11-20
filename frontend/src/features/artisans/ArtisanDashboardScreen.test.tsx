@@ -188,9 +188,7 @@ describe('ArtisanDashboardScreen', () => {
 
     renderScreen();
 
-    expect(
-      await screen.findByRole('heading', { name: 'En attente de réponse' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'En attente de réponse' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Terminées' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Accepter' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Refuser' })).toBeInTheDocument();
@@ -268,16 +266,11 @@ describe('ArtisanDashboardScreen', () => {
 
   it('shows the onboarding state instead of stats/requests for an unverified artisan', async () => {
     mockedUseAuth.mockReturnValue(authValue({ role: 'artisan' }));
-    mockedApi.getMyArtisanProfile.mockResolvedValue({
-      ...profileFixture,
-      verifiedStatus: 'pending',
-    });
+    mockedApi.getMyArtisanProfile.mockResolvedValue({ ...profileFixture, verifiedStatus: 'pending' });
 
     renderScreen();
 
-    expect(
-      await screen.findByText('Votre compte est en cours de vérification'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Votre compte est en cours de vérification')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Compléter mon profil/ })).toBeInTheDocument();
     expect(screen.queryByText('Demandes reçues')).not.toBeInTheDocument();
     expect(mockedApi.getArtisanStats).not.toHaveBeenCalled();
