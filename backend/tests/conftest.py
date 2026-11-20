@@ -32,8 +32,18 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
+from app.services import rate_limit
 
 _test_engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_memory_rate_limiters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compteurs en mémoire NEUFS à chaque test : sans cela, les limiteurs
+    singletons du processus (plafond global de SMS, vérification OTP...)
+    accumuleraient les appels de TOUTE la suite, et un test échouerait selon
+    l'ordre d'exécution."""
+    monkeypatch.setattr(rate_limit, "_memory_limiters", {})
 
 
 @pytest.fixture
