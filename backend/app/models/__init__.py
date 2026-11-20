@@ -17,6 +17,7 @@ from app.models.rate_limit import RateLimitHit
 from app.models.refresh_token import RefreshToken
 from app.models.request import ServiceRequest
 from app.models.review import Review
+from app.models.support import SupportTicket
 from app.models.trade import Trade
 from app.models.user import User
 
@@ -41,6 +42,7 @@ __all__ = [
     "RefreshToken",
     "Review",
     "ServiceRequest",
+    "SupportTicket",
     "Trade",
     "User",
     "Verification",

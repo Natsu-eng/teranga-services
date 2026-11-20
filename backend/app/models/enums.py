@@ -187,6 +187,8 @@ class AuditAction(StrEnum):
     REVIEW_HIDE = "review.hide"
     REVIEW_RESTORE = "review.restore"
     COMMISSION_RATE_CREATE = "commission_rate.create"
+    # Réponse d'un admin à une demande d'aide (éventuellement avec clôture).
+    SUPPORT_TICKET_REPLY = "support_ticket.reply"
 
 
 class AuditTargetType(StrEnum):
@@ -196,3 +198,21 @@ class AuditTargetType(StrEnum):
     USER = "user"
     REVIEW = "review"
     COMMISSION_RATE = "commission_rate"
+    SUPPORT_TICKET = "support_ticket"
+
+
+class SupportCategory(StrEnum):
+    """Sujet d'une demande d'aide (« Aide / Signaler un problème »)."""
+
+    COMPTE = "compte"
+    # Un problème avec une autre personne (un artisan pour un client, un
+    # client pour un artisan).
+    UTILISATEUR = "utilisateur"
+    PAIEMENT = "paiement"
+    BUG = "bug"
+    AUTRE = "autre"
+
+
+class SupportTicketStatus(StrEnum):
+    OUVERT = "ouvert"
+    RESOLU = "resolu"
