@@ -92,8 +92,9 @@ async def recalculate_artisan_rating(session: AsyncSession, artisan_id: uuid.UUI
     """Recalcule `rating_avg`/`review_count` depuis les avis visibles (BUILD_PLAN.md §6, §3.6).
 
     Comptent les avis publiés ET signalés en attente de décision ; un avis
-    masqué par un admin n'entre plus dans la moyenne. À appeler après toute
-    création d'avis ou changement de statut.
+    masqué par un admin, ou dont l'intervention est en litige, n'entre plus
+    dans la moyenne (`publicly_visible`). À appeler après toute création
+    d'avis, changement de statut, ouverture ou décision de litige.
 
     Le profil est verrouillé AVANT l'agrégat : deux modérations simultanées
     sur des avis du même artisan sont sérialisées, et la seconde, qui relit
@@ -115,7 +116,7 @@ async def recalculate_artisan_rating(session: AsyncSession, artisan_id: uuid.UUI
         await session.execute(
             select(func.round(func.avg(Review.rating), 2), func.count(Review.id)).where(
                 Review.artisan_id == artisan_id,
-                Review.status.in_(reviews_repository.VISIBLE_REVIEW_STATUSES),
+                reviews_repository.publicly_visible(),
             )
         )
     ).one()
