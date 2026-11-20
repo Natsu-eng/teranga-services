@@ -1034,3 +1034,84 @@ sécurisé) avec un backend où `WEB_PUSH_ENABLED=true`.
   (`pushsubscriptionchange`, surtout Firefox), le nouveau n'est enregistré
   qu'à la prochaine ouverture de l'app ; l'ancien, refusé en 410, est alors
   supprimé.
+
+## 16. Litiges (signaler un problème)
+
+Une partie (client ou artisan) signale un problème sur une intervention ; un
+admin tranche depuis `/admin/litiges`. Règles du lot `feat/disputes-support` :
+
+### 16.1 Quand un problème peut être signalé
+
+- **Pendant les travaux** (`en_cours`) : toujours.
+- **Après la fin des travaux** (`terminee`) : pendant `DISPUTE_WINDOW_HOURS`
+  heures après la confirmation du client (**72 par défaut**, `0` = désactivé),
+  à condition qu'aucun litige n'ait déjà eu lieu sur l'intervention (un seul,
+  même tranché) et qu'**aucun paiement en ligne n'ait été versé** à l'artisan.
+  Refus clairs : `LITIGE_DELAI_DEPASSE`, `LITIGE_DEJA_OUVERT`,
+  `LITIGE_PAIEMENT_DEJA_VERSE` (HTTP 409).
+- L'écran ne montre le bouton « Signaler un problème » que si le serveur
+  l'accepterait (`can_open_dispute`, et `dispute_deadline` pour la limite
+  affichée après les travaux).
+
+**Versement différé : REPORTÉ.** Aujourd'hui, un paiement en ligne est versé
+à l'artisan dès la confirmation de fin des travaux : la fenêtre ne s'applique
+donc pas au séquestre (refus `LITIGE_PAIEMENT_DEJA_VERSE`). Retenir le
+versement jusqu'à la fin de la fenêtre exige un déclenchement planifié (cron
+Render payant, GitHub Action planifiée vers un endpoint protégé...) : à faire
+avec le branchement de l'agrégateur de paiement réel. En beta
+(`PAYMENT_PROVIDER=disabled`), tout se règle en espèces : la fenêtre
+s'applique pleinement.
+
+### 16.2 Ce qui se passe pendant le litige
+
+- Les admins reçoivent un **e-mail** (si `ADMIN_NOTIFICATION_EMAILS` et le
+  fournisseur e-mail sont configurés, §14) : métier, qui a signalé (client ou
+  artisan), lien `/admin/litiges`. **Jamais le motif**, ni nom, ni numéro.
+  Best-effort : un échec est journalisé (`Notification admin (litige ouvert)
+  NON envoyée : ...`), le signalement reste enregistré.
+- Le **motif** (comme celui d'une annulation ou d'un refus) est **masqué** à
+  l'écriture : numéros et e-mails remplacés, comme dans la messagerie — il est
+  montré à l'autre partie.
+- Paiement en ligne **retenu** : gelé (ni versement ni remboursement).
+  Espèces ou hors plateforme : Téranga ne détient rien, le litige est une
+  **médiation** ; l'interface ne parle jamais d'« argent gelé ».
+- L'**avis** éventuel du client n'est plus public (liste, compteur et note de
+  l'artisan recalculés sans lui) ; il redevient public dès la décision, quelle
+  qu'elle soit.
+
+### 16.3 Les issues, selon l'argent réellement détenu
+
+Les valeurs stockées restent `libere` / `rembourse` ; leur effet et leurs
+libellés dépendent du paiement :
+
+| Cas | Issue « artisan » (`libere`) | Issue « client » (`rembourse`) |
+|---|---|---|
+| Paiement en ligne retenu | terminée, versement du net, commission prélevée | annulée, **client remboursé**, aucune commission |
+| Espèces | terminée, commission **due** par l'artisan | annulée, commission **annulée** ; le paiement espèces reste enregistré tel quel (Téranga ne peut pas le rembourser) |
+| Aucun paiement | terminée, commission due | annulée, commission annulée |
+
+- Litige ouvert **après** la fin des travaux : la date de fin d'origine est
+  conservée (issue artisan), et la demande **n'est pas rouverte** (issue
+  client) — les travaux ont eu lieu. Ouvert pendant les travaux : la demande
+  redevient ouverte (issue client), comme avant.
+- Chaque décision est justifiée (visible des deux parties) et inscrite au
+  journal d'audit (avec `opened_after_completion`).
+
+### 16.4 Effet temporaire sur les statistiques
+
+Le temps d'un litige ouvert après la fin, l'intervention n'est plus
+`terminee` : elle sort des compteurs qui ne regardent que ce statut —
+interventions terminées de l'artisan, espèces encaissées, commission due
+(`app/repositories/artisans.py` `count_completed_interventions`,
+`app/repositories/payments.py` `artisan_earnings_totals`) ; la vue
+d'ensemble admin la compte alors en commission « à prélever ». Tout revient
+à l'identique si l'issue est `libere` ; en faveur du client, l'intervention
+sort définitivement des terminées (commission annulée). Comportement voulu :
+un travail contesté n'est pas compté comme réussi tant qu'il n'est pas
+tranché.
+
+### 16.5 Variable
+
+| Variable | Rôle | Valeur |
+|---|---|---|
+| `DISPUTE_WINDOW_HOURS` | Heures pour signaler un problème après la fin des travaux | `72` (défaut), `0` = seulement pendant les travaux, au plus `720` |

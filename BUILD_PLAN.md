@@ -1105,12 +1105,19 @@ plateforme est mesuré, jamais ignoré.
   checkout ouvert ou espèces -> `annule`, commission `annulee`, **jamais de
   versement ni de commission**, demande rouverte.
 - Litige (`POST /interventions/{id}/dispute`, client ou artisan, travaux en
-  cours) : l'argent est **gelé** tel quel. C'est aussi le recours de
-  l'artisan si le client ne confirme jamais la fin. Un admin tranche
-  (`POST /admin/disputes/{id}/resolve`) : `libere` -> même enchaînement
-  qu'une complétion (versement du net) ; `rembourse` -> intervention
-  annulée (arbitrage), client remboursé, aucune commission. Justification
-  obligatoire, visible des deux parties.
+  cours, ou après leur fin pendant `DISPUTE_WINDOW_HOURS` -- 72 h par
+  défaut -- sans paiement en ligne déjà versé ; un seul par intervention) :
+  l'argent retenu est **gelé** tel quel. C'est aussi le recours de
+  l'artisan si le client ne confirme jamais la fin. Motif masqué (numéros,
+  e-mails), e-mail aux admins sans le motif, avis suspendu publiquement
+  jusqu'à la décision. Un admin tranche (`POST /admin/disputes/{id}/resolve`) :
+  `libere` -> même enchaînement qu'une complétion (versement du net ;
+  espèces : commission due ; date de fin d'origine conservée) ; `rembourse`
+  -> intervention annulée (arbitrage), commission annulée, **remboursement
+  seulement des fonds réellement retenus** (espèces : rien à rembourser par
+  Téranga, paiement laissé tel quel), demande rouverte seulement si le
+  litige a été ouvert pendant les travaux. Justification obligatoire,
+  visible des deux parties. Détail : DEPLOYMENT.md §16.
 - Remboursement **idempotent** (clé `refund-<id>`) et exécuté AVANT le
   commit : si notre transaction échoue après l'appel, la relance ne
   rembourse pas deux fois. Fournisseur indisponible -> 502, rien ne change.
@@ -1169,7 +1176,10 @@ recevez ». Aucun montant n'est calculé par le front.
 **Limites connues.** Recouvrement des commissions dues (cash) non codé ;
 versements relancés par script (pas encore de planificateur) ; montant
 incohérent signalé par un webhook traité manuellement ; litige sans
-délai automatique de libération ; un seul fournisseur actif à la fois (un
+délai automatique de libération ; **versement différé pendant la fenêtre de
+litige non codé** (le versement en ligne part à la confirmation ; un litige
+après un versement est refusé) -- à faire avec l'agrégateur réel et un
+déclenchement planifié ; un seul fournisseur actif à la fois (un
 remboursement exige le fournisseur d'origine).
 
 
