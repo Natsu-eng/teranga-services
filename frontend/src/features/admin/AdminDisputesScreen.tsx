@@ -12,7 +12,11 @@ import { ApiError, api } from '../../lib/api';
 import { formatFcfa } from '../../lib/format';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { Intervention } from '../../types';
-import { adminOutcomeLabels, adminOutcomePill } from '../interventions/disputeText';
+import {
+  adminOutcomeLabels,
+  adminOutcomePill,
+  settledCommissionWarning,
+} from '../interventions/disputeText';
 import { CHANNEL_LABELS, formatPaymentDate, formatRate } from '../payments/paymentText';
 
 /** Longueur minimale de la justification (alignée sur la validation serveur). */
@@ -41,6 +45,7 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
   // ou médiation en espèces / hors plateforme) : jamais un remboursement
   // que Téranga ne pourrait pas faire.
   const outcomeLabels = adminOutcomeLabels(payment);
+  const commissionWarning = isOpen ? settledCommissionWarning(payment) : null;
 
   const confirm = async () => {
     if (!outcome || note.trim().length < MIN_NOTE_LENGTH) return;
@@ -101,6 +106,12 @@ const DisputeCard: React.FC<{ intervention: Intervention; onResolved: (id: strin
         </dl>
       ) : (
         <p className="text-sm text-muted-foreground">Aucun devis accepté.</p>
+      )}
+
+      {commissionWarning && (
+        <p role="note" className="rounded-field bg-accent-soft p-3 text-sm text-foreground">
+          {commissionWarning}
+        </p>
       )}
 
       {!isOpen && dispute.resolutionNote && (

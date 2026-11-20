@@ -97,6 +97,22 @@ export function adminOutcomeLabels(
   };
 }
 
+/**
+ * Back-office : commission qui n'est PLUS due (déjà prélevée ou annulée).
+ * Une décision « en faveur du client » est alors refusée par le serveur
+ * (rien n'est modifié) : l'admin le voit avant même de cliquer.
+ */
+export function settledCommissionWarning(payment: PaymentSummary | null): string | null {
+  const status = payment?.commission.status;
+  if (status === 'collectee') {
+    return 'Commission déjà prélevée : une décision en faveur du client sera refusée, à traiter manuellement.';
+  }
+  if (status === 'annulee') {
+    return 'Commission déjà annulée : une décision en faveur du client sera refusée, à traiter manuellement.';
+  }
+  return null;
+}
+
 /** Back-office : pastille d'un litige tranché, fidèle à ce qui a été fait. */
 export function adminOutcomePill(outcome: Outcome, payment: PaymentSummary | null): string {
   if (outcome === 'libere') {
