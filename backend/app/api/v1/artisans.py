@@ -30,6 +30,8 @@ from app.schemas.artisans import (
     ArtisanStatsPrivateOut,
     ArtisanStatsPublicOut,
     ArtisanTradeCreateIn,
+    ArtisanTradeRadiusUpdateIn,
+    ArtisanZoneOut,
     MyVerificationOut,
     ProfileMediaConstraintsOut,
     VerificationDocumentOut,
@@ -216,6 +218,38 @@ async def add_my_trade(
     )
     await session.commit()
     return result
+
+
+@router.patch("/me/trades/{artisan_trade_id}", response_model=ArtisanZoneOut)
+async def update_my_trade_radius(
+    artisan_trade_id: uuid.UUID,
+    payload: ArtisanTradeRadiusUpdateIn,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanZoneOut:
+    """Change le rayon d'intervention d'un métier sans le retirer (plafond
+    ARTISAN_SERVICE_RADIUS_MAX_M, compté dans les changements de zone)."""
+    result = await artisan_profile_service.update_trade_radius(
+        session,
+        user=artisan,
+        artisan_trade_id=artisan_trade_id,
+        radius_m=payload.service_radius_m,
+        settings=settings,
+    )
+    await session.commit()
+    return result
+
+
+@router.get("/me/zone", response_model=ArtisanZoneOut)
+async def get_my_zone(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    artisan: Annotated[User, Depends(require_role(Role.ARTISAN))],
+) -> ArtisanZoneOut:
+    """Zone d'intervention de l'artisan connecté : source, quartier, rayon
+    par métier, changements restants. Aucune coordonnée."""
+    return await artisan_profile_service.get_my_zone(session, user=artisan, settings=settings)
 
 
 @router.delete("/me/trades/{artisan_trade_id}", response_model=ArtisanDetailOut)

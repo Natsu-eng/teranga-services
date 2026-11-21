@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
 from app.models.commission import CommissionRate
 from app.models.enums import (
+    ArtisanLocationSource,
     ArtisanVerifiedStatus,
     InterventionStatus,
     Locale,
@@ -93,11 +94,16 @@ async def make_artisan_profile(
     lng: float = DEFAULT_LNG,
     bio: str | None = None,
     is_available: bool = True,
+    placed: bool = True,
 ) -> ArtisanProfile:
+    """Artisan vérifié. Placé par défaut à (`lat`, `lng`) tels quels (source
+    `gps`) : la fabrique écrit en base sans passer par l'API, qui, elle,
+    arrondirait la position. `placed=False` : artisan sans position."""
     artisan_user = user or await make_user(session, role=Role.ARTISAN, full_name="Test Artisan")
     profile = ArtisanProfile(
         user_id=artisan_user.id,
-        base_location=point(lat, lng),
+        base_location=point(lat, lng) if placed else None,
+        location_source=ArtisanLocationSource.GPS if placed else None,
         bio=bio,
         is_available=is_available,
         verified_status=ArtisanVerifiedStatus.VERIFIED,

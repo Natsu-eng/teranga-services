@@ -36,7 +36,7 @@ async def _client() -> AsyncClient:
     return AsyncClient(transport=transport, base_url="http://test")
 
 
-async def test_list_returns_paginated_envelope_with_idrissa_at_zero_distance(
+async def test_list_returns_paginated_envelope_with_idrissa_at_the_first_step(
     db_session: AsyncSession,
 ) -> None:
     # Le seed COMPLET (métiers, artisans, avis, notes recalculées) tourne dans
@@ -65,7 +65,9 @@ async def test_list_returns_paginated_envelope_with_idrissa_at_zero_distance(
     assert body["pagination"]["page_size"] == get_settings().pagination_page_size_default
     assert body["pagination"]["total"] >= 1
     item = next(i for i in body["items"] if i["id"] == idrissa_id)
-    assert item["distance_m"] == 0
+    # Position du seed arrondie sur la grille (< 1 pas de la référence), puis
+    # distance publique arrondie au pas supérieur : jamais « 0 m ».
+    assert item["distance_m"] == get_settings().public_distance_rounding_m
     assert item["full_name"] == "Idrissa Diop"
     assert item["trades"][0]["trade"]["code"] == "plomberie"
     assert item["verified_status"] == "verified"

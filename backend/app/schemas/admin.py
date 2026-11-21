@@ -15,6 +15,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import (
+    ArtisanLocationSource,
     ArtisanVerifiedStatus,
     ReviewStatus,
     Role,
@@ -62,6 +63,16 @@ class VerificationReviewOut(BaseModel):
     artisan_verified_status: ArtisanVerifiedStatus
 
 
+class AdminArtisanZoneOut(BaseModel):
+    """Zone d'intervention vue par l'admin : d'où vient la position, sans
+    la position elle-même (inutile pour décider, et jamais exposée)."""
+
+    placed: bool
+    source: ArtisanLocationSource | None
+    neighborhood_id: str | None
+    neighborhood_label: str | None
+
+
 class AdminArtisanDetailOut(BaseModel):
     """Vue admin d'un artisan : profil + historique complet de ses documents
     (contrairement à `ArtisanDetailOut`, public, qui n'expose aucun
@@ -84,9 +95,12 @@ class AdminArtisanDetailOut(BaseModel):
     is_suspended: bool
     suspended_at: datetime | None
     suspension_reason: str | None
+    # Zone d'intervention (rayons : dans `trades`).
+    zone: AdminArtisanZoneOut
     # Interventions de l'artisan, par statut.
     interventions: dict[str, int]
-    # Décisions admin le concernant (journal d'audit), plus récentes d'abord.
+    # Journal le concernant (décisions admin, changements de zone), plus
+    # récents d'abord.
     history: list[AuditEntryOut]
 
 

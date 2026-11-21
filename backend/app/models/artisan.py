@@ -13,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    String,
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.models.enums import (
+    ArtisanLocationSource,
     ArtisanVerifiedStatus,
     PayoutChannel,
     SubscriptionTier,
@@ -42,6 +44,16 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
+# Texte recopié à l'identique dans la migration 7c41d2e9a5b3 (une migration
+# reste figée même si le modèle change) ; un test vérifie qu'ils concordent.
+LOCATION_FIELDS_CONSISTENT_SQL = (
+    "(location_source IS NULL AND neighborhood_id IS NULL AND base_location IS NULL)"
+    " OR (location_source IS NOT NULL AND base_location IS NOT NULL AND ("
+    "(location_source = 'gps' AND neighborhood_id IS NULL)"
+    " OR (location_source = 'neighborhood' AND neighborhood_id IS NOT NULL)))"
+)
+
+
 class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base):
     """Extension 1:1 d'un `user` de rôle `artisan`."""
 
@@ -53,6 +65,11 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
             "(suspended_at IS NULL) = (suspension_reason IS NULL)",
             name="suspension_fields_together",
         ),
+        # Position, source et quartier vont ensemble : non placé (rien),
+        # placé par GPS (sans quartier) ou au centre d'un quartier. Écrite
+        # pour ne JAMAIS valoir NULL (un CHECK à NULL est accepté) : la
+        # source est testée non nulle avant toute comparaison.
+        CheckConstraint(LOCATION_FIELDS_CONSISTENT_SQL, name="location_fields_consistent"),
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -60,9 +77,18 @@ class ArtisanProfile(UUIDPrimaryKeyMixin, TimestampMixin, SoftDeleteMixin, Base)
     )
     bio: Mapped[str | None] = mapped_column(Text)
     years_experience: Mapped[int | None] = mapped_column(Integer)
+    # Jamais une position précise : le centre d'un quartier, ou une position
+    # GPS arrondie sur une grille (app.core.geo_privacy). NULL = non placé,
+    # l'artisan ne reçoit alors aucune demande.
     base_location: Mapped[WKBElement | WKTElement | None] = mapped_column(
         Geography(geometry_type="POINT", srid=4326, spatial_index=False)
     )
+    location_source: Mapped[ArtisanLocationSource | None] = mapped_column(
+        enum_column(ArtisanLocationSource, "artisan_profile_location_source")
+    )
+    # Identifiant de la liste fermée app.core.neighborhoods (pas de clé
+    # étrangère : la liste vit dans le code, validée à l'écriture).
+    neighborhood_id: Mapped[str | None] = mapped_column(String(64))
     avatar_url: Mapped[str | None] = mapped_column(Text)
     cover_url: Mapped[str | None] = mapped_column(Text)
     is_available: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

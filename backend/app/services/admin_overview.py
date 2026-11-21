@@ -99,6 +99,18 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
             .where(ArtisanProfile.deleted_at.is_(None), ArtisanProfile.suspended_at.is_not(None))
         )
     ).scalar_one()
+    verified_unplaced = (
+        await session.execute(
+            select(func.count())
+            .select_from(ArtisanProfile)
+            .where(
+                ArtisanProfile.deleted_at.is_(None),
+                ArtisanProfile.suspended_at.is_(None),
+                ArtisanProfile.verified_status == ArtisanVerifiedStatus.VERIFIED,
+                ArtisanProfile.base_location.is_(None),
+            )
+        )
+    ).scalar_one()
     reported_reviews = (
         await session.execute(
             select(func.count()).select_from(Review).where(Review.status == ReviewStatus.SIGNALE)
@@ -124,6 +136,7 @@ async def get_overview(session: AsyncSession) -> AdminOverviewOut:
             total=sum(artisans.values()),
             **{status.value: artisans.get(status.value, 0) for status in ArtisanVerifiedStatus},
             suspended=suspended_artisans,
+            verified_unplaced=verified_unplaced,
         ),
         users=UserCountsOut(
             clients=users.get(Role.CLIENT.value, 0),

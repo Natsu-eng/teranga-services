@@ -17,16 +17,18 @@ from app.models.artisan import ArtisanProfile
 from app.models.user import User
 from app.repositories import artisans as artisans_repository
 from app.repositories import trades as trades_repository
-from app.repositories.requests import to_point
 from app.schemas.artisans import (
     ArtisanDetailOut,
     ArtisanProfileUpdateIn,
     ArtisanTradeCreateIn,
+    ArtisanZoneOut,
 )
+from app.services import artisan_location
 from app.services.artisan_errors import (
     ArtisanMetierDejaDeclareError,
     ArtisanProfilIntrouvableError,
     ArtisanTradeIntrouvableError,
+    FormatPositionObsoleteError,
     MetierIntrouvableError,
     ZoneInterventionInvalideError,
 )
@@ -57,8 +59,21 @@ async def update_profile(
     aussi bien le toggle historique (`{is_available}` seul, Lot 12c) que
     l'édition complète de l'onboarding, sans qu'omettre un champ ne
     l'efface. Ne touche jamais `verified_status` (toujours dérivé) ni le
-    rôle -- absents du schéma d'entrée."""
+    rôle -- absents du schéma d'entrée.
+
+    Position : uniquement `location` (quartier ou GPS, voir
+    `app.services.artisan_location`) ; l'ancien `base_location` à
+    coordonnées libres est refusé AVANT toute modification."""
+    if "base_location" in payload.model_fields_set:
+        raise FormatPositionObsoleteError()
     profile = await get_own_profile(session, user)
+    # En PREMIER : le placement verrouille et relit la ligne du profil ; fait
+    # après les autres champs, cette relecture écraserait leurs nouvelles
+    # valeurs encore en mémoire.
+    if payload.location is not None:
+        await artisan_location.apply_location(
+            session, user=user, profile=profile, location=payload.location, settings=settings
+        )
     fields = payload.model_dump(exclude_unset=True)
 
     if "is_available" in fields:
@@ -77,9 +92,6 @@ async def update_profile(
         profile.avatar_url = fields["avatar_url"]
     if "cover_url" in fields:
         profile.cover_url = fields["cover_url"]
-    if "base_location" in fields:
-        location = fields["base_location"]
-        profile.base_location = to_point(lat=location["lat"], lng=location["lng"])
 
     await session.flush()
     required_doc_types = list(settings.verification_required_doc_types)
@@ -113,6 +125,7 @@ async def add_trade(
         session, artisan_id=profile.id, trade_id=trade.id
     ):
         raise ArtisanMetierDejaDeclareError()
+    artisan_location.ensure_radius_allowed(payload.service_radius_m, settings=settings)
 
     service_area = _to_polygon(payload.service_area) if payload.service_area else None
     await artisans_repository.create_artisan_trade(
@@ -147,3 +160,31 @@ async def remove_trade(
 
     required_doc_types = list(settings.verification_required_doc_types)
     return to_detail(profile, required_doc_types=required_doc_types)
+
+
+async def update_trade_radius(
+    session: AsyncSession,
+    *,
+    user: User,
+    artisan_trade_id: uuid.UUID,
+    radius_m: int,
+    settings: Settings,
+) -> ArtisanZoneOut:
+    """`PATCH /artisans/me/trades/{id}` : nouveau rayon d'un métier de
+    l'artisan courant (jamais celui d'un tiers), sans retirer le métier."""
+    profile = await get_own_profile(session, user)
+    await artisan_location.update_trade_radius(
+        session,
+        user=user,
+        profile=profile,
+        artisan_trade_id=artisan_trade_id,
+        radius_m=radius_m,
+        settings=settings,
+    )
+    return await artisan_location.get_zone(session, profile=profile, settings=settings)
+
+
+async def get_my_zone(session: AsyncSession, *, user: User, settings: Settings) -> ArtisanZoneOut:
+    """`GET /artisans/me/zone` : zone d'intervention et changements restants."""
+    profile = await get_own_profile(session, user)
+    return await artisan_location.get_zone(session, profile=profile, settings=settings)

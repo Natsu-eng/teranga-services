@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import AppError
+from app.core.neighborhoods import resolve_neighborhood
 from app.models.enums import AuditAction, AuditTargetType, InterventionStatus, VerificationStatus
 from app.models.intervention import Intervention
 from app.models.user import User
@@ -26,6 +27,7 @@ from app.repositories import audit as audit_repository
 from app.repositories import verification as verification_repository
 from app.schemas.admin import (
     AdminArtisanDetailOut,
+    AdminArtisanZoneOut,
     AdminVerificationListItemOut,
     VerificationReviewOut,
 )
@@ -222,6 +224,9 @@ async def get_artisan_detail_for_admin(
     history = await audit_repository.list_for_artisan(
         session, profile.id, limit=settings.pagination_page_size_max
     )
+    neighborhood = (
+        resolve_neighborhood(profile.neighborhood_id) if profile.neighborhood_id else None
+    )
     return AdminArtisanDetailOut(
         id=detail.id,
         full_name=detail.full_name,
@@ -239,6 +244,12 @@ async def get_artisan_detail_for_admin(
         is_suspended=profile.suspended_at is not None,
         suspended_at=profile.suspended_at,
         suspension_reason=profile.suspension_reason,
+        zone=AdminArtisanZoneOut(
+            placed=profile.base_location is not None,
+            source=profile.location_source,
+            neighborhood_id=profile.neighborhood_id,
+            neighborhood_label=neighborhood.label if neighborhood is not None else None,
+        ),
         interventions={
             status.value: intervention_counts.get(status.value, 0) for status in InterventionStatus
         },

@@ -103,28 +103,38 @@ async def test_is_available_only_still_works_unchanged(db_session: AsyncSession)
     assert response.json()["is_available"] is False
 
 
-async def test_updates_base_location(db_session: AsyncSession) -> None:
+async def test_old_free_coordinates_format_is_refused_and_changes_nothing(
+    db_session: AsyncSession,
+) -> None:
+    """L'ancien `base_location` à coordonnées libres est REFUSÉ avec un
+    message clair -- jamais appliqué, jamais ignoré en silence -- et rien
+    d'autre de la requête n'est appliqué."""
     owner_user = await make_user(db_session, role=Role.ARTISAN)
-    await make_artisan_profile(db_session, user=owner_user)
+    artisan = await make_artisan_profile(db_session, user=owner_user, bio="Avant")
 
     async with await _client() as client:
         response = await client.patch(
             "/api/v1/artisans/me",
-            json={"base_location": {"lat": 14.7167, "lng": -17.4677}},
+            json={"base_location": {"lat": 14.7167, "lng": -17.4677}, "bio": "Après"},
             headers=_auth_headers(owner_user),
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "FORMAT_POSITION_OBSOLETE"
+    assert "location" in error["message"]
+    await db_session.refresh(artisan)
+    assert artisan.bio == "Avant"
 
 
-async def test_invalid_base_location_is_rejected(db_session: AsyncSession) -> None:
+async def test_invalid_gps_location_is_rejected(db_session: AsyncSession) -> None:
     owner_user = await make_user(db_session, role=Role.ARTISAN)
     await make_artisan_profile(db_session, user=owner_user)
 
     async with await _client() as client:
         response = await client.patch(
             "/api/v1/artisans/me",
-            json={"base_location": {"lat": 200, "lng": -17.4677}},
+            json={"location": {"source": "gps", "lat": 200, "lng": -17.4677}},
             headers=_auth_headers(owner_user),
         )
 

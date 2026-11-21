@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.geo_privacy import round_public_distance
 from app.models.artisan import ArtisanProfile
 from app.models.enums import Role, VerificationDocType
 from app.models.user import User
@@ -81,7 +82,7 @@ def _common_fields(
 
     Jamais de coordonnées brutes ni de contact (BUILD_PLAN.md §2.2) : seule
     `distance_m` porte un signal de position, uniquement quand `near` a été
-    fourni à la recherche.
+    fourni à la recherche, et toujours arrondie.
     """
     return {
         "id": profile.id,
@@ -194,8 +195,16 @@ async def list_artisans(
     total = await artisans_repository.count_artisans(session, filters)
 
     required_doc_types = list(settings.verification_required_doc_types)
+    # Distance publique ARRONDIE (PUBLIC_DISTANCE_ROUNDING_M) : avec une
+    # valeur exacte, quelques recherches depuis des points différents
+    # suffiraient à trianguler le point enregistré de l'artisan.
+    step = settings.public_distance_rounding_m
     items = [
-        _to_list_item(profile, distance, required_doc_types=required_doc_types)
+        _to_list_item(
+            profile,
+            round_public_distance(distance, step_m=step) if distance is not None else None,
+            required_doc_types=required_doc_types,
+        )
         for profile, distance in rows
     ]
     return Page.of(items, page=page, page_size=resolved_page_size, total=total)
