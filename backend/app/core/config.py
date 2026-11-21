@@ -9,6 +9,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
+from app.core.geo_privacy import haversine_m
+from app.core.neighborhoods import NEIGHBORHOODS
 from app.core.vapid import load_private_key as load_vapid_private_key
 from app.core.vapid import load_public_key as load_vapid_public_key
 from app.core.vapid import public_key_matches as vapid_public_key_matches
@@ -764,6 +766,64 @@ class Settings(BaseSettings):
     # Plafond dur du rayon de recherche, en mètres -- au-delà, une recherche
     # perd sa pertinence géo et dégrade la sélectivité de l'index GiST.
     artisan_search_max_radius_m: int = 50_000
+
+    # --- Zone d'intervention des artisans (DEPLOYMENT.md §19) -------------
+    # Région desservie : cercle (centre, rayon) hors duquel une position GPS
+    # d'artisan est refusée. Défaut : le milieu de l'emprise OpenStreetMap
+    # des 53 communes de la région de Dakar ; leur point de frontière le
+    # plus éloigné (côté Yène / Sébikotane) en est à 26,6 km, d'où 30 km
+    # (marge pour l'imprécision du GPS). Le cercle déborde un peu sur la mer
+    # et la région de Thiès : il sert de garde-fou, la liste des quartiers
+    # reste la référence. Vérifié au démarrage : chaque centre de quartier
+    # doit être dans la région.
+    service_region_center_lat: float = Field(default=14.7394, ge=-90, le=90)
+    service_region_center_lng: float = Field(default=-17.3348, ge=-180, le=180)
+    service_region_radius_m: int = Field(default=30_000, gt=0)
+    # Maille de la grille sur laquelle une position GPS est arrondie AVANT
+    # d'être enregistrée, en mètres (écart max ~0,7 x maille).
+    artisan_gps_grid_m: int = Field(default=500, ge=100, le=5_000)
+    # Changements de zone (position ou rayon d'un métier) autorisés à un
+    # artisan : sur une fenêtre courte et sur une fenêtre longue. Le premier
+    # placement ne compte pas. Au-delà : 429 explicite.
+    artisan_location_changes_short_max: int = Field(default=3, ge=1)
+    artisan_location_changes_short_window_hours: int = Field(default=24, ge=1)
+    artisan_location_changes_long_max: int = Field(default=10, ge=1)
+    artisan_location_changes_long_window_days: int = Field(default=30, ge=1)
+    # Plafond du rayon d'intervention d'un métier, en mètres.
+    artisan_service_radius_max_m: int = Field(default=30_000, gt=0)
+    # Pas d'arrondi de toute distance publique (recherche par proximité).
+    public_distance_rounding_m: int = Field(default=500, ge=100)
+
+    @model_validator(mode="after")
+    def validate_artisan_zone(self) -> "Settings":
+        """Réglages de zone cohérents, sinon refus de démarrer : une région
+        qui exclurait un quartier proposé rendrait ce quartier inutilisable."""
+        if self.artisan_location_changes_long_max < self.artisan_location_changes_short_max:
+            raise ValueError(
+                "ARTISAN_LOCATION_CHANGES_LONG_MAX doit être au moins égal à "
+                "ARTISAN_LOCATION_CHANGES_SHORT_MAX."
+            )
+        if (
+            self.artisan_location_changes_long_window_days * 24
+            <= self.artisan_location_changes_short_window_hours
+        ):
+            raise ValueError(
+                "La fenêtre longue des changements de zone doit dépasser la fenêtre courte."
+            )
+        outside = [
+            n.label
+            for n in NEIGHBORHOODS
+            if haversine_m(
+                self.service_region_center_lat, self.service_region_center_lng, n.lat, n.lng
+            )
+            > self.service_region_radius_m
+        ]
+        if outside:
+            raise ValueError(
+                "La région desservie (SERVICE_REGION_*) exclut des quartiers proposés : "
+                + ", ".join(outside)
+            )
+        return self
 
     # Pagination offset bornée (BUILD_PLAN.md §6, Lot 9), réutilisée par
     # GET /artisans et GET /artisans/{id}/reviews.

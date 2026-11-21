@@ -132,6 +132,28 @@ services:
         sync: false
       - key: OTP_SMS_ALERT_THRESHOLD_PERCENT
         sync: false
+      # Zone d'intervention des artisans (DEPLOYMENT.md §19) : défauts sûrs
+      # si absentes (config.py) ; la région doit contenir tous les quartiers.
+      - key: SERVICE_REGION_CENTER_LAT
+        sync: false
+      - key: SERVICE_REGION_CENTER_LNG
+        sync: false
+      - key: SERVICE_REGION_RADIUS_M
+        sync: false
+      - key: ARTISAN_GPS_GRID_M
+        sync: false
+      - key: ARTISAN_LOCATION_CHANGES_SHORT_MAX
+        sync: false
+      - key: ARTISAN_LOCATION_CHANGES_SHORT_WINDOW_HOURS
+        sync: false
+      - key: ARTISAN_LOCATION_CHANGES_LONG_MAX
+        sync: false
+      - key: ARTISAN_LOCATION_CHANGES_LONG_WINDOW_DAYS
+        sync: false
+      - key: ARTISAN_SERVICE_RADIUS_MAX_M
+        sync: false
+      - key: PUBLIC_DISTANCE_ROUNDING_M
+        sync: false
       - key: OTP_TEST_WHITELIST
         sync: false
       - key: OTP_TEST_CODE
