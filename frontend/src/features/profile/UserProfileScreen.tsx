@@ -273,7 +273,11 @@ export const UserProfileScreen: React.FC = () => {
             phone={auth.user?.phone}
           />
         ) : (
-          <ClientProfile name={currentUser.name} location={place.label} phone={auth.user?.phone} />
+          <ClientProfile
+            name={currentUser.name}
+            location={place?.label ?? 'Quartier non choisi'}
+            phone={auth.user?.phone}
+          />
         )
       ) : null}
     </main>

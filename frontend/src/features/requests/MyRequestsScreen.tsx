@@ -9,6 +9,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { ApiError, api } from '../../lib/api';
 import { isInServiceRegion } from '../../lib/places';
+import { usePlace } from '../location/usePlace';
 import type { ServiceRequest, ServiceRequestStatus } from '../../types';
 import { useMyRequests } from './hooks/useMyRequests';
 
@@ -57,7 +58,11 @@ const RequestCard: React.FC<RequestCardProps> = ({ request, onCancelled }) => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const isOpen = request.status === 'ouverte';
-  const outOfRegion = isOpen && !isInServiceRegion(request.location);
+  // Région servie par le serveur ; tant qu'elle n'est pas connue, aucun
+  // avertissement n'est affiché (jamais une région supposée).
+  const { catalog } = usePlace();
+  const outOfRegion =
+    isOpen && catalog !== null && !isInServiceRegion(request.location, catalog.serviceRegion);
 
   const cancel = async () => {
     setCancelError(null);

@@ -14,7 +14,7 @@ import { StatusPill, type StatusTone } from '../../components/ui/StatusPill';
 import { VerifiedBadge } from '../../components/ui/VerifiedBadge';
 import { api, ApiError } from '../../lib/api';
 import type { ArtisanFilters } from '../../lib/api/types';
-import type { Coordinates } from '../../lib/places';
+import type { Coordinates, Place } from '../../lib/places';
 import type { AIAnalysisResult, ServiceRequest } from '../../types';
 import { useAuth } from '../auth/hooks/useAuth';
 import { ArtisanCard, ArtisanCardSkeleton } from '../artisans/components/ArtisanCard';
@@ -68,8 +68,32 @@ function searchUrlFor(tradeCode: string, position: Coordinates): string {
  *
  * Aucune donnée simulée : ni description ni photo préremplies, ni faux
  * enregistrement vocal (il ajoutait un texte inventé à la vraie demande).
+ *
+ * Le lieu vient de la liste des quartiers servie par le serveur : tant
+ * qu'elle n'est pas arrivée, l'écran l'attend (ou propose de réessayer),
+ * jamais un lieu inventé.
  */
 export const DescribeProblemScreen: React.FC = () => {
+  const { place, catalogError, reloadCatalog } = usePlace();
+  if (place) return <DescribeProblemForm place={place} />;
+  return (
+    <>
+      <AppBar title="Décrivez votre problème" backTo="/accueil" />
+      <main className="w-full max-w-3xl mx-auto px-4 md:px-8 pt-6">
+        {catalogError ? (
+          <ErrorState message={catalogError.message} onRetry={reloadCatalog} />
+        ) : (
+          <div className="space-y-4" aria-busy="true">
+            <Skeleton className="h-40 rounded-card" />
+            <Skeleton className="h-24 rounded-card" />
+          </div>
+        )}
+      </main>
+    </>
+  );
+};
+
+const DescribeProblemForm: React.FC<{ place: Place }> = ({ place }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
@@ -84,7 +108,7 @@ export const DescribeProblemScreen: React.FC = () => {
   const targetArtisanId = searchParams.get('artisan');
   const { data: targetArtisan } = useArtisan(targetArtisanId);
   // Lieu partagé avec l'en-tête : le quartier affiché est celui de la demande.
-  const { place, setPlace } = usePlace();
+  const { setPlace } = usePlace();
 
   const [description, setDescription] = useState('');
   // Métier CHOISI par le client dans la liste réelle (GET /trades) : prime

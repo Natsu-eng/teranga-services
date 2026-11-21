@@ -9,8 +9,9 @@ import {
   DEFAULT_REALTIME,
   RealtimeContext,
 } from '../../features/messages/realtime/realtime-context';
-import { PlaceContext } from '../../features/location/place-context';
-import { neighborhoodPlace, type Place } from '../../lib/places';
+import { DEFAULT_PLACE_CONTEXT, PlaceContext } from '../../features/location/place-context';
+import { findNeighborhood, neighborhoodPlace, type Place } from '../../lib/places';
+import { TEST_CATALOG } from '../../testing/neighborhoodCatalog';
 
 vi.mock('../../features/auth/hooks/useAuth');
 
@@ -49,7 +50,14 @@ function renderLayout(
   unreadCount: number | null = null,
 ) {
   return render(
-    <PlaceContext.Provider value={{ place: neighborhoodPlace('plateau'), setPlace }}>
+    <PlaceContext.Provider
+      value={{
+        ...DEFAULT_PLACE_CONTEXT,
+        place: neighborhoodPlace(findNeighborhood(TEST_CATALOG, 'plateau')!),
+        setPlace,
+        catalog: TEST_CATALOG,
+      }}
+    >
       <RealtimeContext.Provider value={{ ...DEFAULT_REALTIME, unreadCount }}>
         <MemoryRouter initialEntries={[path]}>
           <Routes>
@@ -209,12 +217,12 @@ describe('Sélecteur de quartier', () => {
   it('s’ouvre, se ferme avec Échap et rend le focus au déclencheur', () => {
     renderLayout();
 
-    const trigger = screen.getByRole('button', { name: /Dakar Plateau/ });
+    const trigger = screen.getByRole('button', { name: /Quartier :\s*Dakar-Plateau/ });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: 'Dakar Plateau' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Dakar-Plateau' })).toHaveAttribute(
       'aria-current',
       'true',
     );
@@ -224,20 +232,39 @@ describe('Sélecteur de quartier', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('remonte le quartier choisi, avec ses coordonnées réelles', () => {
+  it('remonte le quartier choisi, avec le centre officiel servi par le serveur', () => {
     const setPlace = vi.fn();
     renderLayout('/accueil', setPlace);
+    const ouakam = findNeighborhood(TEST_CATALOG, 'ouakam')!;
 
-    fireEvent.click(screen.getByRole('button', { name: /Dakar Plateau/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Ouakam, Dakar' }));
+    fireEvent.click(screen.getByRole('button', { name: /Quartier :\s*Dakar-Plateau/ }));
+    // Liste groupée par département.
+    expect(screen.getByText('Département de Rufisque')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ouakam' }));
 
     expect(setPlace).toHaveBeenCalledWith({
       kind: 'quartier',
       neighborhoodId: 'ouakam',
-      label: 'Ouakam, Dakar',
-      lat: 14.7225,
-      lng: -17.4878,
+      label: 'Ouakam',
+      lat: ouakam.lat,
+      lng: ouakam.lng,
     });
+  });
+
+  it('annonce le chargement tant que la liste du serveur n’est pas arrivée', () => {
+    render(
+      <PlaceContext.Provider value={DEFAULT_PLACE_CONTEXT}>
+        <MemoryRouter initialEntries={['/accueil']}>
+          <Routes>
+            <Route element={<MainLayout />}>
+              <Route path="/accueil" element={<p>Contenu accueil</p>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </PlaceContext.Provider>,
+    );
+
+    expect(screen.getByRole('button', { name: /Chargement des quartiers/ })).toBeDisabled();
   });
 });
 

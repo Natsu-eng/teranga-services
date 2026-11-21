@@ -9,6 +9,8 @@ import { useAnalyzeProblem } from './hooks/useAnalyzeProblem';
 import { useAuth } from '../auth/hooks/useAuth';
 import { GeolocationError, getCurrentPosition } from '../../lib/geo';
 import { PlaceProvider, PLACE_STORAGE_KEY } from '../location/PlaceProvider';
+import { TEST_CATALOG } from '../../testing/neighborhoodCatalog';
+import { distanceFromRegionCenterKm, findNeighborhood } from '../../lib/places';
 import { LocationPicker } from '../../components/layout/LocationPicker';
 import { api, ApiError } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
@@ -53,8 +55,9 @@ const mockedGetCurrentPosition = vi.mocked(getCurrentPosition);
 const mockedCreateServiceRequest = vi.mocked(api.createServiceRequest);
 const mockedCheckCoverage = vi.mocked(api.checkArtisanCoverage);
 
-// Centre du Plateau (lib/places.ts), quartier par défaut.
-const PLATEAU = { lat: 14.6681, lng: -17.4339 };
+// Centre du Plateau, quartier par défaut (catalogue servi par le serveur).
+const PLATEAU_ENTRY = TEST_CATALOG.items.find((item) => item.id === TEST_CATALOG.defaultId)!;
+const PLATEAU = { lat: PLATEAU_ENTRY.lat, lng: PLATEAU_ENTRY.lng };
 
 const artisanFixture: Artisan = {
   id: 'a1',
@@ -120,7 +123,7 @@ function SearchParamsProbe() {
 
 function renderScreen(path = '/demande') {
   return render(
-    <PlaceProvider>
+    <PlaceProvider initialCatalog={TEST_CATALOG}>
       {/* Le sélecteur de l'en-tête partage le lieu avec l'écran. */}
       <LocationPicker />
       <MemoryRouter initialEntries={[path]}>
@@ -195,7 +198,7 @@ describe('DescribeProblemScreen', () => {
         urgency: 'urgent',
         // Le lieu affiché et confirmé (quartier par défaut), pas le GPS.
         location: PLATEAU,
-        locationLabel: 'Dakar Plateau',
+        locationLabel: 'Dakar-Plateau',
       }),
     );
     // Plus aucune estimation de prix transmise (chiffre sans fondement réel).
@@ -450,7 +453,7 @@ describe('DescribeProblemScreen', () => {
       renderScreen();
 
       expect(screen.getByText(/Intervention à :/)).toHaveTextContent(
-        'Intervention à : Dakar Plateau',
+        'Intervention à : Dakar-Plateau',
       );
       expect(screen.getByLabelText('Quartier')).toHaveValue('plateau');
     });
@@ -459,18 +462,18 @@ describe('DescribeProblemScreen', () => {
       renderScreen();
 
       fireEvent.change(screen.getByLabelText('Quartier'), { target: { value: 'ouakam' } });
-      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Ouakam, Dakar');
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Ouakam');
       // Même valeur partagée : l'en-tête affiche le même quartier.
-      expect(
-        screen.getByRole('button', { name: /Quartier :\s*Ouakam, Dakar/ }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Quartier :\s*Ouakam/ })).toBeInTheDocument();
       submit();
 
       await waitFor(() => expect(mockedCreateServiceRequest).toHaveBeenCalledTimes(1));
+      // Centre officiel servi par le serveur.
+      const ouakam = findNeighborhood(TEST_CATALOG, 'ouakam')!;
       expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
         expect.objectContaining({
-          location: { lat: 14.7225, lng: -17.4878 },
-          locationLabel: 'Ouakam, Dakar',
+          location: { lat: ouakam.lat, lng: ouakam.lng },
+          locationLabel: 'Ouakam',
         }),
       );
     });
@@ -478,13 +481,13 @@ describe('DescribeProblemScreen', () => {
     it('le quartier choisi dans l’en-tête devient le lieu de la demande', async () => {
       renderScreen();
 
-      fireEvent.click(screen.getByRole('button', { name: /Quartier :\s*Dakar Plateau/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Point E, Dakar' }));
+      fireEvent.click(screen.getByRole('button', { name: /Quartier :\s*Dakar-Plateau/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Fann-Point E-Amitié' }));
       submit();
 
       await waitFor(() =>
         expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
-          expect.objectContaining({ locationLabel: 'Point E, Dakar' }),
+          expect.objectContaining({ locationLabel: 'Fann-Point E-Amitié' }),
         ),
       );
     });
@@ -493,11 +496,15 @@ describe('DescribeProblemScreen', () => {
       renderScreen();
 
       fireEvent.click(screen.getByRole('button', { name: 'Utiliser ma position actuelle' }));
+      const expectedKm = distanceFromRegionCenterKm(
+        { lat: 14.7225, lng: -17.4878 },
+        TEST_CATALOG.serviceRegion,
+      );
       expect(await screen.findByText(/Position trouvée/)).toHaveTextContent(
-        /à 8 km du centre de Dakar/,
+        `à ${expectedKm} km du centre de la région desservie`,
       );
       // Pas encore appliquée.
-      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar Plateau');
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar-Plateau');
 
       fireEvent.click(screen.getByRole('button', { name: 'Utiliser cette position' }));
       expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Ma position actuelle');
@@ -521,13 +528,13 @@ describe('DescribeProblemScreen', () => {
       const found = await screen.findByRole('status');
       expect(within(found).getByText(/hors de la région de Dakar/)).toBeInTheDocument();
 
-      fireEvent.click(within(found).getByRole('button', { name: 'Garder Dakar Plateau' }));
+      fireEvent.click(within(found).getByRole('button', { name: 'Garder Dakar-Plateau' }));
       expect(screen.queryByText(/Position trouvée/)).not.toBeInTheDocument();
       submit();
 
       await waitFor(() =>
         expect(mockedCreateServiceRequest).toHaveBeenCalledWith(
-          expect.objectContaining({ location: PLATEAU, locationLabel: 'Dakar Plateau' }),
+          expect.objectContaining({ location: PLATEAU, locationLabel: 'Dakar-Plateau' }),
         ),
       );
     });
@@ -541,7 +548,7 @@ describe('DescribeProblemScreen', () => {
       expect(await screen.findByRole('alert')).toHaveTextContent(
         "L'accès à votre position a été refusé. Choisissez votre quartier dans la liste.",
       );
-      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar Plateau');
+      expect(screen.getByText(/Intervention à :/)).toHaveTextContent('Dakar-Plateau');
     });
 
     it("vérifie la zone de l'artisan visé AVANT l'envoi et ne lui envoie rien s'il ne couvre pas le lieu", async () => {
@@ -557,7 +564,7 @@ describe('DescribeProblemScreen', () => {
       describeProblem();
 
       expect(
-        await screen.findByText(/Maty Ndiaye n'intervient pas à Dakar Plateau/),
+        await screen.findByText(/Maty Ndiaye n'intervient pas à Dakar-Plateau/),
       ).toBeInTheDocument();
       expect(mockedCheckCoverage).toHaveBeenCalledWith('a1', 'electricite', PLATEAU);
       expect(
@@ -584,7 +591,7 @@ describe('DescribeProblemScreen', () => {
       );
       renderScreen('/demande?artisan=a1');
       describeProblem();
-      await screen.findByText(/n'intervient pas à Dakar Plateau/);
+      await screen.findByText(/n'intervient pas à Dakar-Plateau/);
 
       fireEvent.change(screen.getByLabelText('Quartier'), { target: { value: 'ouakam' } });
 

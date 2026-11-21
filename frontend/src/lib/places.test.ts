@@ -1,51 +1,52 @@
 import { describe, expect, it } from 'vitest';
+import { TEST_CATALOG } from '../testing/neighborhoodCatalog';
 import {
-  DEFAULT_NEIGHBORHOOD_ID,
-  NEIGHBORHOODS,
-  SERVICE_REGION_RADIUS_KM,
-  distanceFromDakarKm,
+  distanceFromRegionCenterKm,
   distanceKm,
+  findNeighborhood,
+  groupByDepartment,
   isInServiceRegion,
   neighborhoodPlace,
-  positionPlace,
 } from './places';
 
-describe('places', () => {
-  it('a des quartiers aux identifiants uniques, tous dans la région de Dakar', () => {
-    expect(new Set(NEIGHBORHOODS.map((n) => n.id)).size).toBe(NEIGHBORHOODS.length);
-    for (const neighborhood of NEIGHBORHOODS) {
-      expect(isInServiceRegion(neighborhood)).toBe(true);
-      expect(distanceFromDakarKm(neighborhood)).toBeLessThan(SERVICE_REGION_RADIUS_KM);
-    }
+const region = TEST_CATALOG.serviceRegion;
+
+describe('places (calculs, sans liste locale)', () => {
+  it('résout un quartier par identifiant, alias historiques compris', () => {
+    expect(findNeighborhood(TEST_CATALOG, 'medina')?.label).toBe('Médina');
+    // Anciens identifiants gardés par des téléphones.
+    expect(findNeighborhood(TEST_CATALOG, 'almadies')?.id).toBe('ngor');
+    expect(findNeighborhood(TEST_CATALOG, 'yoff-ngor')?.id).toBe('yoff');
+    expect(findNeighborhood(TEST_CATALOG, 'inconnu')).toBeUndefined();
+    expect(findNeighborhood(TEST_CATALOG, null)).toBeUndefined();
   });
 
-  it('mesure des distances réalistes', () => {
-    const plateau = neighborhoodPlace('plateau');
-    const ouakam = neighborhoodPlace('ouakam');
-
-    expect(Math.round(distanceKm(plateau, ouakam))).toBe(8);
-    // La situation observée en test manuel : une position en région parisienne.
-    expect(distanceFromDakarKm({ lat: 48.9097, lng: 2.3819 })).toBeGreaterThan(4_000);
-    expect(isInServiceRegion({ lat: 48.9097, lng: 2.3819 })).toBe(false);
-  });
-
-  it('construit un lieu de quartier avec ses coordonnées, et retombe sur le défaut si inconnu', () => {
-    expect(neighborhoodPlace('almadies')).toEqual({
+  it('un lieu de quartier porte le centre officiel du quartier', () => {
+    const medina = findNeighborhood(TEST_CATALOG, 'medina')!;
+    expect(neighborhoodPlace(medina)).toEqual({
       kind: 'quartier',
-      neighborhoodId: 'almadies',
-      label: 'Almadies, Dakar',
-      lat: 14.7419,
-      lng: -17.508,
+      neighborhoodId: 'medina',
+      label: 'Médina',
+      lat: medina.lat,
+      lng: medina.lng,
     });
-    expect(neighborhoodPlace('inconnu').neighborhoodId).toBe(DEFAULT_NEIGHBORHOOD_ID);
   });
 
-  it('étiquette une position acceptée par le client', () => {
-    expect(positionPlace({ lat: 14.7, lng: -17.45 })).toEqual({
-      kind: 'position',
-      label: 'Ma position actuelle',
-      lat: 14.7,
-      lng: -17.45,
-    });
+  it('regroupe par département dans l’ordre reçu du serveur', () => {
+    const groups = groupByDepartment(TEST_CATALOG.items);
+    expect(groups.map((group) => group.label)).toEqual(['Dakar', 'Rufisque']);
+    expect(groups[1].items.map((item) => item.id)).toEqual(['bargny']);
+  });
+
+  it('mesure les distances et la région desservie reçue du serveur', () => {
+    const plateau = findNeighborhood(TEST_CATALOG, 'plateau')!;
+    const ouakam = findNeighborhood(TEST_CATALOG, 'ouakam')!;
+    expect(Math.round(distanceKm(plateau, ouakam))).toBe(8);
+    for (const neighborhood of TEST_CATALOG.items) {
+      expect(isInServiceRegion(neighborhood, region)).toBe(true);
+    }
+    // Paris : hors région.
+    expect(isInServiceRegion({ lat: 48.9097, lng: 2.3819 }, region)).toBe(false);
+    expect(distanceFromRegionCenterKm(region.center, region)).toBe(0);
   });
 });
