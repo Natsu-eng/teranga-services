@@ -19,6 +19,7 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { MyReviewsSection } from './MyReviewsSection';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
+import { UnplacedBanner } from './components/UnplacedBanner';
 import { useArtisanStats } from './hooks/useArtisanStats';
 import { useAvailabilityToggle } from './hooks/useAvailabilityToggle';
 import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
@@ -151,6 +152,8 @@ export const ArtisanDashboardScreen: React.FC = () => {
         {profileError && !proArtisan && (
           <ErrorState message={profileError.message} onRetry={reloadProfile} />
         )}
+
+        <UnplacedBanner enabled={artisanId != null} />
 
         {proArtisan?.isSuspended && (
           <Card as="aside" padding="lg" role="status" className="space-y-2 bg-destructive-soft">

@@ -19,6 +19,9 @@ class ArtisanCountsOut(BaseModel):
     rejected: int
     # Suspendus par un admin (quel que soit leur statut de vérification).
     suspended: int
+    # Vérifiés, non suspendus, mais SANS position (`base_location` NULL) :
+    # ils ne reçoivent aucune demande tant qu'ils ne se placent pas.
+    verified_unplaced: int
 
 
 class UserCountsOut(BaseModel):

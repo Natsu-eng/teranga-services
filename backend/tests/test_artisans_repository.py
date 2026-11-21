@@ -1,11 +1,13 @@
 """Repository artisans : recherche géo, filtres, count (BUILD_PLAN.md §5, §6 Lot 9)."""
 
+import math
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.models.enums import Role
 from app.repositories.artisans import (
     ArtisanSearchFilters,
@@ -42,7 +44,7 @@ async def test_search_against_seeded_artisans_combines_client_radius_and_own_ser
     Depuis la référence (position d'Idrissa, Le Plateau), Maty (~6,2km) et
     Ousmane (~9,3km) sont tous les deux hors de portée de LEUR PROPRE zone
     d'intervention (5km) -- même avec un rayon client large, ils ne
-    devraient pas apparaître. Seul Idrissa (0m, dans sa propre zone) est
+    devraient pas apparaître. Seul Idrissa (à moins d'une maille, dans sa propre zone) est
     trouvé. C'est la combinaison attendue : rayon client ET zone artisan.
     """
     trades = await _seed_trades(db_session)
@@ -61,7 +63,10 @@ async def test_search_against_seeded_artisans_combines_client_radius_and_own_ser
     assert [p.id for p, _ in relevant] == [idrissa.id]
     idrissa_distance = relevant[0][1]
     assert idrissa_distance is not None
-    assert idrissa_distance <= 5
+    # Le seed arrondit la position sur la grille : au plus une demi-diagonale
+    # de maille de la position d'origine (la référence). Valeur EXACTE ici
+    # (dépôt) ; l'API, elle, l'arrondit avant de l'exposer.
+    assert idrissa_distance <= get_settings().artisan_gps_grid_m * math.sqrt(2) / 2
 
 
 async def test_sort_by_distance_orders_reachable_artisans_correctly(

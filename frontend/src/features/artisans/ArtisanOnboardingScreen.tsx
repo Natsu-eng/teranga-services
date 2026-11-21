@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Camera, MapPin, Plus, Trash2, UploadCloud, UserRound, Wrench } from 'lucide-react';
+import { Camera, Plus, Trash2, UploadCloud, UserRound, Wrench } from 'lucide-react';
 import { RoleRestricted } from '../../components/auth/RoleRestricted';
 import { AppBar } from '../../components/ui/AppBar';
 import { Avatar } from '../../components/ui/Avatar';
@@ -15,11 +15,11 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { buttonClasses } from '../../components/ui/styles';
 import { cn } from '../../lib/cn';
 import { formatFcfa } from '../../lib/format';
-import { GeolocationError, getCurrentPosition, type Coordinates } from '../../lib/geo';
 import { useAuth } from '../auth/hooks/useAuth';
 import { toDisplayRole } from '../auth/role';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { VerificationStatusBanner } from './VerificationStatusBanner';
+import { ArtisanZoneSection } from './components/ArtisanZoneSection';
 import { ChecklistItem } from './components/OnboardingChecklistItem';
 import { VerificationDocumentsSection } from './components/VerificationDocumentsSection';
 import { REQUIRED_DOCS, latestDocumentsByType } from './onboardingDocuments';
@@ -28,6 +28,7 @@ import { useArtisanProfileActions } from './hooks/useArtisanProfileActions';
 import { useDocumentUpload } from './hooks/useDocumentUpload';
 import { useMyArtisanProfile } from './hooks/useMyArtisanProfile';
 import { useProfileMediaConstraints } from './hooks/useProfileMediaConstraints';
+import { useMyArtisanZone } from './hooks/useMyArtisanZone';
 import { useMyVerification } from './hooks/useMyVerification';
 import { useTrades } from './hooks/useTrades';
 import type { VerificationDocType } from '../../types';
@@ -60,6 +61,13 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     reload: reloadVerification,
   } = useMyVerification(role === 'artisan' && artisanId != null);
   const { data: trades } = useTrades();
+  const {
+    data: zone,
+    isLoading: isZoneLoading,
+    error: zoneError,
+    reload: reloadZone,
+    setData: setZone,
+  } = useMyArtisanZone(role === 'artisan' && artisanId != null);
 
   const mediaConstraints = useProfileMediaConstraints(role === 'artisan' && artisanId != null);
   const actions = useArtisanProfileActions((next) => setProfile(() => next), mediaConstraints);
@@ -71,8 +79,6 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   const [yearsExperience, setYearsExperience] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [coverUrl, setCoverUrl] = useState('');
-  const [pendingLocation, setPendingLocation] = useState<Coordinates | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
   // Trace le profil déjà servi au formulaire, pas un booléen "initialisé" --
   // ajustement d'état pendant le rendu (pattern React officiel : "Adjusting
   // state when a prop changes"), volontairement PAS un useEffect : appeler
@@ -80,7 +86,6 @@ export const ArtisanOnboardingScreen: React.FC = () => {
   // inutile (React bascule immédiatement sans jamais commiter le rendu
   // intermédiaire quand c'est fait pendant le rendu).
   const [loadedProfileId, setLoadedProfileId] = useState<string | null>(null);
-  const [isLocating, setIsLocating] = useState(false);
 
   const [selectedTradeCode, setSelectedTradeCode] = useState('');
   const [hourlyRateFcfa, setHourlyRateFcfa] = useState('');
@@ -103,11 +108,12 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     profile?.bio && profile.bio.trim().length > 0 && profile.yearsExperience != null,
   );
   const hasTrades = Boolean(profile?.trades.length);
+  // Étape OBLIGATOIRE : non placé, l'artisan ne reçoit aucune demande.
+  const hasZone = zone?.placed === true;
   const hasAllRequiredDocs = REQUIRED_DOCS.every(({ type }) => latestByType[type] != null);
   const isVerified = profile?.verifiedStatus === 'verified';
-  const doneCount = [hasProfileBasics, hasTrades, hasAllRequiredDocs, isVerified].filter(
-    Boolean,
-  ).length;
+  const steps = [hasProfileBasics, hasZone, hasTrades, hasAllRequiredDocs, isVerified];
+  const doneCount = steps.filter(Boolean).length;
 
   // Défense en profondeur : la route est déjà réservée aux artisans.
   if (role !== 'artisan') {
@@ -122,23 +128,6 @@ export const ArtisanOnboardingScreen: React.FC = () => {
     );
   }
 
-  async function handleUseCurrentLocation(): Promise<void> {
-    setIsLocating(true);
-    setLocationError(null);
-    try {
-      const position = await getCurrentPosition();
-      setPendingLocation(position);
-    } catch (err) {
-      // Jamais de position de repli silencieuse : la zone d'intervention en
-      // dépend, l'artisan doit savoir qu'elle n'a pas été mise à jour.
-      setLocationError(
-        `${err instanceof GeolocationError ? err.message : "Votre position n'a pas pu être déterminée."} Votre position enregistrée n'a pas changé.`,
-      );
-    } finally {
-      setIsLocating(false);
-    }
-  }
-
   async function handleSaveProfile(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     const trimmedBio = bio.trim();
@@ -150,9 +139,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
       yearsExperience: yearsExperience === '' ? null : Number(yearsExperience),
       avatarUrl: trimmedAvatar === '' ? null : trimmedAvatar,
       coverUrl: trimmedCover === '' ? null : trimmedCover,
-      ...(pendingLocation ? { baseLocation: pendingLocation } : {}),
     });
-    setPendingLocation(null);
   }
 
   async function handleAddTrade(event: React.FormEvent): Promise<void> {
@@ -167,7 +154,14 @@ export const ArtisanOnboardingScreen: React.FC = () => {
       setSelectedTradeCode('');
       setHourlyRateFcfa('');
       setRadiusKm('');
+      // Le nouveau métier apparaît avec son rayon dans « Ma zone d'intervention ».
+      reloadZone();
     }
+  }
+
+  async function handleRemoveTrade(artisanTradeId: string): Promise<void> {
+    await actions.removeTrade(artisanTradeId);
+    reloadZone();
   }
 
   function handleFileSelected(
@@ -223,25 +217,28 @@ export const ArtisanOnboardingScreen: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-primary-emerald-foreground">Progression</span>
-              <span className="font-semibold">{doneCount} / 4</span>
+              <span className="font-semibold">
+                {doneCount} / {steps.length}
+              </span>
             </div>
             <div
               role="progressbar"
               aria-label="Progression du profil"
               aria-valuemin={0}
-              aria-valuemax={4}
+              aria-valuemax={steps.length}
               aria-valuenow={doneCount}
               className="h-2 rounded-full bg-white/15 overflow-hidden"
             >
               <div
                 className="h-full rounded-full bg-accent transition-[width] duration-300"
-                style={{ width: `${(doneCount / 4) * 100}%` }}
+                style={{ width: `${(doneCount / steps.length) * 100}%` }}
               />
             </div>
           </div>
 
           <ul className="space-y-2.5">
             <ChecklistItem done={hasProfileBasics} label="Profil complété" />
+            <ChecklistItem done={hasZone} label="Zone d’intervention choisie" />
             <ChecklistItem done={hasTrades} label="Métiers déclarés" />
             <ChecklistItem done={hasAllRequiredDocs} label="Documents envoyés" />
             <ChecklistItem
@@ -411,25 +408,6 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                   onChange={(e) => setYearsExperience(e.target.value)}
                 />
 
-                <Button
-                  variant="outline"
-                  fullWidth
-                  onClick={handleUseCurrentLocation}
-                  isLoading={isLocating}
-                  leadingIcon={<MapPin aria-hidden className="w-4 h-4" />}
-                >
-                  {isLocating
-                    ? 'Localisation...'
-                    : pendingLocation
-                      ? 'Position mise à jour, prête à enregistrer'
-                      : 'Utiliser ma position actuelle'}
-                </Button>
-                {locationError && (
-                  <p role="alert" className="text-sm text-destructive">
-                    {locationError}
-                  </p>
-                )}
-
                 {actions.error && (
                   <p role="alert" className="text-sm text-destructive">
                     {actions.error}
@@ -447,6 +425,14 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                 </Button>
               </form>
             </Card>
+
+            <ArtisanZoneSection
+              zone={zone}
+              isLoading={isZoneLoading}
+              error={zoneError}
+              reload={reloadZone}
+              onZoneChange={(next) => setZone(() => next)}
+            />
 
             <Card
               as="section"
@@ -481,7 +467,7 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                       </div>
                       <IconButton
                         label={`Retirer ${trade.tradeLabel}`}
-                        onClick={() => actions.removeTrade(trade.id)}
+                        onClick={() => void handleRemoveTrade(trade.id)}
                         disabled={actions.isSaving}
                         tone="danger"
                       >
@@ -524,10 +510,12 @@ export const ArtisanOnboardingScreen: React.FC = () => {
                       type="number"
                       inputMode="decimal"
                       min={0.1}
+                      max={zone ? zone.radiusMaxM / 1000 : undefined}
                       step={0.1}
                       value={radiusKm}
                       onChange={(e) => setRadiusKm(e.target.value)}
                       placeholder="Rayon (km)"
+                      hint={zone ? `${zone.radiusMaxM / 1000} km au plus.` : undefined}
                     />
                   </div>
                   <Button

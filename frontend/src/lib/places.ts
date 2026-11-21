@@ -1,15 +1,12 @@
 /**
- * Lieux d'intervention (lot `fix/localisation-demande`).
+ * Lieux d'intervention : types et calculs, SANS aucune liste de quartiers.
  *
- * Source unique des quartiers proposés partout (sélecteur de l'en-tête,
- * écran de demande) : un quartier choisi dans l'en-tête et le lieu d'une
- * demande ne peuvent donc plus se contredire.
- *
- * Coordonnées : centre approximatif de chaque quartier (relevé sur
- * OpenStreetMap), précision de l'ordre de quelques centaines de mètres —
- * suffisante pour la règle de zone, dont les rayons se comptent en
- * kilomètres. Le client choisit toujours ce qui est envoyé : rien n'est
- * deviné à sa place.
+ * La liste fermée des quartiers (une entrée par commune de la région de
+ * Dakar, centres tirés d'OpenStreetMap) vit côté serveur
+ * (backend/app/core/neighborhoods.py) et arrive par
+ * `GET /api/v1/meta/neighborhoods` (lib/api/neighborhoods.ts), avec la
+ * région desservie. Le front n'en garde aucune copie : un quartier ajouté ou
+ * corrigé côté serveur l'est partout à la fois.
  */
 
 export interface Coordinates {
@@ -20,18 +17,26 @@ export interface Coordinates {
 export interface Neighborhood extends Coordinates {
   id: string;
   label: string;
+  /** Nom de la commune dans OpenStreetMap. */
+  commune: string;
+  department: string;
+  departmentLabel: string;
 }
 
-export const NEIGHBORHOODS: readonly Neighborhood[] = [
-  { id: 'plateau', label: 'Dakar Plateau', lat: 14.6681, lng: -17.4339 },
-  { id: 'almadies', label: 'Almadies, Dakar', lat: 14.7419, lng: -17.508 },
-  { id: 'ouakam', label: 'Ouakam, Dakar', lat: 14.7225, lng: -17.4878 },
-  { id: 'mermoz-sacre-coeur', label: 'Mermoz - Sacré Cœur', lat: 14.712, lng: -17.469 },
-  { id: 'yoff-ngor', label: 'Yoff - Ngor', lat: 14.753, lng: -17.49 },
-  { id: 'point-e', label: 'Point E, Dakar', lat: 14.6951, lng: -17.4593 },
-] as const;
+/** Cercle hors duquel une position est hors de la région desservie. */
+export interface ServiceRegion {
+  center: Coordinates;
+  radiusM: number;
+}
 
-export const DEFAULT_NEIGHBORHOOD_ID = 'plateau';
+export interface NeighborhoodCatalog {
+  items: readonly Neighborhood[];
+  /** Anciens identifiants (gardés sur des téléphones) -> identifiant actuel. */
+  aliases: Readonly<Record<string, string>>;
+  /** Quartier proposé tant que le client n'en a choisi aucun. */
+  defaultId: string;
+  serviceRegion: ServiceRegion;
+}
 
 /** Lieu d'intervention retenu : un quartier, ou la position que le client a acceptée. */
 export type Place =
@@ -42,12 +47,17 @@ export type NeighborhoodPlace = Extract<Place, { kind: 'quartier' }>;
 
 export const CURRENT_POSITION_LABEL = 'Ma position actuelle';
 
-export function findNeighborhood(id: string | null | undefined): Neighborhood | undefined {
-  return NEIGHBORHOODS.find((neighborhood) => neighborhood.id === id);
+/** Le quartier de cet identifiant, alias historiques compris. */
+export function findNeighborhood(
+  catalog: NeighborhoodCatalog,
+  id: string | null | undefined,
+): Neighborhood | undefined {
+  if (!id) return undefined;
+  const canonical = catalog.aliases[id] ?? id;
+  return catalog.items.find((neighborhood) => neighborhood.id === canonical);
 }
 
-export function neighborhoodPlace(id: string): NeighborhoodPlace {
-  const neighborhood = findNeighborhood(id) ?? findNeighborhood(DEFAULT_NEIGHBORHOOD_ID)!;
+export function neighborhoodPlace(neighborhood: Neighborhood): NeighborhoodPlace {
   return {
     kind: 'quartier',
     neighborhoodId: neighborhood.id,
@@ -61,16 +71,21 @@ export function positionPlace(coordinates: Coordinates): Place {
   return { kind: 'position', label: CURRENT_POSITION_LABEL, ...coordinates };
 }
 
-/*
- * Région desservie, pour un AVERTISSEMENT d'affichage seulement (la règle
- * de zone, elle, est appliquée par le serveur artisan par artisan) : une
- * position à plus de 60 km du centre de Dakar sort de la région de Dakar,
- * où opèrent les artisans de Téranga.
- */
-const SERVICE_REGION_CENTER = findNeighborhood(DEFAULT_NEIGHBORHOOD_ID)!;
-export const SERVICE_REGION_RADIUS_KM = 60;
+/** Quartiers regroupés par département, dans l'ordre reçu du serveur. */
+export function groupByDepartment(
+  items: readonly Neighborhood[],
+): { label: string; items: Neighborhood[] }[] {
+  const groups: { label: string; items: Neighborhood[] }[] = [];
+  for (const neighborhood of items) {
+    const group = groups.find((candidate) => candidate.label === neighborhood.departmentLabel);
+    if (group) group.items.push(neighborhood);
+    else groups.push({ label: neighborhood.departmentLabel, items: [neighborhood] });
+  }
+  return groups;
+}
 
-const EARTH_RADIUS_KM = 6_371;
+// Rayon moyen de la Terre (IUGG), comme le serveur (app/core/geo_privacy.py).
+const EARTH_RADIUS_KM = 6_371.0088;
 
 /** Distance à vol d'oiseau (formule de haversine), en kilomètres. */
 export function distanceKm(a: Coordinates, b: Coordinates): number {
@@ -83,11 +98,19 @@ export function distanceKm(a: Coordinates, b: Coordinates): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 }
 
-/** Distance au centre de Dakar, en km entiers. */
-export function distanceFromDakarKm(coordinates: Coordinates): number {
-  return Math.round(distanceKm(coordinates, SERVICE_REGION_CENTER));
+/** Distance au centre de la région desservie, en km entiers. */
+export function distanceFromRegionCenterKm(
+  coordinates: Coordinates,
+  region: ServiceRegion,
+): number {
+  return Math.round(distanceKm(coordinates, region.center));
 }
 
-export function isInServiceRegion(coordinates: Coordinates): boolean {
-  return distanceKm(coordinates, SERVICE_REGION_CENTER) <= SERVICE_REGION_RADIUS_KM;
+/**
+ * Dans la région desservie ? AVERTISSEMENT d'affichage seulement : le
+ * serveur applique lui-même la règle (refus d'une position GPS d'artisan
+ * hors région, zone de chaque artisan pour une demande).
+ */
+export function isInServiceRegion(coordinates: Coordinates, region: ServiceRegion): boolean {
+  return distanceKm(coordinates, region.center) * 1000 <= region.radiusM;
 }

@@ -5,14 +5,16 @@ import { Card } from '../../components/ui/Card';
 import { SelectField } from '../../components/ui/Field';
 import { GeolocationError, getCurrentPosition } from '../../lib/geo';
 import {
-  NEIGHBORHOODS,
-  distanceFromDakarKm,
+  distanceFromRegionCenterKm,
+  findNeighborhood,
+  groupByDepartment,
   isInServiceRegion,
   neighborhoodPlace,
   positionPlace,
   type Coordinates,
   type Place,
 } from '../../lib/places';
+import { usePlace } from './usePlace';
 
 /** Valeur de la liste pour « Ma position actuelle » (jamais un identifiant de quartier). */
 const POSITION_OPTION = '__position';
@@ -29,8 +31,8 @@ interface PlaceSectionProps {
 /**
  * Lieu de l'intervention, choisi et VU par le client avant l'envoi.
  *
- * - Moyen principal : un quartier de Dakar (même liste que l'en-tête, avec
- *   ses vraies coordonnées).
+ * - Moyen principal : un quartier (même liste que l'en-tête, servie par le
+ *   serveur, une commune par entrée, avec son centre officiel).
  * - Le GPS n'est qu'une SUGGESTION : demandé seulement sur clic (le
  *   navigateur demande alors l'autorisation), son résultat est montré
  *   (coordonnées, distance à Dakar) et ne remplace le lieu qu'après
@@ -38,6 +40,7 @@ interface PlaceSectionProps {
  */
 export const PlaceSection: React.FC<PlaceSectionProps> = ({ place, onChange }) => {
   const titleId = useId();
+  const { catalog } = usePlace();
   const [isLocating, setIsLocating] = useState(false);
   const [proposal, setProposal] = useState<Coordinates | null>(null);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -59,8 +62,10 @@ export const PlaceSection: React.FC<PlaceSectionProps> = ({ place, onChange }) =
     }
   };
 
-  const proposalDistance = proposal ? distanceFromDakarKm(proposal) : null;
-  const proposalInRegion = proposal ? isInServiceRegion(proposal) : true;
+  const region = catalog?.serviceRegion ?? null;
+  const proposalDistance = proposal && region ? distanceFromRegionCenterKm(proposal, region) : null;
+  // Sans la région (liste pas encore reçue), aucun avertissement inventé.
+  const proposalInRegion = proposal && region ? isInServiceRegion(proposal, region) : true;
 
   return (
     <section aria-labelledby={titleId} className="space-y-3">
@@ -71,19 +76,24 @@ export const PlaceSection: React.FC<PlaceSectionProps> = ({ place, onChange }) =
         label="Quartier"
         value={place.kind === 'quartier' ? place.neighborhoodId : POSITION_OPTION}
         onChange={(event) => {
-          const value = event.target.value;
-          if (value !== POSITION_OPTION) onChange(neighborhoodPlace(value));
+          const neighborhood = catalog ? findNeighborhood(catalog, event.target.value) : undefined;
+          if (neighborhood) onChange(neighborhoodPlace(neighborhood));
         }}
         hint="L'artisan chiffre et se déplace d'après ce lieu."
       >
         {place.kind === 'position' && (
           <option value={POSITION_OPTION}>{place.label} (position GPS)</option>
         )}
-        {NEIGHBORHOODS.map((neighborhood) => (
-          <option key={neighborhood.id} value={neighborhood.id}>
-            {neighborhood.label}
-          </option>
-        ))}
+        {catalog &&
+          groupByDepartment(catalog.items).map((group) => (
+            <optgroup key={group.label} label={`Département de ${group.label}`}>
+              {group.items.map((neighborhood) => (
+                <option key={neighborhood.id} value={neighborhood.id}>
+                  {neighborhood.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
       </SelectField>
 
       {!proposal && (
@@ -109,8 +119,10 @@ export const PlaceSection: React.FC<PlaceSectionProps> = ({ place, onChange }) =
           <p className="flex items-start gap-2 text-foreground">
             <MapPin aria-hidden className="w-4 h-4 shrink-0 mt-0.5 text-primary-emerald" />
             <span>
-              Position trouvée : {formatCoordinates(proposal)}, à {proposalDistance} km du centre de
-              Dakar.
+              Position trouvée : {formatCoordinates(proposal)}
+              {proposalDistance !== null
+                ? `, à ${proposalDistance} km du centre de la région desservie.`
+                : '.'}
             </span>
           </p>
           {!proposalInRegion && (

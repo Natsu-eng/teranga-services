@@ -76,6 +76,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   'review.restore': 'Avis rétabli',
   'commission_rate.create': 'Taux de commission ajouté',
   'support_ticket.reply': "Réponse à une demande d'aide",
+  'artisan.location_change': "Zone d'intervention changée",
 };
 
 export const AUDIT_TARGET_LABELS: Record<AuditTargetType, string> = {

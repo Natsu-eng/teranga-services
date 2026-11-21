@@ -102,3 +102,52 @@ class ZoneInterventionInvalideError(AppError):
             message="La zone d'intervention fournie est invalide (le polygone doit être fermé).",
             status_code=422,
         )
+
+
+class FormatPositionObsoleteError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="FORMAT_POSITION_OBSOLETE",
+            message="Ce format de position (base_location, coordonnées libres) n'est plus"
+            ' accepté. Envoyez location = {"source": "neighborhood", "neighborhood_id": ...}'
+            ' ou {"source": "gps", "lat": ..., "lng": ...}.',
+            status_code=422,
+        )
+
+
+class QuartierInconnuError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="QUARTIER_INCONNU",
+            message="Ce quartier ne fait pas partie des quartiers desservis.",
+            status_code=422,
+        )
+
+
+class HorsRegionDesservieError(AppError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="HORS_REGION_DESSERVIE",
+            message="Cette position est en dehors de la région desservie par Téranga."
+            " Choisissez plutôt votre quartier.",
+            status_code=422,
+        )
+
+
+class RayonInterventionTropGrandError(AppError):
+    def __init__(self, max_m: int) -> None:
+        super().__init__(
+            code="RAYON_INTERVENTION_TROP_GRAND",
+            message=f"Le rayon d'intervention ne peut pas dépasser {max_m // 1000} km.",
+            status_code=422,
+        )
+
+
+class TropDeChangementsDeZoneError(AppError):
+    def __init__(self, *, max_changes: int, window_label: str, retry_at_label: str) -> None:
+        super().__init__(
+            code="TROP_DE_CHANGEMENTS_DE_ZONE",
+            message=f"Vous avez déjà changé votre zone d'intervention {max_changes} fois"
+            f" en {window_label}. Prochain changement possible le {retry_at_label}.",
+            status_code=429,
+        )

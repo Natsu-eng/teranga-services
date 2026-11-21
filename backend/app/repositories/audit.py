@@ -6,6 +6,7 @@ toute façon (déclencheur `audit_log_append_only`).
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,5 +72,26 @@ async def list_for_artisan(
         )
         .order_by(AuditLog.created_at.desc(), AuditLog.id)
         .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def list_counted_location_changes_since(
+    session: AsyncSession, artisan_id: uuid.UUID, *, since: datetime
+) -> list[datetime]:
+    """Dates des changements de zone de cet artisan qui COMPTENT dans ses
+    limites (`details.counted`), depuis `since`, de la plus ancienne à la
+    plus récente. Le premier placement et les corrections de migration n'y
+    figurent pas (`counted` faux)."""
+    stmt = (
+        select(AuditLog.created_at)
+        .where(
+            AuditLog.action == AuditAction.ARTISAN_LOCATION_CHANGE,
+            AuditLog.target_type == AuditTargetType.ARTISAN,
+            AuditLog.target_id == artisan_id,
+            AuditLog.details["counted"].as_boolean().is_(True),
+            AuditLog.created_at >= since,
+        )
+        .order_by(AuditLog.created_at)
     )
     return list((await session.execute(stmt)).scalars().all())

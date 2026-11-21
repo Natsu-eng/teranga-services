@@ -29,6 +29,7 @@ import type {
   EngagementCheck,
   RequestEligibility,
   Intervention,
+  ArtisanZone,
   MyArtisanProfile,
   MyReceivedReview,
   PaymentChannel,
@@ -47,6 +48,7 @@ import type {
 import { apiRequest, apiRequestBlob } from './http';
 import { httpAdminBackoffice } from './admin-backoffice';
 import { ApiError } from './types';
+import { mapArtisanZone, type BackendArtisanZone } from './zone-mappers';
 import type {
   AddArtisanTradeInput,
   AdminVerificationFilters,
@@ -196,7 +198,12 @@ export const httpApiClient: ApiClient = {
     if (input.fullName !== undefined) body.full_name = input.fullName;
     if (input.bio !== undefined) body.bio = input.bio;
     if (input.yearsExperience !== undefined) body.years_experience = input.yearsExperience;
-    if (input.baseLocation !== undefined) body.base_location = input.baseLocation;
+    if (input.location !== undefined) {
+      body.location =
+        input.location.source === 'neighborhood'
+          ? { source: 'neighborhood', neighborhood_id: input.location.neighborhoodId }
+          : { source: 'gps', lat: input.location.lat, lng: input.location.lng };
+    }
     if (input.avatarUrl !== undefined) body.avatar_url = input.avatarUrl;
     if (input.coverUrl !== undefined) body.cover_url = input.coverUrl;
     if (input.isAvailable !== undefined) body.is_available = input.isAvailable;
@@ -253,6 +260,21 @@ export const httpApiClient: ApiClient = {
       method: 'DELETE',
     });
     return mapMyArtisanProfile(detail);
+  },
+
+  async getMyArtisanZone(): Promise<ArtisanZone> {
+    return mapArtisanZone(await apiRequest<BackendArtisanZone>('/artisans/me/zone'));
+  },
+
+  async updateArtisanTradeRadius(
+    artisanTradeId: string,
+    serviceRadiusM: number,
+  ): Promise<ArtisanZone> {
+    const body = await apiRequest<BackendArtisanZone>(`/artisans/me/trades/${artisanTradeId}`, {
+      method: 'PATCH',
+      body: { service_radius_m: serviceRadiusM },
+    });
+    return mapArtisanZone(body);
   },
 
   async listMyVerificationDocuments(): Promise<MyVerification> {

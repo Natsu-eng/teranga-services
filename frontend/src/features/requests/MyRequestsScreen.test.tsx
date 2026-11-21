@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { MyRequestsScreen } from './MyRequestsScreen';
+import { PlaceProvider } from '../location/PlaceProvider';
+import { TEST_CATALOG } from '../../testing/neighborhoodCatalog';
 import { useMyRequests } from './hooks/useMyRequests';
 import type { ServiceRequest } from '../../types';
 import { ApiError, api } from '../../lib/api';
@@ -34,10 +36,13 @@ function requestFixture(overrides: Partial<ServiceRequest>): ServiceRequest {
 }
 
 function renderScreen() {
+  // Région desservie : celle que sert le serveur (extrait de test).
   return render(
-    <MemoryRouter>
-      <MyRequestsScreen />
-    </MemoryRouter>,
+    <PlaceProvider initialCatalog={TEST_CATALOG}>
+      <MemoryRouter>
+        <MyRequestsScreen />
+      </MemoryRouter>
+    </PlaceProvider>,
   );
 }
 

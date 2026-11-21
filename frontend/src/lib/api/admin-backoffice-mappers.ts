@@ -27,7 +27,7 @@ export interface BackendPage<T> {
 }
 
 export interface BackendOverview {
-  artisans: AdminOverview['artisans'];
+  artisans: Omit<AdminOverview['artisans'], 'verifiedUnplaced'> & { verified_unplaced: number };
   users: AdminOverview['users'];
   interventions: {
     proposee: number;
@@ -86,7 +86,13 @@ export interface BackendAdminArtisanDetail {
   avatar_url: string | null;
   is_available: boolean;
   verified_status: ArtisanVerifiedStatus;
-  trades: { trade: { label_fr: string } }[];
+  trades: { trade: { label_fr: string }; service_radius_m: number }[];
+  zone: {
+    placed: boolean;
+    source: 'neighborhood' | 'gps' | null;
+    neighborhood_id: string | null;
+    neighborhood_label: string | null;
+  };
   documents: {
     id: string;
     doc_type: VerificationDocType;
@@ -165,7 +171,15 @@ export function mapPage<B, T>(page: BackendPage<B>, map: (item: B) => T): PageRe
 
 export function mapOverview(o: BackendOverview): AdminOverview {
   return {
-    artisans: o.artisans,
+    artisans: {
+      total: o.artisans.total,
+      none: o.artisans.none,
+      pending: o.artisans.pending,
+      verified: o.artisans.verified,
+      rejected: o.artisans.rejected,
+      suspended: o.artisans.suspended,
+      verifiedUnplaced: o.artisans.verified_unplaced,
+    },
     users: o.users,
     interventions: {
       proposee: o.interventions.proposee,
@@ -231,6 +245,12 @@ export function mapArtisanDetail(a: BackendAdminArtisanDetail): AdminArtisanDeta
     isAvailable: a.is_available,
     verifiedStatus: a.verified_status,
     tradeLabels: a.trades.map((t) => t.trade.label_fr),
+    tradeRadii: a.trades.map((t) => ({ label: t.trade.label_fr, radiusM: t.service_radius_m })),
+    zone: {
+      placed: a.zone.placed,
+      source: a.zone.source,
+      neighborhoodLabel: a.zone.neighborhood_label,
+    },
     documents: a.documents.map((d) => ({
       id: d.id,
       docType: d.doc_type,

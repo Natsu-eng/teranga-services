@@ -24,6 +24,7 @@ import type {
   AIAnalysisResult,
   Artisan,
   Intervention,
+  ArtisanZone,
   MyArtisanProfile,
   MyReceivedReview,
   MyVerification,
@@ -56,7 +57,15 @@ const mockAdminBackoffice: AdminBackofficeApi = {
   async getAdminOverview() {
     await simulateNetworkLatency();
     return {
-      artisans: { total: 0, none: 0, pending: 0, verified: 0, rejected: 0, suspended: 0 },
+      artisans: {
+        total: 0,
+        none: 0,
+        pending: 0,
+        verified: 0,
+        rejected: 0,
+        suspended: 0,
+        verifiedUnplaced: 0,
+      },
       users: { clients: 0, artisans: 0, admins: 0 },
       interventions: { proposee: 0, acceptee: 0, enCours: 0, terminee: 0, annulee: 0, litige: 0 },
       money: {
@@ -421,6 +430,17 @@ export const mockApiClient: ApiClient = {
   },
 
   async removeArtisanTrade(): Promise<MyArtisanProfile> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  // Aucune zone inventée côté mock : le serveur seul sait où l'artisan est.
+  async getMyArtisanZone(): Promise<ArtisanZone> {
+    await simulateNetworkLatency();
+    throw new ApiError('not_found', 'Profil artisan introuvable.');
+  },
+
+  async updateArtisanTradeRadius(): Promise<ArtisanZone> {
     await simulateNetworkLatency();
     throw new ApiError('not_found', 'Profil artisan introuvable.');
   },

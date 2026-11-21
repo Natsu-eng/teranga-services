@@ -20,6 +20,7 @@ import type {
   PayoutChannel,
   PayoutSettings,
   AIAnalysisResult,
+  ArtisanZone,
   MyArtisanProfile,
   MyReceivedReview,
   MyVerification,
@@ -99,13 +100,19 @@ export interface UpdateArtisanProfileInput {
   fullName?: string;
   bio?: string | null;
   yearsExperience?: number | null;
-  baseLocation?: { lat: number; lng: number };
+  // Zone d'intervention : un quartier (le serveur pose son centre officiel)
+  // ou une position GPS (arrondie par le serveur). Plus jamais de
+  // coordonnées libres (l'ancien `base_location` est refusé en 422).
+  location?: ArtisanLocationInput;
   // URL http(s) absolue uniquement (refusée en 422 sinon, côté serveur) ;
   // `null` retire la photo.
   avatarUrl?: string | null;
   coverUrl?: string | null;
   isAvailable?: boolean;
 }
+
+export type ArtisanLocationInput =
+  { source: 'neighborhood'; neighborhoodId: string } | { source: 'gps'; lat: number; lng: number };
 
 export interface AddArtisanTradeInput {
   tradeCode: string;
@@ -171,6 +178,10 @@ export interface ApiClient extends AdminBackofficeApi {
   getProfileMediaConstraints(): Promise<ProfileMediaConstraints>;
   addArtisanTrade(input: AddArtisanTradeInput): Promise<MyArtisanProfile>;
   removeArtisanTrade(artisanTradeId: string): Promise<MyArtisanProfile>;
+  /** `GET /artisans/me/zone` : zone retenue et changements restants. */
+  getMyArtisanZone(): Promise<ArtisanZone>;
+  /** `PATCH /artisans/me/trades/{id}` : rayon d'un métier, sans le retirer. */
+  updateArtisanTradeRadius(artisanTradeId: string, serviceRadiusM: number): Promise<ArtisanZone>;
   listMyVerificationDocuments(): Promise<MyVerification>;
   uploadVerificationDocument(
     docType: VerificationDocType,

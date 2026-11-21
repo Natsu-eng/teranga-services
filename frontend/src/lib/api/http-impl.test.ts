@@ -374,24 +374,74 @@ describe('httpApiClient', () => {
       expect(JSON.parse(options.body as string)).toEqual({ bio: 'Nouvelle bio.' });
     });
 
-    it('forwards baseLocation and null-clearing fields verbatim', async () => {
+    it('envoie la zone au format du serveur (quartier ou GPS), jamais base_location', async () => {
       const fetchMock = vi
         .fn()
-        .mockResolvedValue(jsonResponse(200, { ...backendArtisan, cover_url: null }));
+        .mockImplementation(async () => jsonResponse(200, { ...backendArtisan, cover_url: null }));
       vi.stubGlobal('fetch', fetchMock);
 
       await httpApiClient.updateMyArtisanProfile!({
         bio: null,
         yearsExperience: 5,
-        baseLocation: { lat: 14.7, lng: -17.4 },
+        location: { source: 'neighborhood', neighborhoodId: 'medina' },
+      });
+      await httpApiClient.updateMyArtisanProfile!({
+        location: { source: 'gps', lat: 14.7, lng: -17.4 },
       });
 
-      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-      expect(JSON.parse(options.body as string)).toEqual({
-        bio: null,
-        years_experience: 5,
-        base_location: { lat: 14.7, lng: -17.4 },
+      const bodies = fetchMock.mock.calls.map(([, options]) =>
+        JSON.parse((options as RequestInit).body as string),
+      );
+      expect(bodies).toEqual([
+        {
+          bio: null,
+          years_experience: 5,
+          location: { source: 'neighborhood', neighborhood_id: 'medina' },
+        },
+        { location: { source: 'gps', lat: 14.7, lng: -17.4 } },
+      ]);
+      expect(JSON.stringify(bodies)).not.toContain('base_location');
+    });
+
+    it('lit la zone et change le rayon d’un métier', async () => {
+      const zone = {
+        placed: true,
+        source: 'neighborhood',
+        neighborhood: { id: 'medina', label: 'Médina', department_label: 'Dakar' },
+        trades: [
+          {
+            id: 't1',
+            trade: { code: 'plomberie', label_fr: 'Plomberie' },
+            service_radius_m: 12_000,
+            has_custom_service_area: false,
+          },
+        ],
+        radius_max_m: 30_000,
+        gps_grid_m: 500,
+        changes_remaining_short: 2,
+        changes_remaining_long: 9,
+        short_window_hours: 24,
+        long_window_days: 30,
+        next_change_at: null,
+      };
+      const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(200, zone));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const read = await httpApiClient.getMyArtisanZone();
+      await httpApiClient.updateArtisanTradeRadius('t1', 12_000);
+
+      expect(read.neighborhood?.departmentLabel).toBe('Dakar');
+      expect(read.trades[0]).toEqual({
+        id: 't1',
+        tradeCode: 'plomberie',
+        tradeLabel: 'Plomberie',
+        serviceRadiusM: 12_000,
+        hasCustomServiceArea: false,
       });
+      const [url, options] = fetchMock.mock.calls[1] as [string, RequestInit];
+      expect(url).toContain('/artisans/me/trades/t1');
+      expect(options.method).toBe('PATCH');
+      expect(JSON.parse(options.body as string)).toEqual({ service_radius_m: 12_000 });
     });
 
     it('sends cover_url and maps it back onto the returned profile', async () => {

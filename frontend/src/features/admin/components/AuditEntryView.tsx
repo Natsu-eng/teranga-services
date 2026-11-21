@@ -1,5 +1,6 @@
 import React from 'react';
 import type { AuditEntry } from '../../../types/admin';
+import { formatRadiusKm } from '../../artisans/zoneText';
 import { formatRate } from '../../payments/paymentText';
 import { AUDIT_ACTION_LABELS, AUDIT_TARGET_LABELS, formatAdminDateTime } from '../adminText';
 
@@ -23,11 +24,39 @@ const DETAIL_LABELS: Record<string, string> = {
   via: 'Via',
   payout_id: 'Versement',
   artisan_id: 'Artisan',
+  // Changement de zone d'intervention (jamais de coordonnées).
+  kind: 'Changement',
+  counted: 'Compté dans les limites',
+  first_placement: 'Premier placement',
+  old_source: 'Ancienne source',
+  new_source: 'Nouvelle source',
+  source: 'Source',
+  old_neighborhood_id: 'Ancien quartier',
+  new_neighborhood_id: 'Nouveau quartier',
+  neighborhood_id: 'Quartier',
+  radii: 'Rayons',
+  radius_m: 'Rayon',
+  old_radius_m: 'Ancien rayon',
+  new_radius_m: 'Nouveau rayon',
 };
+
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  kind: { position: 'Position', radius: 'Rayon d’un métier' },
+  source: { neighborhood: 'Quartier', gps: 'Position GPS (arrondie)' },
+  reason: { plafond_migration: 'Rayon ramené au plafond (migration)' },
+};
+VALUE_LABELS.old_source = VALUE_LABELS.source;
+VALUE_LABELS.new_source = VALUE_LABELS.source;
+
+const RADIUS_KEYS = new Set(['radius_m', 'old_radius_m', 'new_radius_m']);
 
 /** Valeur d'un détail, lisible : dates, taux et objets imbriqués compris. */
 function formatValue(key: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
+  if (typeof value === 'string' && VALUE_LABELS[key]?.[value]) return VALUE_LABELS[key][value];
+  if (RADIUS_KEYS.has(key) && typeof value === 'number') return formatRadiusKm(value);
+  if (Array.isArray(value)) return value.map((item) => formatValue(key, item)).join(' ; ');
   if (key === 'rate_bps' && typeof value === 'number') return formatRate(value);
   if (key === 'rating' && typeof value === 'number') return `${value}/5`;
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)) {

@@ -189,6 +189,18 @@ class AuditAction(StrEnum):
     COMMISSION_RATE_CREATE = "commission_rate.create"
     # Réponse d'un admin à une demande d'aide (éventuellement avec clôture).
     SUPPORT_TICKET_REPLY = "support_ticket.reply"
+    # Zone d'intervention d'un artisan changée (position ou rayon d'un
+    # métier), par lui-même ou par une migration. Jamais de coordonnées.
+    ARTISAN_LOCATION_CHANGE = "artisan.location_change"
+
+
+class ArtisanLocationSource(StrEnum):
+    """D'où vient la position enregistrée d'un artisan."""
+
+    # Centre officiel d'un quartier de la liste fermée (app.core.neighborhoods).
+    NEIGHBORHOOD = "neighborhood"
+    # Position GPS de l'artisan, arrondie sur la grille ARTISAN_GPS_GRID_M.
+    GPS = "gps"
 
 
 class AuditTargetType(StrEnum):

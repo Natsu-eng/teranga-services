@@ -157,6 +157,11 @@ export const AdminOverviewScreen: React.FC = () => {
                 hint={countLabel(data.artisans.rejected, 'refusé', 'refusés')}
               />
               <StatTile label="Suspendus" value={data.artisans.suspended} />
+              <StatTile
+                label="Vérifiés non placés"
+                value={data.artisans.verifiedUnplaced}
+                hint="Ne reçoivent aucune demande"
+              />
             </div>
           </Section>
 

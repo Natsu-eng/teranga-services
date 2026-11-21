@@ -192,3 +192,33 @@ export interface AdminVerificationReview {
   artisanId: string;
   artisanVerifiedStatus: ArtisanVerifiedStatus;
 }
+
+/** Un métier dans la zone d'intervention : son rayon, modifiable seul. */
+export interface ZoneTrade {
+  id: string;
+  tradeCode: string;
+  tradeLabel: string;
+  serviceRadiusM: number;
+  hasCustomServiceArea: boolean;
+}
+
+/**
+ * `GET /artisans/me/zone` : où l'artisan reçoit des demandes, tel que le
+ * serveur l'a retenu (jamais de coordonnées), et ce qu'il peut encore
+ * changer.
+ */
+export interface ArtisanZone {
+  placed: boolean;
+  /** `neighborhood` : centre d'un quartier ; `gps` : position arrondie. */
+  source: 'neighborhood' | 'gps' | null;
+  neighborhood: { id: string; label: string; departmentLabel: string } | null;
+  trades: ZoneTrade[];
+  radiusMaxM: number;
+  gpsGridM: number;
+  changesRemainingShort: number;
+  changesRemainingLong: number;
+  shortWindowHours: number;
+  longWindowDays: number;
+  /** Quand un changement redevient possible (ISO), si aucun ne l'est. */
+  nextChangeAt: string | null;
+}

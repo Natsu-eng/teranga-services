@@ -32,6 +32,8 @@ const artisan: AdminArtisanDetail = {
   isAvailable: true,
   verifiedStatus: 'verified',
   tradeLabels: ['Plomberie'],
+  tradeRadii: [{ label: 'Plomberie', radiusM: 12_000 }],
+  zone: { placed: true, source: 'neighborhood', neighborhoodLabel: 'Médina' },
   documents: [],
   createdAt: '2026-01-01T10:00:00Z',
   ratingAvg: 4.5,

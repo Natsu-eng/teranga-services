@@ -53,11 +53,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.geo_privacy import snap_to_grid
 from app.db.session import async_session_maker
 from app.db.target import describe_database, is_local_database
 from app.models.artisan import ArtisanProfile, ArtisanTrade, Verification
 from app.models.commission import CommissionRate
 from app.models.enums import (
+    ArtisanLocationSource,
     ArtisanVerifiedStatus,
     InterventionStatus,
     Locale,
@@ -244,6 +246,7 @@ async def _seed_artisans(
     session: AsyncSession, trades: dict[str, Trade]
 ) -> dict[str, ArtisanProfile]:
     profiles: dict[str, ArtisanProfile] = {}
+    settings = get_settings()
     for artisan in ARTISANS:
         user, created = await _get_or_create_user(
             session, phone=artisan["phone"], full_name=artisan["full_name"], role=Role.ARTISAN
@@ -260,7 +263,17 @@ async def _seed_artisans(
             user_id=user.id,
             bio=artisan["bio"],
             years_experience=artisan["years_experience"],
-            base_location=_point(artisan["lat"], artisan["lng"]),
+            # Position arrondie sur la grille, comme le ferait l'API : la
+            # base ne garde jamais une position GPS précise.
+            base_location=_point(
+                *snap_to_grid(
+                    artisan["lat"],
+                    artisan["lng"],
+                    grid_m=settings.artisan_gps_grid_m,
+                    reference_lat=settings.service_region_center_lat,
+                )
+            ),
+            location_source=ArtisanLocationSource.GPS,
             is_available=True,
             verified_status=ArtisanVerifiedStatus.NONE,  # corrigé juste après (dérivé)
             subscription_tier=SubscriptionTier.VERIFIED,

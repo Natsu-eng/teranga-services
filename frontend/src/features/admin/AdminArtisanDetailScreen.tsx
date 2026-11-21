@@ -9,6 +9,7 @@ import { StatusPill } from '../../components/ui/StatusPill';
 import { api } from '../../lib/api';
 import { useAsyncResource } from '../../lib/useAsyncResource';
 import type { AdminArtisanDetail } from '../../types/admin';
+import { formatRadiusKm } from '../artisans/zoneText';
 import {
   INTERVENTION_STATUS_LABELS,
   REASON_MIN_LENGTH,
@@ -112,7 +113,21 @@ export const AdminArtisanDetailScreen: React.FC = () => {
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Métiers</dt>
               <dd className="text-foreground">
-                {data.tradeLabels.length > 0 ? data.tradeLabels.join(', ') : 'Aucun'}
+                {data.tradeRadii.length > 0
+                  ? data.tradeRadii
+                      .map((t) => `${t.label} (rayon ${formatRadiusKm(t.radiusM)})`)
+                      .join(', ')
+                  : 'Aucun'}
+              </dd>
+              <dt className="text-muted-foreground">Zone</dt>
+              <dd
+                className={data.zone.placed ? 'text-foreground' : 'font-semibold text-destructive'}
+              >
+                {!data.zone.placed
+                  ? 'Placé nulle part : ne reçoit aucune demande'
+                  : data.zone.source === 'neighborhood'
+                    ? `Centre de ${data.zone.neighborhoodLabel ?? 'quartier inconnu'}`
+                    : 'Position GPS (arrondie)'}
               </dd>
               <dt className="text-muted-foreground">Expérience</dt>
               <dd className="text-foreground">
@@ -177,7 +192,7 @@ export const AdminArtisanDetailScreen: React.FC = () => {
           </Card>
 
           <Card as="section" padding="lg" className="space-y-3" aria-label="Historique">
-            <h2 className="font-semibold text-foreground">Historique des décisions</h2>
+            <h2 className="font-semibold text-foreground">Historique (décisions et zone)</h2>
             {data.history.length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune décision admin pour l’instant.</p>
             ) : (
