@@ -6,7 +6,28 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { useCurrentUser } from '../profile/hooks/useCurrentUser';
 import { ApiError, api } from '../../lib/api';
 import type { AuthContextValue } from '../auth/auth-context';
-import type { MyArtisanProfile, MyVerification, ProfileMediaConstraints, Trade } from '../../types';
+import type {
+  ArtisanZone,
+  MyArtisanProfile,
+  MyVerification,
+  ProfileMediaConstraints,
+  Trade,
+} from '../../types';
+
+// Zone telle que renvoyée par GET /artisans/me/zone : artisan pas encore placé.
+const unplacedZone: ArtisanZone = {
+  placed: false,
+  source: null,
+  neighborhood: null,
+  trades: [],
+  radiusMaxM: 30_000,
+  gpsGridM: 500,
+  changesRemainingShort: 3,
+  changesRemainingLong: 10,
+  shortWindowHours: 24,
+  longWindowDays: 30,
+  nextChangeAt: null,
+};
 
 vi.mock('../auth/hooks/useAuth');
 vi.mock('../profile/hooks/useCurrentUser');
@@ -26,6 +47,7 @@ vi.mock('../../lib/api', async (importOriginal) => {
       listMyVerificationDocuments: vi.fn(),
       uploadVerificationDocument: vi.fn(),
       listTrades: vi.fn(),
+      getMyArtisanZone: vi.fn(),
     },
   };
 });
@@ -115,9 +137,37 @@ describe('ArtisanOnboardingScreen', () => {
     mockedApi.addArtisanTrade.mockReset();
     mockedApi.removeArtisanTrade.mockReset();
     mockedApi.uploadVerificationDocument.mockReset();
+    mockedApi.getMyArtisanZone.mockReset().mockImplementation(async () => unplacedZone);
   });
 
   afterEach(cleanup);
+
+  it('la zone d’intervention est une étape obligatoire de la checklist', async () => {
+    renderScreen();
+
+    expect(await screen.findByText('Zone d’intervention choisie')).toBeInTheDocument();
+    expect(await screen.findByText('Vous n’êtes placé nulle part')).toBeInTheDocument();
+    // Cinq étapes, la zone comprise ; aucune n'est faite sans placement.
+    expect(screen.getByRole('progressbar', { name: 'Progression du profil' })).toHaveAttribute(
+      'aria-valuemax',
+      '5',
+    );
+    // L'ancien bouton à coordonnées libres a disparu.
+    expect(screen.queryByRole('button', { name: 'Utiliser ma position actuelle' })).toBeNull();
+  });
+
+  it('une fois placé, l’étape est cochée et le plafond du rayon vient du serveur', async () => {
+    mockedApi.getMyArtisanZone.mockImplementation(async () => ({
+      ...unplacedZone,
+      placed: true,
+      source: 'neighborhood',
+      neighborhood: { id: 'medina', label: 'Médina', departmentLabel: 'Dakar' },
+    }));
+    renderScreen();
+
+    expect(await screen.findByText('Placé au centre de Médina')).toBeInTheDocument();
+    expect(screen.getByText('30 km au plus.')).toBeInTheDocument();
+  });
 
   it('shows an honest "reserved for artisans" message for a client', () => {
     mockedUseAuth.mockReturnValue(authValue({ role: 'client' }));

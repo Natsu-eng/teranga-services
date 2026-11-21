@@ -23,6 +23,8 @@ export interface AdminOverview {
     verified: number;
     rejected: number;
     suspended: number;
+    /** Vérifiés, non suspendus, sans position : ne reçoivent aucune demande. */
+    verifiedUnplaced: number;
   };
   users: { clients: number; artisans: number; admins: number };
   interventions: {
@@ -63,7 +65,8 @@ export type AuditAction =
   | 'review.hide'
   | 'review.restore'
   | 'commission_rate.create'
-  | 'support_ticket.reply';
+  | 'support_ticket.reply'
+  | 'artisan.location_change';
 
 export type AuditTargetType =
   | 'verification'
@@ -131,6 +134,14 @@ export interface AdminArtisanDetail {
   isAvailable: boolean;
   verifiedStatus: ArtisanVerifiedStatus;
   tradeLabels: string[];
+  /** Rayon d'intervention de chaque métier. */
+  tradeRadii: { label: string; radiusM: number }[];
+  /** D'où vient la position (jamais la position elle-même). */
+  zone: {
+    placed: boolean;
+    source: 'neighborhood' | 'gps' | null;
+    neighborhoodLabel: string | null;
+  };
   documents: AdminArtisanDocument[];
   createdAt: string;
   ratingAvg: number | null;

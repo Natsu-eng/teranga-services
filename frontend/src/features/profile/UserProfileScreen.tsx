@@ -26,6 +26,7 @@ import { useAuth } from '../auth/hooks/useAuth';
 import { usePlace } from '../location/usePlace';
 import { toDisplayRole } from '../auth/role';
 import { VerificationStatusBanner } from '../artisans/VerificationStatusBanner';
+import { ArtisanZoneCard } from '../artisans/components/ArtisanZoneCard';
 import { useMyArtisanProfile } from '../artisans/hooks/useMyArtisanProfile';
 import { PaymentMethodsSummary } from '../payments/components/PaymentMethodsSummary';
 import { IdentityCard } from './components/IdentityCard';
@@ -193,6 +194,8 @@ const ArtisanProfile: React.FC<{
       ) : profile ? (
         <VerificationStatusBanner status={profile.verifiedStatus} />
       ) : null}
+
+      <ArtisanZoneCard enabled={artisanId != null} />
 
       <section aria-labelledby="mon-activite" className="space-y-3">
         <SectionHeader id="mon-activite" title="Mon activité" />
