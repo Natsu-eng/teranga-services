@@ -122,7 +122,9 @@ coup) si l'une manque, garde une valeur d'exemple, ou pointe vers du local.
 OTP (`OTP_*` ; `OTP_TEST_*` : staging uniquement, §10 ; `RATE_LIMIT_OTP_*`), JWT (`JWT_ACCESS_TTL_SECONDS`,
 `JWT_REFRESH_TTL_SECONDS`), téléphone (`PHONE_DEFAULT_REGION`,
 `PHONE_ALLOWED_REGIONS`), recherche et pagination (`ARTISAN_SEARCH_*`,
-`PAGINATION_*`), vérification (`VERIFICATION_REQUIRED_DOC_TYPES`), Mistral
+`PAGINATION_*`), zone d'intervention (`SERVICE_REGION_*`, `ARTISAN_GPS_GRID_M`,
+`ARTISAN_LOCATION_CHANGES_*`, `ARTISAN_SERVICE_RADIUS_MAX_M`,
+`PUBLIC_DISTANCE_ROUNDING_M`, §19), vérification (`VERIFICATION_REQUIRED_DOC_TYPES`), Mistral
 (`MISTRAL_MODEL`, `MISTRAL_API_BASE_URL`, `MISTRAL_TIMEOUT_SECONDS`), envois
 et médias (`STORAGE_MAX_UPLOAD_BYTES`, `AVATAR_*`, `COVER_*`,
 `PROFILE_MEDIA_MAX_PIXELS`, `MESSAGE_ATTACHMENT_*`, `RATE_LIMIT_*`),
@@ -1260,3 +1262,68 @@ la plateforme. Mesurer la valeur avec §12.7.
 `/api/v1/health` et `/api/v1/health/ready` acceptent aussi `HEAD` (sondes
 de disponibilité de type UptimeRobot) ; le contrôle de santé de Render, en
 GET, ne change pas.
+
+## 19. Zone d'intervention des artisans (quartier ou GPS)
+
+Lot `feat/artisan-manual-location`. Où un artisan reçoit des demandes, sans
+jamais enregistrer ni exposer sa position précise.
+
+### 19.1 Quartiers : liste fermée côté serveur
+
+- Source unique : `backend/app/core/neighborhoods.py`, **une entrée par
+  commune** des 5 départements de la région de Dakar (Dakar 19, Pikine 12,
+  Guédiawaye 5, Keur Massar 6, Rufisque 11 : 53). Publiée par
+  `GET /api/v1/meta/neighborhoods` (public) ; le front n'en garde aucune copie.
+- Centres et départements tirés d'**OpenStreetMap** (relation
+  `admin_level=8` de chaque commune, point Nominatim, vérifié dans le
+  polygone), jamais saisis à la main. Données © contributeurs OSM (ODbL).
+- Identifiants stables (gardés par les téléphones) ; anciens `almadies` et
+  `yoff-ngor` = alias vers `ngor` et `yoff`.
+
+### 19.2 Placement (`PATCH /api/v1/artisans/me`)
+
+- Seulement `location = {"source": "neighborhood", "neighborhood_id"}` (le
+  serveur pose le centre officiel) ou `{"source": "gps", "lat", "lng"}`.
+- GPS : refusé hors de la région (`SERVICE_REGION_*`, 422
+  `HORS_REGION_DESSERVIE`), puis **arrondi sur une grille** de
+  `ARTISAN_GPS_GRID_M` (500 m) avant l'enregistrement.
+- Ancien format `base_location` (coordonnées libres) : **422
+  `FORMAT_POSITION_OBSOLETE`**, rien n'est appliqué. Un front d'avant ce lot
+  doit donc être redéployé en même temps que le backend.
+- `GET /api/v1/artisans/me/zone` : source, quartier, rayon par métier,
+  changements restants. `PATCH /api/v1/artisans/me/trades/{id}` : rayon d'un
+  métier sans le retirer (plafond `ARTISAN_SERVICE_RADIUS_MAX_M`, 30 km).
+
+### 19.3 Limites et journal
+
+- **3 changements / 24 h et 10 / 30 jours** (position ou rayon), 429
+  `TROP_DE_CHANGEMENTS_DE_ZONE` avec la date de reprise. Le premier placement
+  ne compte pas (ni les réglages faits avant d'être placé). Comptés dans le
+  journal d'audit, ligne du profil verrouillée pendant la vérification.
+- Chaque changement : `artisan.location_change` (ancienne/nouvelle source,
+  quartier, rayons), visible dans la fiche admin de l'artisan. **Aucune
+  coordonnée** dans le journal.
+
+### 19.4 Distances publiques
+
+`GET /api/v1/artisans?near=…` arrondit `distance_m` au multiple supérieur
+de `PUBLIC_DISTANCE_ROUNDING_M` (500 m). `GET /artisans/{id}/coverage` ne
+renvoie qu'un oui/non. Comme la position enregistrée est déjà le centre d'un
+quartier ou un nœud de grille, aucune combinaison de réponses (triangulation)
+ne retrouve mieux que ce point (prouvé par un test).
+
+### 19.5 Migration `7c41d2e9a5b3`
+
+- Ajoute `location_source` et `neighborhood_id` ; les positions existantes
+  deviennent `gps` et sont **arrondies sur la grille** (irréversible : la
+  position précise n'est conservée nulle part) ; les rayons au-delà de 30 km
+  sont ramenés à 30 km et journalisés (sans acteur). Élargit
+  `audit_log.action` à 23 caractères.
+- Les réglages `ARTISAN_GPS_GRID_M`, `SERVICE_REGION_CENTER_LAT` et
+  `ARTISAN_SERVICE_RADIUS_MAX_M` sont lus **au moment de la migration** :
+  les renseigner sur Render avant le déploiement s'ils diffèrent du défaut.
+- Downgrade refusé (message explicite) dès qu'un changement de zone est
+  journalisé (journal en ajout seul).
+- **Après le déploiement** : la Vue d'ensemble admin compte les « Artisans
+  vérifiés non placés » ; ils voient un bandeau et ne reçoivent aucune
+  demande tant qu'ils ne se placent pas.
